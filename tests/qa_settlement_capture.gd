@@ -11,7 +11,7 @@ var overview = false
 var closeup = false
 var night = false
 # gameplay-zoom spots: [cell offset, local position]
-const CLOSEUPS = [[Vector2i(0,0),Vector2(420,330)],[Vector2i(0,1),Vector2(384,640)],[Vector2i(-1,0),Vector2(200,560)],[Vector2i(1,-1),Vector2(560,420)]]
+const CLOSEUPS = [[Vector2i(0,0),Vector2(384,420)],[Vector2i(0,0),Vector2(250,650)],[Vector2i(-1,-1),Vector2(300,250)],[Vector2i(1,0),Vector2(560,600)]]
 
 func _initialize():
     for arg in OS.get_cmdline_user_args():

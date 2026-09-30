@@ -1,5 +1,6 @@
 extends RefCounted
 const FactionCatalog = preload("res://world/faction_catalog.gd")
+const SettlementBuildingModels = preload("res://world/settlement_building_models.gd")
 
 const FOOTPRINT_3X3 = [
     Vector2i(-1,-1),Vector2i(0,-1),Vector2i(1,-1),
@@ -42,176 +43,185 @@ const NPC_PLACEMENTS = {
     ]
 }
 
-# 1.22-dev4: every settlement sector gets an authored plan instead of the same
-# three-box template. Building slots keep the old footprints (and therefore door
-# lanes / cache ids); a sector may leave a slot empty to open a yard, square or
-# parade ground. Set pieces are visual structures with small base collisions:
-#   plain kind -> settlement_props_v1.png, "poi:" -> poi_props_v1.png,
-#   "prop:" -> world_props_v19.png, "street:" -> street_furniture_v1.png.
-# The centre band (x 300..470, y 300..430) stays free for NPCs, and gate lanes
-# (x/y 320..450 from an outer wall to the centre) stay free for movement.
-const SLOTS = {
-    "nw":{"pos":Vector2(176,150),"size":Vector2(260,148)},
-    "ne":{"pos":Vector2(610,150),"size":Vector2(220,128)},
-    "se":{"pos":Vector2(610,616),"size":Vector2(206,116)},
-    "sw":{"pos":Vector2(176,622),"size":Vector2(220,120)}
-}
-const SLOT_ORDER = ["nw","ne","se","sw"]
+# 1.22-dev4: the settlements are laid out as towns, not as three boxes per sector.
+# Street grid (local sector coords): a main street runs through the middle of every
+# sector (x/y 336..432, continuing into the gates) and a lane runs along every
+# inner sector border. That cuts each 3x3 settlement into 36 blocks (4 per sector:
+# nw/ne/sw/se). A block either holds buildings standing on its street line (the
+# south edge - every entrance faces south) or a yard / square with set pieces.
+# Buildings use authored exterior models from settlement_building_models.gd.
+#   "b": {quad: [[model, sign, dx], ...]}      dx = offset from the block centre
+#   "y": {quad: preset}                        yard preset, see YARDS
+#   "p": [[kind, pos, scale?], ...]            extra pieces in sector coords
+const QUADS = ["nw","ne","sw","se"]
 
-const PLANS = {
+const TOWNS = {
     "perron":[
-        {"b":{"nw":["utility_house","БАРАКИ"],"ne":["panel_entry","БАРАК №2"],"x1":["shed","САРАЙ",Vector2(118,640),Vector2(108,80)]},
-         "p":[["laundry_line",Vector2(170,318)],["laundry_line",Vector2(622,312)],["garden_beds",Vector2(262,560)],["garden_beds",Vector2(262,660)],
-              ["chicken_coop",Vector2(560,570)],["poi:woodpile",Vector2(706,560)],["long_table",Vector2(600,690)],["fire_barrel",Vector2(470,300)],
-              ["water_point",Vector2(470,560)],["street:bench",Vector2(300,736)]],
-         "trees":[Vector2(720,470),Vector2(460,720),Vector2(740,720)]},
-        {"b":{"nw":["utility_house","ВОДА"]},
-         "p":[["water_tower",Vector2(618,244),0.82],["water_point",Vector2(710,320)],["garden_beds",Vector2(96,540)],["garden_beds",Vector2(226,540)],
-              ["garden_beds",Vector2(96,640)],["garden_beds",Vector2(226,640)],["garden_beds",Vector2(96,740)],["garden_beds",Vector2(226,740)],
-              ["poi:greenhouse",Vector2(560,560)],["poi:greenhouse",Vector2(690,560)],["poi:greenhouse",Vector2(560,690)],["poi:greenhouse",Vector2(690,690)],
-              ["chicken_coop",Vector2(110,306)]],
-         "trees":[Vector2(470,720),Vector2(470,540)]},
-        {"b":{"nw":["warehouse","СКЛАД"],"ne":["warehouse","ЗЕРНО"],"se":["service_shop","ВЕСОВАЯ"],"x1":["shed","ТАРА",Vector2(118,640),Vector2(108,80)]},
-         "p":[["poi:pallets_tarp",Vector2(262,560)],["poi:pallets_tarp",Vector2(262,700)],["prop:supply_crate",Vector2(360,560),0.62],["prop:cardboard_boxes",Vector2(400,570),0.58],
-              ["fire_barrel",Vector2(440,640)],["poi:cable_drum",Vector2(482,730)],["poi:woodpile",Vector2(120,300)],["market_stall_b",Vector2(470,300)]],
-         "trees":[Vector2(740,720)]},
-        {"b":{"nw":["checkpoint","КПП"],"ne":["rail_service","ДЕПО"]},
-         "p":[["poi:boxcar",Vector2(180,558)],["poi:boxcar",Vector2(560,558)],["laundry_line",Vector2(180,690)],["garden_beds",Vector2(560,650)],
-              ["garden_beds",Vector2(560,740)],["fire_barrel",Vector2(250,290)],["long_table",Vector2(296,700)],["chicken_coop",Vector2(700,700)]],
-         "trees":[Vector2(700,300),Vector2(60,730)]},
-        {"b":{"nw":["grocery","РЫНОК"]},
-         "p":[["market_stall",Vector2(522,206)],["market_stall_b",Vector2(622,206)],["market_stall",Vector2(716,206)],
-              ["market_stall_b",Vector2(522,306)],["market_stall",Vector2(622,306)],["market_stall_b",Vector2(716,306)],
-              ["platform_canopy",Vector2(200,520),0.74],["poi:tank_wagon",Vector2(600,558)],["street:notice_board",Vector2(110,296)],
-              ["fire_barrel",Vector2(290,440)],["long_table",Vector2(150,660)],["long_table",Vector2(300,660)],["field_kitchen",Vector2(560,680)],
-              ["long_table",Vector2(690,690)],["street:bench",Vector2(150,740)],["fire_barrel",Vector2(470,640)]],
-         "garlands":[[Vector2(480,250),Vector2(750,250)],[Vector2(318,282),Vector2(480,250)],[Vector2(80,600),Vector2(370,600)]],
-         "trees":[Vector2(460,740)]},
-        {"b":{"nw":["cafe","СТОЛОВАЯ"]},
-         "p":[["field_kitchen",Vector2(546,266)],["long_table",Vector2(650,228)],["long_table",Vector2(650,300)],
-              ["poi:boxcar",Vector2(200,558)],["poi:boxcar",Vector2(560,558)],["laundry_line",Vector2(160,690)],["long_table",Vector2(288,690)],
-              ["fire_barrel",Vector2(470,640)],["chicken_coop",Vector2(620,700)],["prop:supply_crate",Vector2(470,300),0.55]],
-         "garlands":[[Vector2(500,190),Vector2(740,190)]],
-         "trees":[Vector2(740,720)]},
-        {"b":{"nw":["workshop","МАСТЕРСКИЕ"],"ne":["shed","СТОЛЯРКА",Vector2(610,150),Vector2(132,96)],"se":["utility_house","КУЗНЯ"]},
-         "p":[["poi:woodpile",Vector2(120,560)],["poi:woodpile",Vector2(120,660)],["poi:pallets_tarp",Vector2(270,590)],["furnace",Vector2(290,720),0.62],
-              ["poi:cable_drum",Vector2(430,600)],["fire_barrel",Vector2(470,300)],["laundry_line",Vector2(620,320)],["long_table",Vector2(130,740)],
-              ["prop:toolbox",Vector2(420,720),0.6]],
-         "trees":[Vector2(740,470)]},
-        {"b":{"nw":["utility_house","РАДИО"],"ne":["utility_house","ГЕНЕРАТОРНАЯ"],"x1":["shed","СКЛАД",Vector2(118,640),Vector2(108,80)]},
-         "p":[["radio_mast",Vector2(618,700),0.86],["poi:transformer",Vector2(540,560)],["prop:generator_prop",Vector2(262,560),0.66],["chicken_coop",Vector2(700,560)],
-              ["garden_beds",Vector2(262,700)],["fire_barrel",Vector2(290,300)],["water_point",Vector2(500,700)]],
-         "trees":[Vector2(740,300)]},
-        {"b":{"nw":["checkpoint","КПП"],"ne":["utility_house","ДОСМОТР"],"x1":["shed","БАНЯ",Vector2(118,640),Vector2(108,80)]},
-         "p":[["poi:pallets_tarp",Vector2(600,560)],["water_point",Vector2(660,690)],["laundry_line",Vector2(262,560)],["fire_barrel",Vector2(290,690)],
-              ["street:bench",Vector2(290,300)],["chicken_coop",Vector2(520,690)],["poi:woodpile",Vector2(720,560)]],
-         "trees":[Vector2(740,300)]}
+        {"b":{"nw":[["perron_barrack","БАРАКИ",0]],"ne":[["perron_izba","ДОМ 12",-64],["perron_bathhouse","БАНЯ",82]],
+              "sw":[["perron_izba","ДОМ 7",-66]],"se":[["perron_barrack","БАРАКИ №2",0]]},
+         "y":{"sw":"garden_side"}},
+        {"b":{"nw":[["perron_izba","ДОМ 3",-66]],"se":[["perron_izba","ДОМ 5",66]]},
+         "y":{"nw":"garden_side","ne":"water_tower","sw":"greenhouses","se":"garden_side_w"}},
+        {"b":{"nw":[["perron_warehouse","СКЛАД",0]],"ne":[["perron_warehouse","ЗЕРНО",0]],"se":[["perron_bathhouse","ВЕСОВАЯ",-80]]},
+         "y":{"sw":"depot_yard","se":"crates_side"}},
+        {"b":{"nw":[["perron_izba","КПП",-66]],"ne":[["perron_barrack","КАЗАРМА ОХРАНЫ",0]],"se":[["perron_warehouse","ДЕПО",0]]},
+         "y":{"nw":"woodpile_side","sw":"rail_yard_w"},
+         "p":[["poi:boxcar",Vector2(170,764)],["poi:boxcar",Vector2(660,764)]]},
+        {"b":{"nw":[["perron_market","РЫНОК",0]],"ne":[["perron_canteen","ЧАЙНАЯ",0]],"sw":[["perron_station","ВОКЗАЛ",0]]},
+         "y":{"se":"market_square"},
+         "p":[["fire_barrel",Vector2(300,452)],["street:notice_board",Vector2(470,462)],["poi:tank_wagon",Vector2(600,764)]],
+         "garlands":[[Vector2(452,444),Vector2(716,444)]]},
+        {"b":{"nw":[["perron_canteen","СТОЛОВАЯ",0]],"ne":[["perron_barrack","ОБЩЕЖИТИЕ",0]],"sw":[["perron_izba","ДОМ 21",-66]]},
+         "y":{"se":"kitchen_yard","sw":"laundry_side"},
+         "p":[["poi:boxcar",Vector2(620,764)]]},
+        {"b":{"nw":[["perron_warehouse","МАСТЕРСКИЕ",0]],"ne":[["perron_bathhouse","КУЗНЯ",-80]],"sw":[["perron_barrack","СТОЛЯРКА",0]]},
+         "y":{"ne":"smithy_side","se":"woodpile_yard"}},
+        {"b":{"nw":[["perron_radio","РАДИО",-70]],"ne":[["perron_izba","ДОМ РАДИСТА",66]],"sw":[["perron_bathhouse","ГЕНЕРАТОРНАЯ",-80]]},
+         "y":{"nw":"radio_side","se":"garden_small","sw":"generator_side"}},
+        {"b":{"nw":[["perron_izba","КПП",-66]],"ne":[["perron_warehouse","ДОСМОТР",0]],"se":[["perron_barrack","КАРАУЛ",0]]},
+         "y":{"sw":"coop_yard","nw":"woodpile_side"}}
     ],
     "rubezh":[
-        {"b":{"nw":["barracks","КАЗАРМА"],"ne":["barracks","КАЗАРМА №2"]},
-         "p":[["army_tent",Vector2(100,600)],["army_tent",Vector2(220,600)],["army_tent",Vector2(100,730)],["army_tent",Vector2(220,730)],
-              ["hesco_row",Vector2(600,560)],["poi:pallets_tarp",Vector2(560,690)],["prop:ammo_crate",Vector2(680,690),0.62],["fire_barrel",Vector2(440,560)],
-              ["street:bench",Vector2(90,300)],["sandbag_nest",Vector2(470,300)],["jersey_blocks",Vector2(700,330)]]},
-        {"b":{"nw":["clinic","МЕДПУНКТ"],"ne":["utility_house","САНЧАСТЬ"]},
-         "p":[["medical_tent",Vector2(560,600)],["medical_tent",Vector2(690,600)],["jersey_blocks",Vector2(150,560)],["prop:stretcher",Vector2(250,680),0.62],
-              ["prop:medboxes_large",Vector2(130,690),0.62],["fire_barrel",Vector2(470,560)],["oxygen_rack",Vector2(690,320)],["ambulance",Vector2(610,730)],
-              ["sandbag_nest",Vector2(272,316)]]},
-        {"b":{"nw":["mil_store","СКЛАД"],"ne":["mil_store","СКЛАД ГСМ"],"se":["warehouse","ПРОДСКЛАД"]},
-         "p":[["ammo_bunker",Vector2(170,630),0.8],["poi:pallets_tarp",Vector2(298,570)],["poi:forklift",Vector2(318,690)],["poi:army_truck",Vector2(170,440)],
-              ["prop:ammo_crate",Vector2(460,560),0.62],["prop:supply_crate",Vector2(460,650),0.62],["hesco_row",Vector2(170,740)],["jersey_blocks",Vector2(600,300)]]},
-        {"b":{"nw":["checkpoint","ПЕРИМЕТР"],"ne":["barracks","КАРАУЛКА"]},
-         "p":[["searchlight_tower",Vector2(110,650),0.9],["sandbag_nest",Vector2(250,560)],["hesco_row",Vector2(240,730)],["poi:hedgehogs",Vector2(710,320)],
-              ["army_tent",Vector2(560,620)],["army_tent",Vector2(690,620)],["poi:army_truck",Vector2(600,740)],["jersey_blocks",Vector2(506,722)]]},
-        {"b":{"nw":["barracks","ШТАБ"],"ne":["comms","ДЕЖУРНАЯ"]},
-         "p":[["flag_pole",Vector2(482,300),0.9],["btr",Vector2(560,650),0.8],["btr",Vector2(700,650),0.8],["poi:army_truck",Vector2(170,610)],
-              ["jersey_blocks",Vector2(490,520)],["jersey_blocks",Vector2(700,520)],["sandbag_nest",Vector2(170,470)],["army_tent",Vector2(300,700)],
-              ["fire_barrel",Vector2(150,730)]],
-         "parade":Rect2(470,258,282,236)},
-        {"b":{"nw":["mil_store","ОРУЖЕЙНАЯ"],"se":["repair_bay","РЕМБАТ"]},
-         "p":[["poi:army_truck",Vector2(180,600)],["btr",Vector2(200,730),0.8],["poi:pallets_tarp",Vector2(640,290)],["prop:ammo_crate",Vector2(330,560),0.62],
-              ["prop:weapon_rack",Vector2(520,290),0.62],["fire_barrel",Vector2(470,300)],["hesco_row",Vector2(262,476)]]},
-        {"b":{"nw":["garage_row","АВТОПАРК"],"ne":["garage_row","БОКСЫ"]},
-         "p":[["btr",Vector2(150,600),0.8],["btr",Vector2(150,730),0.8],["poi:army_truck",Vector2(560,590)],["poi:army_truck",Vector2(560,720)],
-              ["fuel_station",Vector2(296,700),0.72],["jersey_blocks",Vector2(470,300)],["poi:pallets_tarp",Vector2(700,470)]]},
-        {"b":{"nw":["comms","СВЯЗЬ"],"ne":["barracks","ПОСТ"]},
-         "p":[["radio_mast",Vector2(620,700),0.86],["searchlight_tower",Vector2(140,660),0.9],["sandbag_nest",Vector2(250,480)],["poi:transformer",Vector2(700,540)],
-              ["army_tent",Vector2(250,680)],["poi:pallets_tarp",Vector2(520,560)],["fire_barrel",Vector2(290,300)]]},
-        {"b":{"nw":["checkpoint","КПП"],"se":["barracks","КАРАУЛ"]},
-         "p":[["hesco_row",Vector2(170,560)],["sandbag_nest",Vector2(170,690)],["searchlight_tower",Vector2(700,340),0.9],["poi:hedgehogs",Vector2(560,300)],
-              ["fire_barrel",Vector2(290,300)],["army_tent",Vector2(280,690)],["poi:hedgehogs",Vector2(700,470)]]}
+        {"b":{"nw":[["rubezh_barracks","КАЗАРМА",0]],"ne":[["rubezh_barracks","КАЗАРМА №2",0]],"sw":[["rubezh_barracks","КАЗАРМА №3",0]]},
+         "y":{"se":"tent_camp"}},
+        {"b":{"nw":[["rubezh_medpoint","МЕДПУНКТ",-40]],"ne":[["rubezh_guardhouse","ПОСТ",-66]],"se":[["rubezh_garages","САНТРАНСПОРТ",0]]},
+         "y":{"sw":"field_hospital","ne":"sandbag_side"}},
+        {"b":{"nw":[["rubezh_armory","СКЛАД",-40]],"ne":[["rubezh_hangar","СКЛАД ГСМ",0]],"sw":[["rubezh_garages","ПРОДСКЛАД",0]]},
+         "y":{"se":"supply_yard","nw":"crates_side_mil"}},
+        {"b":{"nw":[["rubezh_guardhouse","ПЕРИМЕТР",-66]],"ne":[["rubezh_barracks","КАРАУЛКА",0]]},
+         "y":{"nw":"tower_side","sw":"firing_pos","se":"truck_park"}},
+        {"b":{"nw":[["rubezh_hq","ШТАБ",0]],"ne":[["rubezh_comms","ДЕЖУРНАЯ",-60]]},
+         "y":{"ne":"flag_side","sw":"parade_w","se":"parade_e"},
+         "parade":Rect2(40,440,688,280)},
+        {"b":{"nw":[["rubezh_armory","ОРУЖЕЙНАЯ",-40]],"ne":[["rubezh_guardhouse","ПОСТ №2",-66]],"sw":[["rubezh_hangar","РЕМБАТ",0]]},
+         "y":{"ne":"sandbag_side_e","se":"truck_park"}},
+        {"b":{"nw":[["rubezh_garages","АВТОПАРК",0]],"ne":[["rubezh_garages","БОКСЫ",0]],"sw":[["rubezh_hangar","АНГАР",0]]},
+         "y":{"se":"motor_pool"}},
+        {"b":{"nw":[["rubezh_comms","СВЯЗЬ",-60]],"ne":[["rubezh_barracks","ПОСТ",0]]},
+         "y":{"nw":"mast_side","sw":"tower_yard","se":"radio_yard"}},
+        {"b":{"nw":[["rubezh_guardhouse","КПП",-66]],"ne":[["rubezh_barracks","КАРАУЛ",0]]},
+         "y":{"nw":"sandbag_side","sw":"hesco_yard","se":"checkpoint_yard"}}
     ],
     "mechanics":[
-        {"b":{"nw":["workshop","РАЗБОР"],"x1":["garage_row","РАЗБОРКА",Vector2(176,630),Vector2(220,100)]},
-         "p":[["jib_crane",Vector2(612,244),0.9],["scrap_heap",Vector2(560,560)],["scrap_heap",Vector2(690,690)],["car_on_blocks",Vector2(560,700)],
-              ["car_on_blocks",Vector2(700,560)],["poi:pipe_stack",Vector2(200,300)],["fire_barrel",Vector2(470,300)],["scrap_heap",Vector2(474,566)]],
-         "garlands":[[Vector2(480,320),Vector2(750,320)]]},
-        {"b":{"nw":["workshop","ЭЛЕКТРОЦЕХ"],"ne":["warehouse","АККУМУЛЯТОРНАЯ"]},
-         "p":[["wind_turbine",Vector2(110,640),0.9],["wind_turbine",Vector2(250,740),0.9],["solar_rig",Vector2(560,560)],["solar_rig",Vector2(690,560)],
-              ["solar_rig",Vector2(560,690)],["solar_rig",Vector2(690,690)],["poi:transformer",Vector2(250,560)],["poi:cable_drum",Vector2(470,560)],
-              ["poi:cable_drum",Vector2(292,306)]]},
-        {"b":{"nw":["warehouse","МЕТАЛЛ"],"ne":["warehouse","ЛОМ"],"se":["repair_bay","ПРЕСС"]},
-         "p":[["poi:pipe_stack",Vector2(140,560)],["poi:pipe_stack",Vector2(140,670)],["poi:forklift",Vector2(290,620)],["scrap_heap",Vector2(290,730)],
-              ["jib_crane",Vector2(440,640),0.84],["poi:cable_drum",Vector2(470,300)],["scrap_heap",Vector2(140,760)]]},
-        {"b":{"nw":["service_shop","ПРИЁМКА"],"se":["warehouse","ВЕСЫ"]},
-         "p":[["container_shop",Vector2(170,620)],["poi:pallets_tarp",Vector2(270,730)],["poi:forklift",Vector2(460,600)],["scrap_heap",Vector2(620,300)],
-              ["fire_barrel",Vector2(470,300)],["poi:pallets_tarp",Vector2(120,730)]],
-         "garlands":[[Vector2(60,540),Vector2(300,540)]]},
-        {"b":{"nw":["factory_admin","АРТЕЛЬ"],"x1":["repair_bay","РЕМЦЕХ",Vector2(176,622),Vector2(220,120)]},
-         "p":[["jib_crane",Vector2(640,256),0.9],["container_shop",Vector2(610,650)],["furnace",Vector2(700,500)],["poi:pipe_stack",Vector2(470,720)],
-              ["fire_barrel",Vector2(290,450)],["street:bench",Vector2(290,300)],["scrap_heap",Vector2(520,300)]],
-         "garlands":[[Vector2(318,282),Vector2(560,300)],[Vector2(560,300),Vector2(750,300)]]},
-        {"b":{"nw":["repair_bay","РЕМБОКС 1"],"se":["repair_bay","РЕМБОКС 2"],"x1":["repair_bay","РЕМБОКС 3",Vector2(176,622),Vector2(220,120)]},
-         "p":[["car_on_blocks",Vector2(560,296)],["poi:cable_drum",Vector2(700,300)],["jib_crane",Vector2(470,720),0.84],["scrap_heap",Vector2(680,740)],
-              ["prop:tool_case",Vector2(470,300),0.6]]},
-        {"b":{"nw":["warehouse","ТОПЛИВО"]},
-         "p":[["fuel_station",Vector2(170,630)],["poi:h_tank",Vector2(600,580)],["poi:h_tank",Vector2(600,700)],["poi:silo",Vector2(470,700)],
-              ["prop:gas_can",Vector2(290,560),0.6],["prop:gas_can",Vector2(320,570),0.55],["jersey_blocks",Vector2(560,300)],["jersey_blocks",Vector2(170,740)],
-              ["poi:pallets_tarp",Vector2(700,300)]]},
-        {"b":{"nw":["warehouse","СНАБЖЕНИЕ"],"ne":["warehouse","ЭКСПЕДИЦИЯ"]},
-         "p":[["container_shop",Vector2(610,600)],["container_shop",Vector2(610,730)],["poi:pallets_tarp",Vector2(170,590)],["poi:forklift",Vector2(270,690)],
-              ["solar_rig",Vector2(130,730)],["fire_barrel",Vector2(290,300)]]},
-        {"b":{"nw":["service_shop","ДИСПЕТЧЕРСКАЯ"],"se":["repair_bay","ГРУЗОВОЙ БОКС"]},
-         "p":[["jib_crane",Vector2(200,650),0.9],["container_shop",Vector2(620,300)],["poi:pallets_tarp",Vector2(270,730)],["scrap_heap",Vector2(110,730)],
-              ["container_shop",Vector2(110,560)]]}
+        {"b":{"nw":[["mech_workshop","РАЗБОР",0]],"sw":[["mech_garages","РАЗБОРКА",0]]},
+         "y":{"ne":"crane_yard","se":"scrap_yard"}},
+        {"b":{"nw":[["mech_electro","ЭЛЕКТРОЦЕХ",0]],"ne":[["mech_containers","ЖИЛЬЁ",-40]]},
+         "y":{"sw":"wind_farm","se":"solar_farm","ne":"cable_side"}},
+        {"b":{"nw":[["mech_hangar","МЕТАЛЛ",0]],"ne":[["mech_garages","ЛОМ",0]],"se":[["mech_workshop","ПРЕСС",0]]},
+         "y":{"sw":"pipe_yard"}},
+        {"b":{"nw":[["mech_fuel","ПРИЁМКА",-66]],"ne":[["mech_containers","ЖИЛЬЁ №2",-40]],"se":[["mech_garages","ВЕСЫ",0]]},
+         "y":{"nw":"crates_side_ind","sw":"container_yard"}},
+        {"b":{"nw":[["mech_office","АРТЕЛЬ",0]],"ne":[["mech_boiler","КОТЕЛЬНАЯ",-60]],"sw":[["mech_workshop","РЕМЦЕХ",0]]},
+         "y":{"se":"crane_yard_s","ne":"forge_side"}},
+        {"b":{"nw":[["mech_garages","РЕМБОКСЫ",0]],"ne":[["mech_hangar","РЕМБОКС 2",0]],"sw":[["mech_containers","ЖИЛЬЁ №3",-40]]},
+         "y":{"se":"repair_yard","sw":"scrap_side"}},
+        {"b":{"nw":[["mech_fuel","ТОПЛИВО",-66]],"se":[["mech_garages","ЦИСТЕРНЫ",0]]},
+         "y":{"nw":"fuel_side","ne":"tank_farm","sw":"fuel_station_yard"}},
+        {"b":{"nw":[["mech_hangar","СНАБЖЕНИЕ",0]],"ne":[["mech_electro","ЭКСПЕДИЦИЯ",0]]},
+         "y":{"sw":"container_yard","se":"solar_farm"}},
+        {"b":{"nw":[["mech_workshop","ДИСПЕТЧЕРСКАЯ",0]],"ne":[["mech_containers","ЖИЛЬЁ №4",-40]],"se":[["mech_garages","ГРУЗОВОЙ БОКС",0]]},
+         "y":{"sw":"crane_yard_s"}}
     ],
     "lazaret":[
-        {"b":{"nw":["panel_entry","ЖИЛОЙ КОРПУС"],"ne":["utility_house","ПРАЧЕЧНАЯ"],"x1":["panel_entry","КОРПУС Б",Vector2(176,622),Vector2(200,120)]},
-         "p":[["laundry_line",Vector2(600,320)],["laundry_line",Vector2(170,316)],["herb_beds",Vector2(560,560)],["herb_beds",Vector2(690,560)],
-              ["wash_station",Vector2(600,690)],["street:bench",Vector2(700,700)],["street:planter",Vector2(470,560)]],
-         "trees":[Vector2(740,730),Vector2(460,730)]},
-        {"b":{"nw":["pharmacy","АПТЕКА"],"ne":["warehouse","АПТЕЧНЫЙ СКЛАД"],"se":["utility_house","КОТЕЛЬНАЯ"]},
-         "p":[["oxygen_rack",Vector2(150,570)],["poi:pallets_tarp",Vector2(280,660)],["prop:medboxes_large",Vector2(150,690),0.62],["herb_beds",Vector2(150,760)],
-              ["prop:med_supply_stack",Vector2(470,560),0.58],["street:bench",Vector2(240,300)]],
-         "trees":[Vector2(740,470),Vector2(470,740)]},
-        {"b":{"nw":["utility_house","САНДВОР"],"x1":["utility_house","ДЕЗИНФЕКЦИЯ",Vector2(176,622),Vector2(200,116)]},
-         "p":[["incinerator",Vector2(630,248),0.84],["wash_station",Vector2(540,560)],["decon_frame",Vector2(680,580)],["laundry_line",Vector2(600,700)],
-              ["prop:trash_bag",Vector2(720,320),0.58],["oxygen_rack",Vector2(470,700)]],
-         "trees":[Vector2(740,730)]},
-        {"b":{"nw":["clinic","ПРИЁМ"],"se":["utility_house","РЕГИСТРАТУРА"]},
-         "p":[["ambulance",Vector2(170,610)],["ambulance",Vector2(170,730)],["triage_canopy",Vector2(610,300)],["prop:stretcher",Vector2(320,700),0.62],
-              ["prop:wheelchair",Vector2(470,560),0.58]]},
-        {"b":{"nw":["clinic","КЛИНИКА"],"se":["pharmacy","ПРОЦЕДУРНАЯ"]},
-         "p":[["triage_canopy",Vector2(612,244)],["herb_beds",Vector2(130,560)],["herb_beds",Vector2(130,660)],["herb_beds",Vector2(130,760)],
-              ["medical_tent",Vector2(290,650)],["street:bench",Vector2(290,300)],["street:planter",Vector2(470,300)],["wash_station",Vector2(470,560)]],
-         "trees":[Vector2(740,470),Vector2(470,740)]},
-        {"b":{"nw":["clinic","ДИАГНОСТИКА"],"se":["utility_house","РЕНТГЕН"]},
-         "p":[["oxygen_rack",Vector2(640,290)],["medical_tent",Vector2(150,620)],["medical_tent",Vector2(290,620)],["ambulance",Vector2(220,740)],
-              ["prop:medical_screen",Vector2(470,300),0.58]],
-         "trees":[Vector2(470,740)]},
-        {"b":{"nw":["clinic","ИЗОЛЯТОР"]},
-         "p":[["medical_tent",Vector2(140,600)],["medical_tent",Vector2(290,600)],["decon_frame",Vector2(560,600)],["incinerator",Vector2(690,700)],
-              ["wash_station",Vector2(470,560)],["prop:body_bag",Vector2(200,650),0.55],["triage_canopy",Vector2(560,730)]],
-         "quarantine":Rect2(60,520,280,150)},
-        {"b":{"nw":["pharmacy","ЛАБОРАТОРИЯ"],"ne":["utility_house","ВИВАРИЙ"]},
-         "p":[["herb_beds",Vector2(560,560)],["herb_beds",Vector2(690,560)],["herb_beds",Vector2(560,660)],["herb_beds",Vector2(690,660)],
-              ["poi:greenhouse",Vector2(140,600)],["poi:greenhouse",Vector2(270,600)],["poi:greenhouse",Vector2(140,720)],["poi:greenhouse",Vector2(270,720)],
-              ["solar_rig",Vector2(470,300)],["oxygen_rack",Vector2(620,740)]],
-         "trees":[Vector2(740,470)]},
-        {"b":{"nw":["utility_house","КПП"],"ne":["utility_house","САНПРОПУСКНИК"]},
-         "p":[["wash_station",Vector2(270,690)],["ambulance",Vector2(600,600)],["herb_beds",Vector2(140,580)],["street:bench",Vector2(290,300)],
-              ["prop:traffic_cone",Vector2(470,560),0.58],["decon_frame",Vector2(640,730)],["herb_beds",Vector2(140,680)]],
-         "trees":[Vector2(740,720),Vector2(90,740)]}
+        {"b":{"nw":[["laz_residence","ЖИЛОЙ КОРПУС",-30]],"ne":[["laz_laundry","ПРАЧЕЧНАЯ",-60]],"sw":[["laz_residence","КОРПУС Б",-30]]},
+         "y":{"se":"herb_garden","ne":"laundry_side"}},
+        {"b":{"nw":[["laz_pharmacy","АПТЕКА",-60]],"ne":[["laz_pavilion","АПТЕЧНЫЙ СКЛАД",0]],"se":[["laz_laundry","КОТЕЛЬНАЯ",-60]]},
+         "y":{"sw":"supply_yard_med","nw":"bench_side"}},
+        {"b":{"nw":[["laz_laundry","САНДВОР",-60]],"sw":[["laz_checkpoint","ДЕЗИНФЕКЦИЯ",-70]]},
+         "y":{"ne":"incinerator_yard","se":"decon_yard","nw":"laundry_side"}},
+        {"b":{"nw":[["laz_hospital","ПРИЁМ",0]],"ne":[["laz_checkpoint","РЕГИСТРАТУРА",-70]],"se":[["laz_pavilion","ПАЛАТА 1",0]]},
+         "y":{"sw":"ambulance_yard","ne":"bench_side"}},
+        {"b":{"nw":[["laz_hospital","КЛИНИКА",0]],"ne":[["laz_pharmacy","ПРОЦЕДУРНАЯ",-60]],"sw":[["laz_pavilion","ПАЛАТА 2",0]]},
+         "y":{"se":"triage_yard","ne":"garden_side_med"}},
+        {"b":{"nw":[["laz_lab","ДИАГНОСТИКА",-40]],"ne":[["laz_residence","ПЕРСОНАЛ",-30]],"se":[["laz_pavilion","РЕНТГЕН",0]]},
+         "y":{"sw":"tent_ward"}},
+        {"b":{"nw":[["laz_isolation","ИЗОЛЯТОР",-30]],"se":[["laz_checkpoint","САНПРОПУСКНИК",-70]]},
+         "y":{"ne":"quarantine","sw":"tent_ward","se":"decon_side"},
+         "quarantine":Rect2(444,60,272,236)},
+        {"b":{"nw":[["laz_lab","ЛАБОРАТОРИЯ",-40]],"ne":[["laz_pavilion","ВИВАРИЙ",0]]},
+         "y":{"sw":"greenhouses_med","se":"herb_garden"}},
+        {"b":{"nw":[["laz_checkpoint","КПП",-70]],"ne":[["laz_laundry","ГАРАЖ СКОРЫХ",-60]],"se":[["laz_pavilion","ПАЛАТА 3",0]]},
+         "y":{"sw":"ambulance_yard","nw":"bench_side"}}
     ]
+}
+
+const BACKYARD = {
+    "perron":["garden_beds","poi:woodpile","laundry_line","chicken_coop","garden_beds","water_point"],
+    "rubezh":["prop:ammo_crate","poi:pallets_tarp","jersey_blocks","sandbag_nest","prop:supply_crate"],
+    "mechanics":["scrap_heap","poi:pallets_tarp","poi:cable_drum","poi:pipe_stack","car_on_blocks"],
+    "lazaret":["herb_beds","laundry_line","street:bench","herb_beds","street:planter"]
+}
+
+# Yard presets: pieces relative to the block centre (blocks are ~290 x 290).
+# "_side" presets fill the free strip beside a narrow building (east side by
+# default, "_w" variants the west side).
+const YARDS = {
+    "garden_side":[["garden_beds",Vector2(84,-50)],["garden_beds",Vector2(84,30)],["poi:woodpile",Vector2(96,110)]],
+    "garden_side_w":[["garden_beds",Vector2(-84,-50)],["garden_beds",Vector2(-84,30)],["chicken_coop",Vector2(-90,110)]],
+    "garden_small":[["garden_beds",Vector2(-70,-40)],["garden_beds",Vector2(60,-40)],["garden_beds",Vector2(-70,50)],["chicken_coop",Vector2(60,60)],["street:bench",Vector2(0,120)]],
+    "water_tower":[["water_tower",Vector2(-30,70),0.9],["water_point",Vector2(80,90)],["garden_beds",Vector2(80,-40)],["garden_beds",Vector2(-90,-60)]],
+    "greenhouses":[["poi:greenhouse",Vector2(-72,-50)],["poi:greenhouse",Vector2(72,-50)],["poi:greenhouse",Vector2(-72,50)],["poi:greenhouse",Vector2(72,50)],["water_point",Vector2(0,120)]],
+    "depot_yard":[["poi:pallets_tarp",Vector2(-80,-40)],["poi:pallets_tarp",Vector2(60,-40)],["prop:supply_crate",Vector2(-80,60),0.62],["poi:cable_drum",Vector2(40,70)],["fire_barrel",Vector2(100,110)]],
+    "crates_side":[["prop:supply_crate",Vector2(96,-60),0.62],["prop:cardboard_boxes",Vector2(96,0),0.58],["poi:pallets_tarp",Vector2(90,90)]],
+    "woodpile_side":[["poi:woodpile",Vector2(84,-40)],["poi:woodpile",Vector2(84,40)],["fire_barrel",Vector2(110,110)]],
+    "rail_yard_w":[["laundry_line",Vector2(-40,-60)],["poi:woodpile",Vector2(60,-50)],["fire_barrel",Vector2(100,40)],["long_table",Vector2(-30,50)]],
+    "market_square":[["market_stall",Vector2(-90,-70)],["market_stall_b",Vector2(0,-70)],["market_stall",Vector2(90,-70)],
+                     ["market_stall_b",Vector2(-90,30)],["long_table",Vector2(20,30)],["field_kitchen",Vector2(100,40)],
+                     ["platform_canopy",Vector2(-40,128),0.74],["fire_barrel",Vector2(90,120)]],
+    "kitchen_yard":[["field_kitchen",Vector2(-70,-40)],["long_table",Vector2(50,-50)],["long_table",Vector2(50,30)],["long_table",Vector2(-70,50)],["fire_barrel",Vector2(100,110)]],
+    "laundry_side":[["laundry_line",Vector2(90,-50)],["laundry_line",Vector2(90,40)]],
+    "smithy_side":[["furnace",Vector2(60,-20),0.66],["poi:woodpile",Vector2(90,90)]],
+    "woodpile_yard":[["poi:woodpile",Vector2(-80,-50)],["poi:woodpile",Vector2(-80,40)],["poi:pallets_tarp",Vector2(60,-40)],["poi:cable_drum",Vector2(60,60)],["long_table",Vector2(0,120)]],
+    "radio_side":[["radio_mast",Vector2(70,40),0.9]],
+    "generator_side":[["prop:generator_prop",Vector2(80,-20),0.66],["poi:transformer",Vector2(80,80)]],
+    "coop_yard":[["chicken_coop",Vector2(-70,-40)],["garden_beds",Vector2(60,-50)],["garden_beds",Vector2(60,40)],["water_point",Vector2(-70,60)],["laundry_line",Vector2(0,120)]],
+    "tent_camp":[["army_tent",Vector2(-80,-50)],["army_tent",Vector2(40,-50)],["army_tent",Vector2(-80,60)],["army_tent",Vector2(40,60)],["hesco_row",Vector2(0,130)],["fire_barrel",Vector2(110,10)]],
+    "field_hospital":[["medical_tent",Vector2(-70,-30)],["medical_tent",Vector2(60,-30)],["prop:stretcher",Vector2(-70,70),0.62],["ambulance",Vector2(60,90)]],
+    "sandbag_side":[["sandbag_nest",Vector2(90,-30)],["prop:ammo_crate",Vector2(100,60),0.62]],
+    "sandbag_side_e":[["sandbag_nest",Vector2(90,-30)],["jersey_blocks",Vector2(80,80)]],
+    "supply_yard":[["ammo_bunker",Vector2(-50,-30),0.8],["poi:pallets_tarp",Vector2(80,-40)],["poi:forklift",Vector2(80,50)],["prop:ammo_crate",Vector2(-70,90),0.62],["hesco_row",Vector2(0,130)]],
+    "crates_side_mil":[["prop:ammo_crate",Vector2(100,-40),0.62],["prop:supply_crate",Vector2(100,40),0.62]],
+    "tower_side":[["searchlight_tower",Vector2(80,40),0.9]],
+    "firing_pos":[["sandbag_nest",Vector2(-70,-40)],["hesco_row",Vector2(40,-40)],["poi:hedgehogs",Vector2(-60,60)],["searchlight_tower",Vector2(70,90),0.9]],
+    "truck_park":[["poi:army_truck",Vector2(-40,-50)],["poi:army_truck",Vector2(-40,60)],["jersey_blocks",Vector2(90,120)],["fuel_station",Vector2(90,-20),0.66]],
+    "flag_side":[["flag_pole",Vector2(90,60),0.9]],
+    "parade_w":[["btr",Vector2(-60,40),0.8],["poi:army_truck",Vector2(60,80)]],
+    "parade_e":[["btr",Vector2(60,40),0.8],["sandbag_nest",Vector2(-70,100)]],
+    "motor_pool":[["btr",Vector2(-60,-50),0.8],["btr",Vector2(60,-50),0.8],["poi:army_truck",Vector2(-40,70)],["fuel_station",Vector2(80,80),0.66]],
+    "mast_side":[["radio_mast",Vector2(80,40),0.9]],
+    "tower_yard":[["searchlight_tower",Vector2(-70,20),0.9],["army_tent",Vector2(50,-30)],["sandbag_nest",Vector2(50,80)]],
+    "radio_yard":[["radio_mast",Vector2(-40,60),0.9],["poi:transformer",Vector2(60,-40)],["poi:pallets_tarp",Vector2(60,70)]],
+    "hesco_yard":[["hesco_row",Vector2(-40,-60)],["hesco_row",Vector2(40,20)],["sandbag_nest",Vector2(-60,90)],["poi:hedgehogs",Vector2(80,110)]],
+    "checkpoint_yard":[["searchlight_tower",Vector2(80,-20),0.9],["sandbag_nest",Vector2(-60,-40)],["poi:hedgehogs",Vector2(-40,80)]],
+    "crane_yard":[["jib_crane",Vector2(-30,60),0.9],["scrap_heap",Vector2(80,-40)],["car_on_blocks",Vector2(-80,-60)],["poi:pipe_stack",Vector2(70,110)]],
+    "crane_yard_s":[["jib_crane",Vector2(-60,70),0.9],["container_shop",Vector2(60,-40)],["poi:pallets_tarp",Vector2(70,90)]],
+    "scrap_yard":[["scrap_heap",Vector2(-70,-50)],["scrap_heap",Vector2(60,-60)],["car_on_blocks",Vector2(-60,60)],["car_on_blocks",Vector2(70,70)],["fire_barrel",Vector2(0,130)]],
+    "scrap_side":[["scrap_heap",Vector2(90,-10),0.6]],
+    "cable_side":[["poi:cable_drum",Vector2(100,-40)],["poi:transformer",Vector2(96,60)]],
+    "wind_farm":[["wind_turbine",Vector2(-70,0),0.9],["wind_turbine",Vector2(60,70),0.9],["poi:transformer",Vector2(60,-60)],["poi:cable_drum",Vector2(-60,110)]],
+    "solar_farm":[["solar_rig",Vector2(-70,-60)],["solar_rig",Vector2(60,-60)],["solar_rig",Vector2(-70,30)],["solar_rig",Vector2(60,30)],["poi:transformer",Vector2(0,120)]],
+    "pipe_yard":[["poi:pipe_stack",Vector2(-70,-60)],["poi:pipe_stack",Vector2(-70,40)],["poi:forklift",Vector2(60,-40)],["scrap_heap",Vector2(60,70)]],
+    "crates_side_ind":[["poi:pallets_tarp",Vector2(90,-40)],["poi:forklift",Vector2(96,60)]],
+    "container_yard":[["container_shop",Vector2(-60,-50)],["container_shop",Vector2(60,-50)],["poi:pallets_tarp",Vector2(-60,70)],["poi:forklift",Vector2(60,70)]],
+    "forge_side":[["furnace",Vector2(80,0),0.7],["poi:pipe_stack",Vector2(80,100)]],
+    "repair_yard":[["car_on_blocks",Vector2(-60,-50)],["jib_crane",Vector2(50,60),0.84],["car_on_blocks",Vector2(-60,70)],["prop:tool_case",Vector2(80,-60),0.6]],
+    "fuel_side":[["prop:gas_can",Vector2(84,-40),0.6],["prop:gas_can",Vector2(104,-30),0.55],["jersey_blocks",Vector2(90,60)]],
+    "tank_farm":[["poi:h_tank",Vector2(0,-50)],["poi:h_tank",Vector2(0,50)],["poi:silo",Vector2(100,120)]],
+    "fuel_station_yard":[["fuel_station",Vector2(-30,-20)],["poi:h_tank",Vector2(20,90)],["jersey_blocks",Vector2(-80,120)]],
+    "herb_garden":[["herb_beds",Vector2(-70,-60)],["herb_beds",Vector2(60,-60)],["herb_beds",Vector2(-70,20)],["herb_beds",Vector2(60,20)],["street:bench",Vector2(-60,110)],["street:planter",Vector2(60,110)]],
+    "bench_side":[["street:bench",Vector2(96,-20)],["street:planter",Vector2(96,60)]],
+    "bench_side_e":[["street:bench",Vector2(-96,-20)],["street:planter",Vector2(-96,60)]],
+    "supply_yard_med":[["oxygen_rack",Vector2(-70,-50)],["poi:pallets_tarp",Vector2(60,-40)],["prop:medboxes_large",Vector2(-60,50),0.62],["prop:med_supply_stack",Vector2(60,60),0.58],["wash_station",Vector2(0,120)]],
+    "incinerator_yard":[["incinerator",Vector2(-40,40),0.84],["prop:trash_bag",Vector2(70,-40),0.58],["oxygen_rack",Vector2(70,70)]],
+    "decon_yard":[["decon_frame",Vector2(-60,-20)],["wash_station",Vector2(60,-40)],["laundry_line",Vector2(40,70)],["prop:trash_bag",Vector2(-70,90),0.58]],
+    "laundry_side_med":[["laundry_line",Vector2(90,0)]],
+    "ambulance_yard":[["ambulance",Vector2(-60,-50)],["ambulance",Vector2(-60,60)],["triage_canopy",Vector2(70,0)],["prop:stretcher",Vector2(70,100),0.62]],
+    "triage_yard":[["triage_canopy",Vector2(-40,-40)],["medical_tent",Vector2(70,60)],["herb_beds",Vector2(-70,70)],["wash_station",Vector2(80,-60)]],
+    "garden_side_med":[["herb_beds",Vector2(90,-40)],["herb_beds",Vector2(90,50)]],
+    "tent_ward":[["medical_tent",Vector2(-70,-40)],["medical_tent",Vector2(50,-40)],["decon_frame",Vector2(-60,80)],["wash_station",Vector2(60,80)]],
+    "quarantine":[["medical_tent",Vector2(-60,-10)],["medical_tent",Vector2(60,-10)],["prop:body_bag",Vector2(0,80),0.55]],
+    "decon_side":[["decon_frame",Vector2(80,-20)],["incinerator",Vector2(80,100),0.7]],
+    "greenhouses_med":[["poi:greenhouse",Vector2(-72,-50)],["poi:greenhouse",Vector2(72,-50)],["poi:greenhouse",Vector2(-72,50)],["poi:greenhouse",Vector2(72,50)],["solar_rig",Vector2(0,130),0.5]]
 }
 
 # Displayed scale (atlas is drawn at 2x density). Authored per-piece scales are
@@ -275,59 +285,104 @@ static func perimeter(offset:Vector2i) -> Dictionary:
 static func piece_solid(kind:String) -> Vector2:
     return PIECE_SOLIDS.get(kind,Vector2.ZERO)
 
+static func block_rect(offset:Vector2i,quad:String) -> Rect2:
+    # Blocks sit between the sector's main street (336..432) and the lanes on the
+    # sector borders; outer sectors keep an extra strip inside the perimeter wall.
+    var west = quad.ends_with("w")
+    var north = quad.begins_with("n")
+    var x0 = (44.0 if offset.x == -1 else 36.0) if west else 432.0
+    var x1 = 336.0 if west else (724.0 if offset.x == 1 else 732.0)
+    var y0 = (52.0 if offset.y == -1 else 36.0) if north else 432.0
+    var y1 = 336.0 if north else (712.0 if offset.y == 1 else 732.0)
+    return Rect2(x0,y0,x1 - x0,y1 - y0)
+
+static func street_line(offset:Vector2i,quad:String) -> float:
+    # buildings stand on the block's south edge with an 8 px pavement in front
+    return block_rect(offset,quad).end.y - 8.0
+
+static func _piece(kind:String,pos:Vector2,scale_value:float = -1.0) -> Dictionary:
+    var piece_scale = scale_value if scale_value > 0.0 else float(PIECE_DEFAULT_SCALE.get(kind,PIECE_BASE_SCALE))
+    var solid = piece_solid(kind)
+    if not kind.contains(":"):
+        # footprints are authored for a 0.5 display scale
+        solid = (solid * piece_scale / 0.5).round()
+    return {"kind":kind,"pos":pos,"scale":piece_scale,"solid":solid,"flip":(int(pos.x + pos.y) % 3) == 0}
+
 static func cell(poi_id:String,offset:Vector2i) -> Dictionary:
     if not has(poi_id) or offset not in FOOTPRINT_3X3:
         return {}
     var d = SETTLEMENTS[poi_id]
     var idx = _index(offset)
     var role = str(d["roles"][idx])
-    var sign = str(d["signs"][idx])
     var faction = str(d["faction"])
     var loot = "industrial" if faction == "mechanics" else ("military" if faction == "rubezh" else ("pharmacy" if faction == "lazaret" else "residential"))
-    var plan = PLANS[faction][idx]
+    var plan = TOWNS[faction][idx]
     var buildings = []
     var slot_index = 0
-    for slot in SLOT_ORDER + ["x1","x2"]:
-        var spec = plan["b"].get(slot,[])
-        if spec.is_empty():
+    var blocks = {}
+    for quad in QUADS:
+        var rect = block_rect(offset,quad)
+        var line = street_line(offset,quad)
+        var used = []
+        for raw in plan.get("b",{}).get(quad,[]):
+            var model_id = str(raw[0])
+            var model = SettlementBuildingModels.model(model_id)
+            var size = model.get("size",Vector2(160,110))
+            var center = Vector2(rect.get_center().x + float(raw[2]),line - size.y * 0.5)
+            buildings.append({
+                "id":"building_%d" % slot_index,"archetype":str(model.get("archetype","utility_house")),
+                "model":model_id,"pos":center,"size":size,"sign":str(raw[1]),
+                "container_id":"cache_%d" % slot_index,"loot":loot,"block":quad
+            })
+            used.append(Rect2(center - size * 0.5,size))
             slot_index += 1
-            continue
-        var building_sign = str(spec[1]) if spec.size() > 1 else sign
-        var slot_data = SLOTS.get(slot,{})
-        buildings.append({
-            "id":"building_%d" % slot_index,"archetype":str(spec[0]),
-            "pos":spec[2] if spec.size() > 2 else slot_data.get("pos",Vector2(384,384)),
-            "size":spec[3] if spec.size() > 3 else slot_data.get("size",Vector2(160,110)),
-            "sign":building_sign,"container_id":"cache_%d" % slot_index,"loot":loot
-        })
-        slot_index += 1
+        blocks[quad] = {"rect":rect,"street_line":line,"buildings":used,"yard":str(plan.get("y",{}).get(quad,""))}
     var pieces = []
+    for quad in QUADS:
+        var preset = str(plan.get("y",{}).get(quad,""))
+        if preset == "":
+            continue
+        var c = blocks[quad]["rect"].get_center()
+        for raw in YARDS.get(preset,[]):
+            pieces.append(_piece(str(raw[0]),c + raw[1],float(raw[2]) if raw.size() > 2 else -1.0))
     for raw in plan.get("p",[]):
-        var kind = str(raw[0])
-        var piece_scale = float(raw[2]) if raw.size() > 2 else float(PIECE_DEFAULT_SCALE.get(kind,PIECE_BASE_SCALE))
-        var solid = piece_solid(kind)
-        if not kind.contains(":"):
-            # footprints are authored for a 0.5 display scale
-            solid = (solid * piece_scale / 0.5).round()
-        pieces.append({
-            "kind":kind,"pos":raw[1],"scale":piece_scale,
-            "solid":solid,"flip":(int(raw[1].x + raw[1].y) % 3) == 0
-        })
-    var lamps = [Vector2(318,282),Vector2(574,500)]
+        pieces.append(_piece(str(raw[0]),raw[1],float(raw[2]) if raw.size() > 2 else -1.0))
+    # back gardens: the strip behind a building row that its roof does not cover
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(offset.x * 7919 + offset.y * 104729 + faction.hash())) + 17
+    var back_kinds = BACKYARD.get(faction,[])
+    for quad in QUADS:
+        var block = blocks[quad]
+        if block["buildings"].is_empty():
+            continue
+        var rect:Rect2 = block["rect"]
+        var roof_top = 9999.0
+        for raw in plan.get("b",{}).get(quad,[]):
+            var model = SettlementBuildingModels.model(str(raw[0]))
+            var size = model.get("size",Vector2(160,110))
+            roof_top = min(roof_top,block["street_line"] - size.y - float(model.get("facade_height",50.0)) - float(model.get("roof_rise",0.0)))
+        var strip = roof_top - rect.position.y
+        if strip < 58.0:
+            continue
+        var y = rect.position.y + min(strip - 6.0,62.0)
+        var count = 3 if rect.size.x > 260.0 else 2
+        for i in range(count):
+            var x = rect.position.x + rect.size.x * (float(i) + 0.5) / float(count) + rng.randf_range(-14.0,14.0)
+            pieces.append(_piece(str(back_kinds[rng.randi_range(0,back_kinds.size() - 1)]),Vector2(round(x),round(y))))
     var workbenches = [Vector2(520,548)] if faction == "mechanics" and offset in [Vector2i.ZERO,Vector2i(1,0)] else []
     return {
         "role":role,"ground":str(d["ground"]),"faction_id":faction,"safe_settlement":true,
-        "settlement_style":faction,"settlement_index":idx,
-        "buildings":buildings,
+        "settlement_style":faction,"settlement_index":idx,"settlement_offset":offset,
+        "buildings":buildings,"blocks":blocks,
         "loose_containers":[{"id":"cache_9","pos":Vector2(182,610),"loot":loot,"name":"Запасы поселения"}],
         "fences":[],
         "perimeter":perimeter(offset),
         "set_pieces":pieces,
-        "trees":plan.get("trees",[]).duplicate(),
+        "trees":[],
         "garlands":plan.get("garlands",[]).duplicate(true),
         "parade":plan.get("parade",Rect2()),
         "quarantine":plan.get("quarantine",Rect2()),
-        "lamps":lamps,
+        "lamps":[],
         "workbenches":workbenches,
         "props":[],
         "enemy_count":0,"enemy_mult":0.0,"tree_mult":0.0,"car_mult":0.0

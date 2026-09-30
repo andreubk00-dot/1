@@ -55,6 +55,7 @@ func run() -> void:
         var settlement_id = str(FactionCatalog.faction(faction_id).get("settlement_id",""))
         var anchor:Vector2i = RegionCatalog.poi_by_id(settlement_id).get("coord",Vector2i.ZERO)
         var kinds = {}
+        var models = {}
         var building_count := 0
         for offset in FactionSettlementCatalog.footprint(settlement_id):
             var cell = FactionSettlementCatalog.cell(settlement_id,offset)
@@ -81,6 +82,16 @@ func run() -> void:
             for node in chunk.get_children():
                 if node.has_meta("settlement_piece_kind"):
                     kinds[str(node.get_meta("settlement_piece_kind"))] = true
+                if node.has_meta("world_building"):
+                    var model_id = str(node.get_meta("settlement_model",""))
+                    check(model_id != "",settlement_id + " " + str(offset) + " building without an authored exterior model")
+                    models[model_id] = true
+            # every building must stand inside its block and on the block's street line
+            for spec in cell.get("buildings",[]):
+                var block = cell["blocks"][spec["block"]]
+                var brect = Rect2(spec["pos"] - spec["size"] * 0.5,spec["size"])
+                check(block["rect"].encloses(brect),settlement_id + " " + str(offset) + " building leaves its block: " + str(spec["model"]))
+                check(is_equal_approx(brect.end.y,block["street_line"]),settlement_id + " building off the street line")
 
             var origin = chunk.global_position
             var inner = []
@@ -108,7 +119,8 @@ func run() -> void:
                 check(not _blocked(all_rects,Rect2(p - Vector2(16,16),Vector2(32,32))),settlement_id + " NPC boxed in: " + str(npc.get("npc_id","")))
             game._unload_chunk(coord)
             await process_frame
-        check(building_count >= 18,settlement_id + " should read as a town (>=18 buildings), got " + str(building_count))
+        check(building_count >= 20,settlement_id + " should read as a town (>=20 buildings), got " + str(building_count))
+        check(models.size() >= 6,settlement_id + " needs >=6 distinct building models, got " + str(models.size()))
         check(kinds.size() >= 10,settlement_id + " needs >=10 distinct structures, got " + str(kinds.size()))
         kinds_by_faction[faction_id] = kinds
 
