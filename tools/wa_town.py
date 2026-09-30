@@ -80,6 +80,12 @@ MAT = {
     'sandbag':    ((156, 138, 98), 'sandbag'),
     'wood_dark':  ((88, 66, 46), 'plank_h'),
     'metal':      ((96, 100, 100), 'none'),
+    'tarp_blue':  ((58, 88, 124), 'tarp'),
+    'tarp_green': ((72, 92, 60), 'tarp'),
+    'tarp_orange': ((168, 96, 44), 'tarp'),
+    'tarp_grey':  ((118, 116, 106), 'tarp'),
+    'plywood':    ((150, 124, 86), 'plank_h'),
+    'hole':       ((24, 22, 20), 'none'),
     'none':       ((128, 128, 128), 'none'),
 }
 
@@ -379,6 +385,11 @@ def _pattern(draw, face_pt, P, lu, lv, pat, col, rng, s=1.0):
                 a += 4.0 + rng.random() * 3
             b += step
             row += 1
+    elif pat == 'tarp':
+        for _ in range(int(lu * lv / 90) + 3):
+            a, b = rng.random() * lu, rng.random() * lv
+            L(a, b, a + rng.uniform(-6, 6), b + rng.uniform(3, 10), dark(col, 0.78))
+            L(a + 1, b, a + 1 + rng.uniform(-6, 6), b + rng.uniform(3, 10), mix(col, (255, 255, 255), 0.12))
     elif pat == 'tar':
         for _ in range(int(lu * lv / 140)):
             a, b = rng.random() * lu, rng.random() * lv
@@ -425,12 +436,20 @@ def _ambient(layer, c, face_pt, lu, lv, n, steps=10):
             od.polygon([c.P(face_pt(0, b0)), c.P(face_pt(lu, b0)), c.P(face_pt(lu, b1)), c.P(face_pt(0, b1))],
                        fill=(8, 8, 10, int(46 * t * t)))
     elif abs(n[2]) < 0.2 and zmin < 1.0:
-        for i in range(4):
+        # mud splash and damp rising from the ground
+        for i in range(8):
             b0, b1 = i * 2.0, i * 2.0 + 2.0
             if b1 > lv:
                 break
             od.polygon([c.P(face_pt(0, b0)), c.P(face_pt(lu, b0)), c.P(face_pt(lu, b1)), c.P(face_pt(0, b1))],
-                       fill=(24, 20, 14, int(56 * (1 - i / 4))))
+                       fill=(30, 24, 16, int(92 * (1 - i / 8) ** 1.5)))
+        rng2 = random.Random(int(lu * 13 + lv * 7))
+        for _ in range(int(lu / 10)):
+            a = rng2.uniform(0, lu)
+            hgt = rng2.uniform(4, 14)
+            wd = rng2.uniform(3, 9)
+            od.polygon([c.P(face_pt(a, 0)), c.P(face_pt(a + wd, 0)), c.P(face_pt(a + wd * 0.6, hgt)), c.P(face_pt(a + wd * 0.3, hgt))],
+                       fill=(34, 30, 20, rng2.randint(30, 60)))
     layer.alpha_composite(ov)
 
 
@@ -562,11 +581,121 @@ def _draw_decal(d, c, f, kind, p, face_col, rng, layer=None):
         ov = Image.new('RGBA', c.img.size, (0, 0, 0, 0))
         ImageDraw.Draw(ov).polygon([P(pt(u, v)), P(pt(u + w, v)), P(pt(u + w, v + h)), P(pt(u, v + h))], fill=(10, 10, 12, a))
         layer.alpha_composite(ov)
+    elif kind == 'boards':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        R(u - 0.5, v - 0.5, u + w + 0.5, v + h + 0.5, (26, 24, 22))
+        for i, t in enumerate(p.get('rows', (0.2, 0.55, 0.85))):
+            b = v + h * t
+            sl = rng.uniform(-1.6, 1.6)
+            pc = mix(p.get('col', (132, 104, 72)), (60, 50, 40), rng.uniform(0, 0.35))
+            d.polygon([P(pt(u - 2, b - 1.4 + sl)), P(pt(u + w + 2, b - 1.4 - sl)), P(pt(u + w + 2, b + 1.4 - sl)), P(pt(u - 2, b + 1.4 + sl))], fill=pc + (255,))
+            d.line([P(pt(u - 2, b - 1.4 + sl)), P(pt(u + w + 2, b - 1.4 - sl))], fill=dark(pc, 0.6) + (255,))
+            for a in (u - 1, u + w + 1):
+                d.point(P(pt(a, b)), fill=(40, 40, 40, 255))
+    elif kind == 'plywood':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        pc = p.get('col', (150, 124, 86))
+        R(u - 1, v - 1, u + w + 1, v + h + 1, pc)
+        for k in range(1, int(h // 5) + 1):
+            L(u - 1, v + k * 5, u + w + 1, v + k * 5, dark(pc, 0.86))
+        for a, b in ((u, v), (u + w, v), (u, v + h), (u + w, v + h)):
+            d.point(P(pt(a, b)), fill=(50, 46, 40, 255))
+        if rng.random() < 0.5:
+            L(u + 1, v + 1, u + w - 1, v + h - 1, dark(pc, 0.7))
+    elif kind == 'broken':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        cx, cy = u + w * rng.uniform(0.3, 0.7), v + h * rng.uniform(0.3, 0.7)
+        pts = []
+        for i in range(9):
+            a = 2 * math.pi * i / 9
+            r = rng.uniform(0.35, 0.95)
+            pts.append(P(pt(min(u + w, max(u, cx + math.cos(a) * w * 0.5 * r)), min(v + h, max(v, cy + math.sin(a) * h * 0.5 * r)))))
+        d.polygon(pts, fill=(14, 14, 14, 255))
+        for i in range(3):
+            a = rng.uniform(0, 2 * math.pi)
+            L(cx, cy, cx + math.cos(a) * w * 0.6, cy + math.sin(a) * h * 0.6, (150, 164, 170))
+    elif kind == 'tape':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        tc = (206, 196, 150)
+        L(u + 1, v + 1, u + w - 1, v + h - 1, tc, 2)
+        L(u + 1, v + h - 1, u + w - 1, v + 1, tc, 2)
+    elif kind == 'sandbags':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        rows = int(h // 3.2)
+        for r in range(rows):
+            off = (r % 2) * 2.5
+            a = u - 2 - off
+            while a < u + w + 2:
+                c = mix((156, 138, 98), (120, 104, 72), rng.random() * 0.5)
+                R(max(u - 2, a), v + r * 3.2, min(u + w + 2, a + 5), v + r * 3.2 + 3.0, c)
+                L(max(u - 2, a), v + r * 3.2, min(u + w + 2, a + 5), v + r * 3.2, dark(c, 0.6))
+                a += 5.4
+    elif kind == 'soot':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        ov = Image.new('RGBA', c.img.size, (0, 0, 0, 0))
+        od = ImageDraw.Draw(ov)
+        for i in range(6):
+            t = i / 6
+            od.polygon([P(pt(u + w * (0.5 - 0.5 * (1 - t) - 0.2 * t), v + h * t)), P(pt(u + w * (0.5 + 0.5 * (1 - t) + 0.2 * t), v + h * t)),
+                        P(pt(u + w * (0.5 + 0.5 * (1 - t) + 0.2 * t), v + h * (t + 1 / 6))), P(pt(u + w * (0.5 - 0.5 * (1 - t) - 0.2 * t), v + h * (t + 1 / 6)))],
+                       fill=(18, 16, 14, int(70 * (1 - t))))
+        layer.alpha_composite(ov)
+    elif kind == 'peel':
+        # plaster fallen off: an irregular hole showing the brick underneath
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        pts = []
+        for i in range(10):
+            a = 2 * math.pi * i / 10
+            r = rng.uniform(0.55, 1.0)
+            pts.append((u + w / 2 + math.cos(a) * w / 2 * r, v + h / 2 + math.sin(a) * h / 2 * r))
+        bc = shade((138, 80, 60), f.n)
+        d.polygon([P(pt(a, b)) for a, b in pts], fill=bc + (255,))
+        b = v + 1.5
+        row = 0
+        while b < v + h:
+            L(u + w * 0.15, b, u + w * 0.85, b, dark(bc, 0.72))
+            a = u + (row % 2) * 3
+            while a < u + w:
+                if abs(a - (u + w / 2)) < w * 0.38:
+                    L(a, b - 3, a, b, dark(bc, 0.8))
+                a += 6
+            b += 3
+            row += 1
+        d.line([P(pt(a, b)) for a, b in pts + [pts[0]]], fill=mix(face_col, (240, 236, 224), 0.25) + (255,))
+    elif kind == 'sheet':
+        # corrugated patch screwed over a damaged wall area
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        sc = p.get('col', (124, 128, 128))
+        R(u, v, u + w, v + h, sc)
+        a = u
+        i = 0
+        while a < u + w:
+            L(a, v, a, v + h, dark(sc, 0.75) if i % 2 else mix(sc, (255, 255, 255), 0.15))
+            a += 2
+            i += 1
+        for a in (u + 1, u + w - 1):
+            for b in (v + 1, v + h - 1):
+                d.point(P(pt(a, b)), fill=(40, 40, 40, 255))
+        if rng.random() < 0.6:
+            L(u + w * 0.3, v + h, u + w * 0.35, v, (118, 70, 40))
+    elif kind == 'graffiti':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        col = p.get('col', rng.choice([(186, 56, 44), (214, 210, 196), (70, 110, 170), (210, 180, 60), (40, 40, 40)]))
+        x = u
+        while x < u + w - 2:
+            seg = rng.uniform(2.5, 5)
+            L(x, v + rng.uniform(0, h), x + seg, v + rng.uniform(0, h), col, 2)
+            if rng.random() < 0.35:
+                x += 2.5
+            x += seg * 0.8
+        if p.get('underline'):
+            L(u, v - 1, u + w, v - 1.5, col, 1)
     elif kind == 'streak':
         # rain / rust streaks down from window sills
         u, v, h = p['u'], p['v'], p['h']
-        col = dark(face_col, 0.84)
-        L(u, v, u + 0.3, v - h, col)
+        col = p.get('col', dark(face_col, 0.78))
+        L(u, v, u + 0.3, v - h, col, 2 if h > 12 else 1)
+        L(u + 0.3, v - h, u + 0.5, v - h - 2, dark(col, 0.9))
 
 
 def _draw_poly(c, data, rng):
@@ -636,3 +765,24 @@ def _weather(img, seed, grime, rust, moss):
         a[mm, :3] = a[mm, :3] * 0.55 + np.array((74, 88, 46), float) * 0.45
     a[..., 3] = np.where(A, a[..., 3], 0)
     return Image.fromarray(clamp8(a), 'RGBA')
+
+
+def sprinkle_leaves(img, seed, density=0.004, rows=None):
+    """fallen autumn leaves on roofs / ledges (the world's signature orange flecks)."""
+    a = np.array(img)
+    rng = random.Random(seed)
+    h, w = a.shape[:2]
+    y_lo, y_hi = rows if rows else (0, h)
+    ys, xs = np.nonzero(a[y_lo:y_hi, :, 3] > 0)
+    ys = ys + y_lo
+    lf = fbm(w, h, 12, seed + 5, 3, wrap=False)
+    for _ in range(int(len(xs) * density)):
+        i = rng.randrange(len(xs))
+        y, x = ys[i], xs[i]
+        if lf[y, x] < 0.42:
+            continue
+        c = rng.choice(LEAF_ORANGE)
+        a[y, x, :3] = c
+        if x + 1 < w and a[y, x + 1, 3] > 0 and rng.random() < 0.5:
+            a[y, x + 1, :3] = tuple(int(v * 0.8) for v in c)
+    return Image.fromarray(a, 'RGBA')

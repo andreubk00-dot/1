@@ -79,7 +79,7 @@ const TOWNS = {
         {"b":{"nw":[["perron_radio","РАДИО",-70]],"ne":[["perron_izba","ДОМ РАДИСТА",66]],"sw":[["perron_bathhouse","ГЕНЕРАТОРНАЯ",-80]]},
          "y":{"nw":"radio_side","se":"garden_small","sw":"generator_side"}},
         {"b":{"nw":[["perron_izba","КПП",-66]],"ne":[["perron_warehouse","ДОСМОТР",0]],"se":[["perron_barrack","КАРАУЛ",0]]},
-         "y":{"sw":"coop_yard","nw":"woodpile_side"}}
+         "y":{"sw":"shanty_yard","nw":"woodpile_side"}}
     ],
     "rubezh":[
         {"b":{"nw":[["rubezh_barracks","КАЗАРМА",0]],"ne":[["rubezh_barracks","КАЗАРМА №2",0]],"sw":[["rubezh_barracks","КАЗАРМА №3",0]]},
@@ -100,7 +100,7 @@ const TOWNS = {
         {"b":{"nw":[["rubezh_comms","СВЯЗЬ",-60]],"ne":[["rubezh_barracks","ПОСТ",0]]},
          "y":{"nw":"mast_side","sw":"tower_yard","se":"radio_yard"}},
         {"b":{"nw":[["rubezh_guardhouse","КПП",-66]],"ne":[["rubezh_barracks","КАРАУЛ",0]]},
-         "y":{"nw":"sandbag_side","sw":"hesco_yard","se":"checkpoint_yard"}}
+         "y":{"nw":"sandbag_side","sw":"barricade_yard","se":"checkpoint_yard"}}
     ],
     "mechanics":[
         {"b":{"nw":[["mech_workshop","РАЗБОР",0]],"sw":[["mech_garages","РАЗБОРКА",0]]},
@@ -110,7 +110,7 @@ const TOWNS = {
         {"b":{"nw":[["mech_hangar","МЕТАЛЛ",0]],"ne":[["mech_garages","ЛОМ",0]],"se":[["mech_workshop","ПРЕСС",0]]},
          "y":{"sw":"pipe_yard"}},
         {"b":{"nw":[["mech_fuel","ПРИЁМКА",-66]],"ne":[["mech_containers","ЖИЛЬЁ №2",-40]],"se":[["mech_garages","ВЕСЫ",0]]},
-         "y":{"nw":"crates_side_ind","sw":"container_yard"}},
+         "y":{"nw":"crates_side_ind","sw":"shanty_yard"}},
         {"b":{"nw":[["mech_office","АРТЕЛЬ",0]],"ne":[["mech_boiler","КОТЕЛЬНАЯ",-60]],"sw":[["mech_workshop","РЕМЦЕХ",0]]},
          "y":{"se":"crane_yard_s","ne":"forge_side"}},
         {"b":{"nw":[["mech_garages","РЕМБОКСЫ",0]],"ne":[["mech_hangar","РЕМБОКС 2",0]],"sw":[["mech_containers","ЖИЛЬЁ №3",-40]]},
@@ -139,10 +139,17 @@ const TOWNS = {
          "y":{"ne":"quarantine","sw":"tent_ward","se":"decon_side"},
          "quarantine":Rect2(444,60,272,236)},
         {"b":{"nw":[["laz_lab","ЛАБОРАТОРИЯ",-40]],"ne":[["laz_pavilion","ВИВАРИЙ",0]]},
-         "y":{"sw":"greenhouses_med","se":"herb_garden"}},
+         "y":{"sw":"greenhouses_med","se":"cemetery"}},
         {"b":{"nw":[["laz_checkpoint","КПП",-70]],"ne":[["laz_laundry","ГАРАЖ СКОРЫХ",-60]],"se":[["laz_pavilion","ПАЛАТА 3",0]]},
          "y":{"sw":"ambulance_yard","nw":"bench_side"}}
     ]
+}
+
+const CLUTTER = {
+    "perron":["shanty","tarp_shelter","rain_tank","junk_pile","tire_wall","bonfire"],
+    "rubezh":["scrap_barricade","tire_wall","burnt_car","rubble_pile","warning_sign","dead_tree"],
+    "mechanics":["burnt_car","junk_pile","tire_wall","rubble_pile","shanty","rain_tank","scrap_barricade"],
+    "lazaret":["rain_tank","tarp_shelter","junk_pile","dead_tree","warning_sign","graves"]
 }
 
 const BACKYARD = {
@@ -221,6 +228,12 @@ const YARDS = {
     "tent_ward":[["medical_tent",Vector2(-70,-40)],["medical_tent",Vector2(50,-40)],["decon_frame",Vector2(-60,80)],["wash_station",Vector2(60,80)]],
     "quarantine":[["medical_tent",Vector2(-60,-10)],["medical_tent",Vector2(60,-10)],["prop:body_bag",Vector2(0,80),0.55]],
     "decon_side":[["decon_frame",Vector2(80,-20)],["incinerator",Vector2(80,100),0.7]],
+    "cemetery":[["graves",Vector2(-70,-70)],["graves",Vector2(50,-70)],["graves",Vector2(-70,10)],["graves",Vector2(50,10)],
+                 ["graves",Vector2(-10,90)],["dead_tree",Vector2(100,100),0.8],["street:bench",Vector2(-90,120)]],
+    "shanty_yard":[["shanty",Vector2(-70,-50)],["shanty",Vector2(60,-60)],["tarp_shelter",Vector2(-60,60)],["bonfire",Vector2(40,40)],
+                   ["rain_tank",Vector2(90,100)],["junk_pile",Vector2(-10,120)]],
+    "barricade_yard":[["scrap_barricade",Vector2(-50,-60)],["tire_wall",Vector2(60,-40)],["burnt_car",Vector2(-40,50)],
+                      ["warning_sign",Vector2(70,60)],["rubble_pile",Vector2(40,120)]],
     "greenhouses_med":[["poi:greenhouse",Vector2(-72,-50)],["poi:greenhouse",Vector2(72,-50)],["poi:greenhouse",Vector2(-72,50)],["poi:greenhouse",Vector2(72,50)],["solar_rig",Vector2(0,130),0.5]]
 }
 
@@ -231,7 +244,9 @@ const PIECE_DEFAULT_SCALE = {
     "fire_barrel":0.6,"long_table":0.74,"laundry_line":0.76,"market_stall":0.8,"market_stall_b":0.8,
     "garden_beds":0.72,"herb_beds":0.72,"chicken_coop":0.74,"water_point":0.72,"field_kitchen":0.8,
     "sandbag_nest":0.74,"hesco_row":0.78,"jersey_blocks":0.74,"wash_station":0.66,"oxygen_rack":0.66,
-    "solar_rig":0.66,"triage_canopy":0.74,"decon_frame":0.7,"medical_tent":0.78,"army_tent":0.8
+    "solar_rig":0.66,"triage_canopy":0.74,"decon_frame":0.7,"medical_tent":0.78,"army_tent":0.8,
+    "shanty":0.8,"tarp_shelter":0.72,"scrap_barricade":0.7,"tire_wall":0.62,"burnt_car":0.78,"graves":0.6,
+    "warning_sign":0.52,"rubble_pile":0.66,"dead_tree":0.9,"bonfire":0.56,"rain_tank":0.6,"junk_pile":0.66
 }
 
 # Collision footprints (world px, bottom-anchored) for the set pieces.
@@ -247,6 +262,9 @@ const PIECE_SOLIDS = {
     "incinerator":Vector2(32,14),"oxygen_rack":Vector2(44,8),"ambulance":Vector2(56,16),"wash_station":Vector2(36,8),
     "poi:woodpile":Vector2(30,10),"poi:greenhouse":Vector2(54,16),"poi:pallets_tarp":Vector2(52,14),"poi:cable_drum":Vector2(22,10),
     "poi:boxcar":Vector2(110,20),"poi:tank_wagon":Vector2(110,20),"poi:transformer":Vector2(40,16),"poi:army_truck":Vector2(104,26),"poi:forklift":Vector2(32,12),
+    "shanty":Vector2(46,14),"tarp_shelter":Vector2(50,10),"scrap_barricade":Vector2(56,10),"tire_wall":Vector2(44,8),
+    "burnt_car":Vector2(50,14),"graves":Vector2(48,10),"warning_sign":Vector2.ZERO,"rubble_pile":Vector2(50,10),
+    "dead_tree":Vector2(6,6),"bonfire":Vector2.ZERO,"rain_tank":Vector2(18,10),"junk_pile":Vector2(44,10),
     "poi:hedgehogs":Vector2.ZERO,"poi:pipe_stack":Vector2(58,14),"poi:h_tank":Vector2(96,18),"poi:silo":Vector2(28,16)
 }
 

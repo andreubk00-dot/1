@@ -65,6 +65,34 @@ faction door leaf (`settlement_door_leaves_v1.png`) that still swings with the d
 the sign text on the model's sign board. The "behind" fade area grows by the roof rise, so
 tall roofs, masts and chimneys become transparent when the player walks behind them.
 
+## Survival atmosphere pass
+
+The towns were too clean for a post-collapse survival game. They now share the worn look of
+the rest of the world.
+
+- **Buildings (every model, generated):**
+  - Windows: broken panes, boarded windows, plywood-covered windows, sandbagged windows
+    (Рубеж), windows taped with a cross (Лазарет), and stove pipes out of windows with soot
+    above them.
+  - Walls: plaster fallen off down to the brick, corrugated and plywood patches, graffiti,
+    scorch marks, rust and damp streaks, and mud splashed up from the ground.
+  - Roofs: tarps weighed down with tyres, holes with broken rafters, rain barrels, and
+    autumn leaves.
+- **Ground:** `tools/wa_settlement_ground.py` generates 12 seamless materials (cracked
+  asphalt with potholes, silted cobbles, rutted dirt road, broken concrete slabs, pavers,
+  pavement, overgrown and dry grass, dirt yard, gravel, oil-stained concrete). They are
+  world-anchored, so streets continue without seams across sectors.
+- **Clutter:** potholes, manholes, cracks and litter on the streets. Leaves and weeds drift
+  against kerbs and fences, and bushes grow in the yards. Pavements carry bags, barrels and
+  cans.
+- **New survival structures** (`settlement_props_v1.png`): shanty, tarp shelter, scrap
+  barricade, tyre wall, burnt car, graves, warning sign, rubble pile, dead tree, fire pit,
+  rain tank, junk pile.
+  - Each faction scatters its own mix of them in its yards.
+  - There is a shanty yard in Перрон and Механики, a barricade yard in Рубеж, and a
+    cemetery in Лазарет.
+  - Warning signs stand at the Рубеж and Лазарет gates.
+
 ## Other visual work
 
 - `settlement_props_v1.png`: 36 yard structures (stalls, water tower, tents, BTR, cranes,

@@ -19354,7 +19354,9 @@ const SETTLEMENT_PIECE_KINDS = [
     "jib_crane","scrap_heap","wind_turbine","fuel_station","car_on_blocks","furnace",
     "solar_rig","container_shop",
     "medical_tent","decon_frame","triage_canopy","herb_beds","incinerator","oxygen_rack",
-    "ambulance","wash_station"
+    "ambulance","wash_station",
+    "shanty","tarp_shelter","scrap_barricade","tire_wall","burnt_car","graves",
+    "warning_sign","rubble_pile","dead_tree","bonfire","rain_tank","junk_pile"
 ]
 const SETTLEMENT_STYLES = ["perron","rubezh","mechanics","lazaret"]
 const SETTLEMENT_WALL_Y_N = 30.0
@@ -19399,6 +19401,7 @@ func _dress_faction_settlement(chunk,coord,cell_data:Dictionary,settlement_name:
     var quarantine = cell_data.get("quarantine",Rect2())
     if typeof(quarantine) == TYPE_RECT2 and quarantine.size != Vector2.ZERO:
         _settlement_quarantine_pen(chunk,quarantine)
+    _settlement_clutter(chunk,coord,cell_data,style)
 
 func _settlement_spot_clear(chunk,pos,radius:float) -> bool:
     # Settlement pieces are authored, but a building archetype can still grow a
@@ -19464,7 +19467,7 @@ func _settlement_piece(chunk,piece:Dictionary):
         Rect2((index % 6) * 192,int(index / 6) * 192,192,192),
         Vector2(0,-96.0 * piece_scale),piece_scale
     )
-    if sprite != null and bool(piece.get("flip",false)) and kind in ["market_stall","market_stall_b","chicken_coop","field_kitchen","car_on_blocks","scrap_heap","btr","ambulance"]:
+    if sprite != null and bool(piece.get("flip",false)) and kind in ["market_stall","market_stall_b","chicken_coop","field_kitchen","car_on_blocks","scrap_heap","btr","ambulance","shanty","tarp_shelter","scrap_barricade","burnt_car","junk_pile","rubble_pile","dead_tree"]:
         sprite.flip_h = true
     if solid != Vector2.ZERO:
         _add_static_rect(node,Vector2(0,-solid.y * 0.5 + 2.0),solid)
@@ -19474,7 +19477,7 @@ func _settlement_piece(chunk,piece:Dictionary):
 func _settlement_piece_light(node,kind:String,piece_scale:float):
     # Visual-only practical lights; they fade in with the existing night factor.
     match kind:
-        "fire_barrel":
+        "fire_barrel","bonfire":
             _add_detail_light(node,Vector2(0,-30.0 * piece_scale * 2.0),SETTLEMENT_FIRE_LIGHT,0.78,1.05,true)
             _ellipse(Vector2(0,2),22,7,Color(1.0,0.55,0.22,0.07),node)
         "field_kitchen","furnace","incinerator":
@@ -19508,6 +19511,8 @@ func _settlement_garland(chunk,a:Vector2,b:Vector2,style:String):
         if i > 0 and i < steps and i % 2 == 0:
             _ellipse(p + Vector2(0,2),1.4,1.4,bulb_cols[(i / 2) % bulb_cols.size()],root)
     root.add_child(line)
+    root.add_to_group("settlement_garland_posts")
+    root.set_meta("garland_ends",[a,b])
     for post in [a,b]:
         _rect(post + Vector2(0,-17),Vector2(2,34),Color(0.20,0.17,0.13,1.0),root)
         _ellipse(post + Vector2(1,1),4,1.5,Color(0.01,0.012,0.012,0.22),root)
@@ -19527,6 +19532,127 @@ func _settlement_quarantine_pen(chunk,rect:Rect2):
     for x in [rect.position.x,rect.end.x]:
         _rect(Vector2(x,(top + bottom) * 0.5),Vector2(2,rect.size.y),col,chunk)
         _add_static_rect(chunk,Vector2(x,(top + bottom) * 0.5),Vector2(6,rect.size.y))
+
+
+# ---------------------------------------------------------------- survival clutter --
+# The towns are inhabited, not restored: potholes and litter on the streets,
+# leaves drifting against kerbs, weeds in every joint, and the lived-in junk of
+# people surviving - shacks, tarps, rain tanks, fire pits, wrecks, barricades.
+const SETTLEMENT_LITTER = ["street_debris","newspapers_wide","scattered_bottles","broken_tile_pile","rubble","wooden_debris","puddle","trash_bag"]
+
+func _settlement_clutter_spot(chunk,pos:Vector2,radius:float,allow_street:bool = false) -> bool:
+    if not allow_street and (abs(pos.x - 384.0) < 50.0 + radius or abs(pos.y - 384.0) < 50.0 + radius):
+        return false
+    if not _settlement_spot_clear(chunk,pos,radius):
+        return false
+    var gp = chunk.global_position + pos
+    for n in get_tree().get_nodes_in_group("poi_set_pieces"):
+        if is_instance_valid(n) and n.global_position.distance_to(gp) < radius + 22.0:
+            return false
+    for n in get_tree().get_nodes_in_group("settlement_garland_posts"):
+        if not is_instance_valid(n) or n.get_parent() != chunk:
+            continue
+        var ends = n.get_meta("garland_ends",[])
+        if ends.size() == 2:
+            var closest = Geometry2D.get_closest_point_to_segment(pos,ends[0],ends[1])
+            if closest.distance_to(pos) < radius + 30.0:
+                return false
+    for n in get_tree().get_nodes_in_group("street_furniture"):
+        if is_instance_valid(n) and n.global_position.distance_to(gp) < radius + 12.0:
+            return false
+    for child in chunk.get_children():
+        if bool(child.get_meta("world_lamp",false)) and child.position.distance_to(pos) < radius + 10.0:
+            return false
+    return true
+
+func _settlement_clutter(chunk,coord,cell_data:Dictionary,style:String):
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 918273 + coord.y * 645213 + 31)) + 7
+    var placed = 0
+    # 1. street surface: potholes, manholes, cracks, litter (visual only)
+    var street_spots = []
+    for i in range(16):
+        var along = rng.randf_range(20.0,748.0)
+        var across = rng.randf_range(346.0,422.0)
+        street_spots.append(Vector2(across,along) if i % 2 == 0 else Vector2(along,across))
+    for i in range(street_spots.size()):
+        var p = street_spots[i]
+        if abs(p.x - 384.0) < 60.0 and abs(p.y - 384.0) < 60.0:
+            continue                                   # keep the square tidy-ish
+        if i < 6:
+            var detail = [1,0,4,1,3,4][i]
+            _street_detail_sprite(chunk,detail,p,rng.randf_range(-0.3,0.3) if detail != 0 else 0.0,rng.randf_range(0.6,0.85),-3)
+        else:
+            var litter = _world_prop_sprite(SETTLEMENT_LITTER[rng.randi_range(0,6)],chunk,p,1,rng.randf_range(0.42,0.6))
+            if litter != null:
+                litter.rotation = rng.randf_range(-0.4,0.4)
+    # 2. leaves and weeds drifting against the kerbs and fences of every block
+    for quad in cell_data.get("blocks",{}).keys():
+        var block = cell_data["blocks"][quad]
+        var r:Rect2 = block["rect"]
+        for i in range(9):
+            var edge = rng.randi_range(0,3)
+            var p = Vector2.ZERO
+            match edge:
+                0: p = Vector2(rng.randf_range(r.position.x + 8,r.end.x - 8),r.position.y + rng.randf_range(4,10))
+                1: p = Vector2(rng.randf_range(r.position.x + 8,r.end.x - 8),r.end.y + rng.randf_range(6,14))
+                2: p = Vector2(r.position.x + rng.randf_range(4,12),rng.randf_range(r.position.y + 8,r.end.y - 8))
+                _: p = Vector2(r.end.x - rng.randf_range(4,12),rng.randf_range(r.position.y + 8,r.end.y - 8))
+            if _tree_blocks_door_swing(chunk,p):
+                continue
+            var kind = [5,5,3,4,6,3][rng.randi_range(0,5)]
+            var veg = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),p,rng.randf_range(0.4,0.55))
+            if veg != null:
+                veg.z_as_relative = false
+                veg.z_index = -6 if kind >= 5 else 6
+                veg.flip_h = rng.randf() < 0.5
+                veg.add_to_group("world_vegetation")
+        # yards: bushes, overgrown corners, survival junk
+        if block.get("buildings",[]).is_empty():
+            for i in range(3):
+                var p = Vector2(rng.randf_range(r.position.x + 20,r.end.x - 20),rng.randf_range(r.position.y + 24,r.end.y - 20))
+                if _settlement_clutter_spot(chunk,p,14.0):
+                    var kind = [0,1,2,7,4][rng.randi_range(0,4)]
+                    if style == "rubezh" or style == "mechanics":
+                        kind = [7,3,4,2][rng.randi_range(0,3)]
+                    var bush = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),p,0.5)
+                    if bush != null:
+                        bush.z_as_relative = false
+                        bush.z_index = 6
+                        bush.flip_h = rng.randf() < 0.5
+                        bush.add_to_group("world_vegetation")
+            var pool = FactionSettlementCatalog.CLUTTER.get(style,[])
+            for i in range(2):
+                var kind = str(pool[rng.randi_range(0,pool.size() - 1)])
+                var piece = FactionSettlementCatalog._piece(kind,Vector2.ZERO)
+                var radius = max(14.0,piece["solid"].x * 0.5)
+                if kind == "dead_tree":
+                    radius = 40.0
+                for attempt in range(8):
+                    var p = Vector2(rng.randf_range(r.position.x + radius + 6,r.end.x - radius - 6),rng.randf_range(r.position.y + 40,r.end.y - 12))
+                    if _settlement_clutter_spot(chunk,p,radius):
+                        piece["pos"] = p
+                        piece["flip"] = rng.randf() < 0.5
+                        if _settlement_piece(chunk,piece) != null:
+                            placed += 1
+                        break
+    # 3. a few standing things on the pavements: bags, barrels, tyres
+    var pave_kinds = ["trash_bag","barrel","cardboard_boxes","gas_can","trash_bag"]
+    for i in range(6):
+        var quad = ["nw","ne","sw","se"][rng.randi_range(0,3)]
+        if not cell_data.get("blocks",{}).has(quad):
+            continue
+        var r:Rect2 = cell_data["blocks"][quad]["rect"]
+        var p = Vector2(rng.randf_range(r.position.x + 10,r.end.x - 10),r.end.y - 3)
+        if _settlement_clutter_spot(chunk,p,8.0,true) and not _tree_blocks_door_swing(chunk,p):
+            var kind = pave_kinds[rng.randi_range(0,pave_kinds.size() - 1)]
+            if kind == "barrel":
+                _create_barrel(chunk,p)
+            else:
+                var item = _world_prop_sprite(kind,chunk,p,5,rng.randf_range(0.45,0.58))
+                if item != null:
+                    item.z_as_relative = false
+    chunk.set_meta("settlement_clutter",placed)
 
 # ---------------------------------------------------------------- perimeter --
 func _settlement_perimeter(chunk,style:String,walls:Dictionary,settlement_name:String):
@@ -19654,6 +19780,7 @@ func _settlement_gate(chunk,style:String,side:String,settlement_name:String):
             _settlement_piece(chunk,{"kind":"fire_barrel","pos":post_a,"scale":0.5,"solid":Vector2(10,6)})
             _settlement_piece(chunk,{"kind":"prop:road_barrier","pos":post_b,"scale":0.55,"solid":Vector2.ZERO})
         "rubezh":
+            _settlement_piece(chunk,{"kind":"warning_sign","pos":post_b + (Vector2(0,-44) if horizontal else Vector2(-44,0)) * (1.0 if side in ["s","e"] else -1.0),"scale":0.5,"solid":Vector2.ZERO})
             _settlement_piece(chunk,{"kind":"poi:guard_booth","pos":post_a,"solid":Vector2(34,18)})
             _settlement_piece(chunk,{"kind":"sandbag_nest","pos":post_b,"scale":0.45,"solid":Vector2(40,10)})
             if horizontal:
@@ -19670,6 +19797,7 @@ func _settlement_gate(chunk,style:String,side:String,settlement_name:String):
                 var p = a.lerp(b,t) + inward * 10.0
                 _rect(p,Vector2(8,6) if horizontal else Vector2(6,8),Color(0.78,0.62,0.18,0.55) if i % 2 == 0 else Color(0.08,0.08,0.07,0.45),bar)
         "lazaret":
+            _settlement_piece(chunk,{"kind":"warning_sign","pos":post_a + (Vector2(0,-40) if horizontal else Vector2(-40,0)) * (1.0 if side in ["s","e"] else -1.0),"scale":0.5,"solid":Vector2.ZERO})
             _settlement_piece(chunk,{"kind":"wash_station","pos":post_a,"scale":0.45,"solid":Vector2(30,8)})
             _settlement_piece(chunk,{"kind":"prop:med_sign","pos":post_b + Vector2(0,-8),"scale":0.5,"solid":Vector2.ZERO})
 
@@ -19681,6 +19809,37 @@ const SETTLEMENT_GROUND = {
     "mechanics":[Color(0.150,0.152,0.150),Color(0.190,0.188,0.180),Color(0.360,0.356,0.340),Color(0.215,0.212,0.200),Color(0.10,0.10,0.10)],
     "lazaret":[Color(0.330,0.335,0.320),Color(0.300,0.305,0.290),Color(0.560,0.565,0.545),Color(0.215,0.290,0.180),Color(0.30,0.40,0.24)]
 }
+
+# street, lane, pavement, [yard variants] -> settlement_ground_<name>_v1.png (seamless, 256 px)
+const SETTLEMENT_GROUND_TEX = {
+    "perron":["cobble","dirt_road","pavement",["grass","dirt_yard","grass_dry"]],
+    "rubezh":["concrete_slabs","dirt_road","pavement",["gravel","gravel","grass_dry"]],
+    "mechanics":["asphalt","asphalt","pavement",["oil_concrete","dirt_yard","gravel"]],
+    "lazaret":["pavers","asphalt","pavement",["lawn","grass","grass_dry"]]
+}
+
+func _settlement_tex(parent,material:String,rect:Rect2,origin:Vector2,vertical:bool = false):
+    # Seamless world-anchored texture fill: the region follows world coordinates,
+    # so a street continues without a seam into the next sector.
+    var tex = load("res://settlement_ground_%s_v1.png" % material)
+    if tex == null:
+        return null
+    var sprite = Sprite2D.new()
+    sprite.texture = tex
+    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+    sprite.region_enabled = true
+    sprite.centered = false
+    if vertical:
+        # rotate so ruts / slab rows run along the street
+        sprite.rotation = PI * 0.5
+        sprite.position = Vector2(rect.end.x,rect.position.y)
+        sprite.region_rect = Rect2(origin.y + rect.position.y,origin.x + rect.position.x,rect.size.y,rect.size.x)
+    else:
+        sprite.position = rect.position
+        sprite.region_rect = Rect2(origin + rect.position,rect.size)
+    parent.add_child(sprite)
+    return sprite
 
 func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
     # Town floor: streets fill the sector, blocks are raised on curbs with a
@@ -19694,36 +19853,32 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
     rng.seed = int(abs(coord.x * 2654435 + coord.y * 97531 + 4099)) + 1
     var idx = int(cell_data.get("settlement_index",4))
     var offset = cell_data.get("settlement_offset",Vector2i.ZERO)
-    _rect(Vector2(384,384),Vector2(CHUNK_SIZE,CHUNK_SIZE),pal[1],layer)
-    _rect(Vector2(384,384),Vector2(96,CHUNK_SIZE),pal[0],layer)
-    _rect(Vector2(384,384),Vector2(CHUNK_SIZE,96),pal[0],layer)
+    var mats = SETTLEMENT_GROUND_TEX.get(style,SETTLEMENT_GROUND_TEX["perron"])
+    var origin = chunk.global_position
+    _settlement_tex(layer,mats[1],Rect2(0,0,CHUNK_SIZE,CHUNK_SIZE),origin)
+    _settlement_tex(layer,mats[0],Rect2(336,0,96,CHUNK_SIZE),origin,true)
+    _settlement_tex(layer,mats[0],Rect2(0,336,CHUNK_SIZE,96),origin)
     _settlement_street_marks(layer,style,rng)
     # town square on the central crossing
     if idx == 4:
         var sq = Rect2(300,300,168,168)
-        _rect(sq.get_center(),sq.size,pal[2].darkened(0.05),layer)
-        for gx in range(7):
-            for gy in range(7):
-                var c = sq.position + Vector2(12 + gx * 24,12 + gy * 24)
-                _rect(c,Vector2(22,22),pal[2].lightened(0.04 * float((gx + gy) % 2)),layer)
+        _settlement_tex(layer,"pavement",sq,chunk.global_position)
     var blocks = cell_data.get("blocks",{})
     for quad in blocks.keys():
         var block = blocks[quad]
         var r:Rect2 = block["rect"]
         _rect(r.get_center() + Vector2(1,2),r.size + Vector2(2,2),Color(0.02,0.02,0.02,0.35),layer)   # curb shadow
-        _rect(r.get_center(),r.size,pal[2],layer)
+        _settlement_tex(layer,mats[2],r,origin)
+        _rect(Vector2(r.get_center().x,r.position.y + 0.5),Vector2(r.size.x,1),Color(0.70,0.70,0.66,0.35),layer)   # kerb edge
         var inner = r.grow(-6.0)
-        # yard surface keeps the compound noise texture visible underneath
-        var yard_col = pal[3]
-        if style == "perron" and rng.randf() < 0.35:
-            yard_col = Color(0.27,0.24,0.18)          # trodden earth yard
-        _rect(inner.get_center(),inner.size,Color(yard_col.r,yard_col.g,yard_col.b,0.82),layer)
+        var yard_mats = mats[3]
+        _settlement_tex(layer,yard_mats[rng.randi_range(0,yard_mats.size() - 1)],inner,origin)
         for i in range(14):
             var p = Vector2(rng.randf_range(inner.position.x + 8,inner.end.x - 8),rng.randf_range(inner.position.y + 8,inner.end.y - 8))
-            _ellipse(p,rng.randf_range(10,34),rng.randf_range(4,11),Color(pal[4].r,pal[4].g,pal[4].b,rng.randf_range(0.22,0.5)),layer)
+            _ellipse(p,rng.randf_range(10,34),rng.randf_range(4,11),Color(pal[4].r,pal[4].g,pal[4].b,rng.randf_range(0.10,0.22)),layer)
         # tufts / gravel / stains at pixel scale
         var tuft = pal[4].lightened(0.18)
-        for i in range(90):
+        for i in range(30):
             var p = Vector2(rng.randf_range(inner.position.x + 3,inner.end.x - 3),rng.randf_range(inner.position.y + 3,inner.end.y - 3))
             if style == "perron" or style == "lazaret":
                 _rect(p,Vector2(1,3),Color(tuft.r,tuft.g,tuft.b,0.7),layer)
@@ -19775,20 +19930,12 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
 func _settlement_street_marks(layer,style:String,rng):
     match style:
         "perron":
-            # cobbled main streets: rows of setts, worn ruts
-            for i in range(420):
-                var p = Vector2(rng.randf_range(336,432),rng.randf_range(0,768)) if i % 2 == 0 else Vector2(rng.randf_range(0,768),rng.randf_range(336,432))
-                _rect(p,Vector2(4,3),Color(0.36,0.32,0.25,0.55),layer)
+            # worn wheel ruts along the cobbles
             for off in [-18.0,18.0]:
                 _rect(Vector2(384 + off,384),Vector2(6,768),Color(0.22,0.19,0.14,0.45),layer)
                 _rect(Vector2(384,384 + off),Vector2(768,6),Color(0.22,0.19,0.14,0.45),layer)
         "rubezh":
-            # concrete road slabs with joints and a white centre dash
-            for k in range(0,768,48):
-                _rect(Vector2(384,k),Vector2(96,2),Color(0.12,0.12,0.11,0.8),layer)
-                _rect(Vector2(k,384),Vector2(2,96),Color(0.12,0.12,0.11,0.8),layer)
-            _rect(Vector2(384,384),Vector2(2,768),Color(0.12,0.12,0.11,0.8),layer)
-            _rect(Vector2(384,384),Vector2(768,2),Color(0.12,0.12,0.11,0.8),layer)
+            # white lane dashes over the concrete slab texture
             for k in range(12,768,40):
                 if abs(k - 384) > 50:
                     _rect(Vector2(384 + 22,k),Vector2(2,16),Color(0.78,0.78,0.70,0.45),layer)
@@ -19805,10 +19952,7 @@ func _settlement_street_marks(layer,style:String,rng):
             for c in [Vector2(360,120),Vector2(408,640),Vector2(120,408)]:
                 _ellipse(c,6,3,Color(0.08,0.08,0.08,0.9),layer)
         "lazaret":
-            # pale pavers with a darker border band
-            for k in range(0,768,16):
-                _rect(Vector2(384,k),Vector2(96,1),Color(0.26,0.27,0.25,0.5),layer)
-                _rect(Vector2(k,384),Vector2(1,96),Color(0.26,0.27,0.25,0.5),layer)
+            # darker border band along the paved avenues
             for off in [-44.0,44.0]:
                 _rect(Vector2(384 + off,384),Vector2(4,768),Color(0.46,0.47,0.44,0.9),layer)
                 _rect(Vector2(384,384 + off),Vector2(768,4),Color(0.46,0.47,0.44,0.9),layer)

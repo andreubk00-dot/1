@@ -33,6 +33,9 @@ class B:
         if plinth is not None:
             self.m.rect(self.front, 0, 0, W, plinth_h, plinth)
             self.m.rect(self.front, 0, plinth_h - 0.8, W, 0.8, dark(plinth, 0.75))
+        self.style = mid.split('_')[0]
+        self.win_rects = []          # (u, v, w, h) on the main front face
+        self.decay = True
         self.door_x = 0.0
         self.roof_rise = 0.0
         self.roof_fn = lambda x, y: self.H
@@ -202,11 +205,135 @@ class B:
             lit = self.rng.random() < lit_chance
             self.m.window(self.front, self.fu(x), v, w, h, style=style, frame_col=frame, glass=glass, shutters=shutters,
                           bars=bars, lit=lit, sill=sill)
+            self.win_rects.append((self.fu(x), v, w, h))
+            if not lit:
+                self._window_state(self.fu(x), v, w, h)
             if streaks and self.rng.random() < 0.55:
                 for s in range(self.rng.randint(1, 3)):
                     self.front.decals.append(('streak', dict(u=self.fu(x) + self.rng.uniform(1, w - 1), v=v - 2, h=self.rng.uniform(3, 9))))
             k += 1
         return k
+
+    # --- post-apocalyptic wear ------------------------------------------------------
+    WINDOW_WEAR = {
+        # broken, boarded, plywood, sandbags, taped, stovepipe
+        'perron': (0.14, 0.16, 0.08, 0.0, 0.04, 0.07),
+        'rubezh': (0.08, 0.10, 0.04, 0.24, 0.06, 0.03),
+        'mech':   (0.18, 0.08, 0.14, 0.0, 0.03, 0.04),
+        'laz':    (0.05, 0.07, 0.05, 0.0, 0.26, 0.02),
+    }
+
+    def _window_state(self, u, v, w, h):
+        r = self.rng.random()
+        wear = self.WINDOW_WEAR.get(self.style, (0.1, 0.1, 0.05, 0, 0.05, 0.03))
+        acc = 0.0
+        for kind, pr in zip(('broken', 'boards', 'plywood', 'sandbags', 'tape', 'stovepipe'), wear):
+            acc += pr
+            if r < acc:
+                break
+        else:
+            return
+        f = self.front
+        if kind == 'broken':
+            f.decals.append(('broken', dict(u=u, v=v, w=w, h=h)))
+        elif kind == 'boards':
+            f.decals.append(('boards', dict(u=u, v=v, w=w, h=h, rows=(0.2, 0.55, 0.85) if h > 16 else (0.3, 0.7))))
+        elif kind == 'plywood':
+            f.decals.append(('plywood', dict(u=u, v=v, w=w, h=h, col=self.rng.choice([(150, 124, 86), (136, 112, 80), (120, 116, 104)]))))
+        elif kind == 'sandbags':
+            f.decals.append(('sandbags', dict(u=u, v=v - 1, w=w, h=h * 0.62)))
+        elif kind == 'tape':
+            f.decals.append(('tape', dict(u=u, v=v, w=w, h=h)))
+        elif kind == 'stovepipe':
+            # буржуйка: a stove pipe through a plywood-closed pane, soot above it
+            f.decals.append(('plywood', dict(u=u, v=v, w=w, h=h, col=(128, 110, 84))))
+            x = self.x0 + u + w / 2
+            z = v + h * 0.5
+            self.m.box(x - 1.6, x + 1.6, self.y1, self.y1 + 6, z - 1.6, z + 1.6, ((70, 70, 68), 'none'), bias=57, cap=False)
+            self.m.box(x - 1.6, x + 1.6, self.y1 + 4, self.y1 + 7, z, z + 14, ((70, 70, 68), 'none'), bias=58)
+            f.decals.append(('soot', dict(u=u - 3, v=v + h * 0.4, w=w + 6, h=self.H - v - h * 0.4)))
+
+    def _free_wall_spot(self, w, h, v_lo=4.0, v_hi=None, tries=24):
+        v_hi = (self.H - 8.0) if v_hi is None else v_hi
+        blocked = list(self.win_rects) + [(self.fu(x) - ow, 0, ow * 2, DOOR_H + 6) for x, ow in self.opening_xs]
+        for _ in range(tries):
+            u = self.rng.uniform(4, max(5.0, self.W - w - 4))
+            v = self.rng.uniform(v_lo, max(v_lo + 0.1, v_hi - h))
+            ok = True
+            for bu, bv, bw, bh in blocked:
+                if u < bu + bw + 2 and u + w > bu - 2 and v < bv + bh + 2 and v + h > bv - 2:
+                    ok = False
+                    break
+            if ok:
+                return u, v
+        return None
+
+    def wear(self):
+        """generic post-collapse wear: patched walls, soot, graffiti, rust, tarps, holes."""
+        if not self.decay:
+            return
+        r = self.rng
+        f = self.front
+        wall = self.wall
+        plaster = wall in ('plaster', 'plaster_y', 'plaster_g', 'silicate', 'concrete_s')
+        steel = wall.startswith('steel') or wall.startswith('container')
+        area = self.W * self.H
+        # plaster fallen off down to the brick
+        if plaster:
+            for _ in range(int(area // 3500) + 1):
+                spot = self._free_wall_spot(r.uniform(10, 22), r.uniform(7, 13))
+                if spot:
+                    f.decals.append(('peel', dict(u=spot[0], v=spot[1], w=r.uniform(10, 22), h=r.uniform(7, 13))))
+        # corrugated / plywood patches over damage
+        n_patch = {'perron': 2, 'rubezh': 1, 'mech': 3, 'laz': 1}.get(self.style, 1)
+        for _ in range(r.randint(0, n_patch)):
+            w, h = r.uniform(12, 26), r.uniform(10, 18)
+            spot = self._free_wall_spot(w, h)
+            if spot:
+                if r.random() < 0.5 or self.style == 'mech':
+                    f.decals.append(('sheet', dict(u=spot[0], v=spot[1], w=w, h=h, col=r.choice([(124, 128, 128), (128, 84, 54), (76, 102, 118)]))))
+                else:
+                    f.decals.append(('plywood', dict(u=spot[0], v=spot[1], w=w, h=h)))
+        # graffiti and faction marks low on the wall
+        n_g = {'perron': 2, 'rubezh': 1, 'mech': 3, 'laz': 1}.get(self.style, 1)
+        for _ in range(r.randint(1, n_g)):
+            w = r.uniform(14, 30)
+            spot = self._free_wall_spot(w, 6, 6, 22)
+            if spot:
+                f.decals.append(('graffiti', dict(u=spot[0], v=spot[1], w=w, h=r.uniform(3, 6), underline=r.random() < 0.3)))
+        # rust / water streaks from the eaves
+        for _ in range(int(self.W // 22)):
+            u = r.uniform(3, self.W - 3)
+            col = (112, 70, 44) if (steel or r.random() < 0.3) else dark(MAT[wall][0], 0.8)
+            f.decals.append(('streak', dict(u=u, v=self.H - 1, h=r.uniform(6, 20), col=col)))
+        # scorch marks: the region saw fighting
+        if r.random() < {'perron': 0.25, 'rubezh': 0.45, 'mech': 0.35, 'laz': 0.15}.get(self.style, 0.2):
+            spot = self._free_wall_spot(16, 18, 2)
+            if spot:
+                f.decals.append(('soot', dict(u=spot[0], v=spot[1], w=18, h=20)))
+        # roof: tarps weighed down with tyres, holes, junk
+        if self.roof_rise > 0 or True:
+            for _ in range(r.randint(1, 2)):
+                w, d = r.uniform(26, 50), r.uniform(18, 30)
+                x = r.uniform(self.x0 + w / 2 + 6, self.x1 - w / 2 - 6)
+                y = r.uniform(self.y0 + d / 2 + 2, self.y1 - d / 2 - 2)
+                mat = r.choice(['tarp_blue', 'tarp_green', 'tarp_grey', 'tarp_orange'] if self.style != 'rubezh' else ['tarp_green', 'tarp_grey'])
+                self.roof_patch(x, y, w, d, mat)
+                zt = self.roof_z(x, y) + 1.5
+                self.m.line3([V(x - w / 2, y + d / 2, self.roof_z(x, y + d / 2) + 0.8), V(x + w / 2, y - d / 2, self.roof_z(x, y - d / 2) + 0.8)], (60, 56, 48), 1, bias=170)
+                for k in range(r.randint(1, 2)):
+                    tx, ty = x + r.uniform(-w / 3, w / 3), y + r.uniform(-d / 3, d / 3)
+                    self.m.cyl(tx, ty, self.roof_z(tx, ty) + 0.4, self.roof_z(tx, ty) + 3.2, 4.2, ((34, 34, 34), 'none'), segs=10, bias=180)
+            if self.style in ('perron', 'mech') and r.random() < 0.6:
+                x, y = r.uniform(self.x0 + 20, self.x1 - 20), r.uniform(self.y0 + 14, self.y1 - 14)
+                zc = self.roof_z(x, y) + 0.5
+                pts = [V(x + math.cos(a) * r.uniform(4, 9), y + math.sin(a) * r.uniform(3, 6), zc) for a in np.linspace(0, 2 * math.pi, 9, endpoint=False)]
+                self.m.poly3(pts, (20, 18, 16), 'none', bias=165)
+                for a in np.linspace(0, 2 * math.pi, 5, endpoint=False):
+                    self.m.line3([V(x + math.cos(a) * 5, y + math.sin(a) * 3, zc), V(x + math.cos(a) * 11, y + math.sin(a) * 6, zc + 0.5)], (70, 60, 48), 1, bias=166)
+            if r.random() < 0.5:
+                bx, by = r.uniform(self.x0 + 14, self.x1 - 14), r.uniform(self.y0 + 10, self.y1 - 10)
+                self.m.cyl(bx, by, self.roof_z(bx, by) - 1, self.roof_z(bx, by) + 9, 4.5, ((70, 92, 110), 'none'), segs=10, bias=185)   # rain barrel
 
     def signboard(self, x, z, w, h=8.0, col=(40, 44, 42), border=(150, 140, 110)):
         u = self.fu(x) - w / 2
@@ -303,7 +430,13 @@ class B:
         g = self.grime if grime is None else grime
         r = self.rust if rust is None else rust
         mo = self.moss if moss is None else moss
-        c = render(self.m, grime=g, rust=r, moss=mo)
+        self.wear()
+        c = render(self.m, grime=g + 0.05, rust=r + (0.05 if self.style in ('mech', 'rubezh') else 0.02), moss=mo + 0.03)
+        # leaves collect on roofs far more than on walls
+        split = int(round((self.D / 2 - self.H - c.y0) * DENS))
+        from wa_town import sprinkle_leaves
+        c.img = sprinkle_leaves(c.img, self.seed, 0.010, rows=(0, max(1, split)))
+        c.img = sprinkle_leaves(c.img, self.seed + 1, 0.0015)
         return c
 
 

@@ -36,6 +36,9 @@ KINDS = [
     # lazaret (medical)
     'medical_tent', 'decon_frame', 'triage_canopy', 'herb_beds', 'incinerator', 'oxygen_rack',
     'ambulance', 'wash_station',
+    # survival clutter shared by all towns
+    'shanty', 'tarp_shelter', 'scrap_barricade', 'tire_wall', 'burnt_car', 'graves',
+    'warning_sign', 'rubble_pile', 'dead_tree', 'bonfire', 'rain_tank', 'junk_pile',
 ]
 
 WOOD = (132, 98, 64)
@@ -781,6 +784,217 @@ def wash_station():
     return grunge(s.render(), 136, 0.1, rust=0.06, dirt_bottom=0.16)
 
 
+# ------------------------------------------------------------- survival clutter --
+def shanty():
+    s = sc(166)
+    # walls: mismatched corrugated sheets and planks
+    cols = [(124, 128, 128), (128, 84, 54), (76, 102, 118), (110, 92, 64)]
+    x = -40
+    i = 0
+    while x < 40:
+        w = 10 + (i * 7) % 8
+        s.box(V(x + w / 2, 0, 18), (w / 2, 20, 18), cols[i % 4], bias=0.1 * i)
+        for k in range(int(x), int(x + w), 2):
+            s.line([V(k, 20.2, 1), V(k, 20.2, 35)], tuple(int(c * 0.8) for c in cols[i % 4]), 1, bias=1)
+        x += w
+        i += 1
+    s.box(V(-10, 20.4, 12), (7, 0.3, 12), (60, 44, 30), edge=False, bias=2)          # plank door
+    for z in (5, 12, 19):
+        s.line([V(-17, 20.8, z), V(-3, 20.8, z)], (90, 66, 44), 1, bias=3)
+    s.box(V(20, 20.4, 22), (6, 0.3, 4), (60, 74, 80), edge=False, bias=2)             # window
+    # tarp roof weighed with tyres, stove pipe with smoke
+    s.poly([V(-46, 26, 36), V(46, 26, 36), V(46, -24, 44), V(-46, -24, 44)], (58, 88, 124))
+    for (x, y) in ((-24, 0), (18, -6)):
+        s.cyl(V(x, y, 39), 5, 3, (32, 32, 32), bias=4)
+    s.cyl(V(30, -10, 40), 2, 16, (70, 70, 68), bias=5)
+    for k, (dz, r) in enumerate([(62, 3.5), (72, 4.5)]):
+        s.ball(V(31 + k, -10, dz), r, (140, 140, 136), bias=10 + k)
+    return grunge(s.render(), 137, 0.16, rust=0.25, dirt_bottom=0.3, leaves=0.006)
+
+
+def tarp_shelter():
+    s = sc(160)
+    for (x, y, h) in ((-44, 22, 26), (44, 22, 26), (-44, -18, 40), (44, -18, 40)):
+        s.line([V(x, y, 0), V(x, y, h)], (96, 72, 48), 2)
+    s.poly([V(-50, 28, 24), V(50, 28, 24), V(50, -20, 42), V(-50, -20, 42)], (72, 92, 60))
+    for x in range(-44, 46, 14):
+        s.line([V(x, 28, 24), V(x + 4, -20, 42)], (56, 72, 46), 1, bias=2)
+    s.line([V(-50, 28, 24), V(-58, 38, 0)], (170, 160, 130), 1, bias=3)
+    s.line([V(50, 28, 24), V(58, 38, 0)], (170, 160, 130), 1, bias=3)
+    s.box(V(-20, 4, 7), (10, 8, 7), (140, 108, 70), bias=1)
+    s.box(V(4, 8, 5), (8, 6, 5), (110, 116, 104), bias=1)
+    s.box(V(-4, 0, 1.5), (26, 12, 1.5), (120, 110, 90), bias=0.5)                    # mattress
+    s.cyl(V(28, 10, 0), 6, 12, (70, 92, 110), bias=1)
+    return grunge(s.render(), 138, 0.14, dirt_bottom=0.2, leaves=0.006)
+
+
+def scrap_barricade():
+    s = sc(160)
+    rng = random.Random(139)
+    pieces = [((-40, 0, 10), (14, 6, 10), (120, 124, 124)), ((-16, 4, 8), (12, 4, 8), (128, 84, 54)),
+              ((10, 0, 12), (10, 5, 12), (110, 92, 64)), ((34, 4, 9), (12, 5, 9), (76, 102, 118)),
+              ((-28, 2, 22), (18, 4, 4), (96, 72, 48)), ((22, 2, 25), (16, 4, 3), (140, 110, 70))]
+    for c, h, col in pieces:
+        s.box(V(*c), h, col, bias=rng.uniform(0, 1))
+    for x in (-48, 48):
+        s.cyl(V(x, 10, 0), 7, 4, (32, 32, 32), bias=2)
+        s.cyl(V(x, 10, 4), 7, 4, (36, 36, 36), bias=2.1)
+    for x in range(-44, 46, 11):
+        s.line([V(x, 8, 18), V(x + 6, 14, 30)], (70, 60, 50), 1, bias=3)         # spikes / rebar
+    for i in range(40):
+        t = i / 39
+        a = t * math.pi * 16
+        s.px(V(-48 + t * 96 + math.cos(a) * 1.5, 6 + math.sin(a) * 3, 32 + math.sin(a) * 2), (150, 152, 150), bias=4)
+    return grunge(s.render(), 139, 0.18, rust=0.4, dirt_bottom=0.25)
+
+
+def tire_wall():
+    s = sc(150)
+    for row in range(3):
+        n = 6 - row
+        for i in range(n):
+            x = (i - (n - 1) / 2) * 15
+            s.cyl(V(x, 0, row * 6), 7.5, 5.5, (34, 34, 34), bias=row)
+            s.cyl(V(x, 0, row * 6 + 5.5), 3.5, 0.2, (18, 18, 18), bias=row + 0.5, edge=False)
+    return grunge(s.render(), 140, 0.12, dirt_bottom=0.1, leaves=0.01)
+
+
+def burnt_car():
+    s = sc(156)
+    body = (62, 44, 34)
+    s.box(V(0, 0, 14), (46, 18, 8), body)
+    s.box(V(-4, 0, 27), (24, 16, 5), (48, 36, 30), face_cols={'front': (20, 18, 16)})
+    for (x, y) in ((-30, -18), (30, -18), (-30, 18), (30, 18)):
+        s.box(V(x, y, 3), (6, 2, 3), (40, 30, 24), bias=-0.3)                       # rims
+    s.box(V(38, 0, 16), (8, 14, 4), (30, 26, 22), bias=1)                            # gaping bonnet
+    img = s.render()
+    a = np.array(img).astype(float)
+    A = a[..., 3] > 0
+    rng = np.random.default_rng(141)
+    rust = rng.random(A.shape) < 0.18
+    a[A & rust, :3] = a[A & rust, :3] * 0.4 + np.array((126, 64, 32)) * 0.6
+    soot = rng.random(A.shape) < 0.25
+    a[A & soot, :3] *= 0.55
+    return grunge(Image.fromarray(a.astype(np.uint8)), 141, 0.2, rust=0.3, dirt_bottom=0.3, leaves=0.01)
+
+
+def graves():
+    s = sc(150)
+    for i, x in enumerate((-40, 0, 40)):
+        s.box(V(x, 8, 2), (12, 16, 2), (78, 64, 48), face_cols={'top': (70, 58, 42)})
+        s.box(V(x, -8, 14), (1.5, 1.5, 14), (104, 80, 54), bias=1)
+        s.box(V(x, -8, 22), (7, 1.5, 1.4), (104, 80, 54), bias=1.1)
+        if i != 1:
+            for k in range(4):
+                s.px(V(x - 4 + k * 3, 14, 4.5), [(200, 60, 50), (220, 200, 90), (230, 230, 220)][k % 3], bias=2)
+    s.cyl(V(52, 18, 0), 2.5, 6, (160, 120, 60), bias=3)                            # candle jar
+    return grunge(s.render(), 142, 0.12, dirt_bottom=0.1, leaves=0.02)
+
+
+def warning_sign():
+    s = sc(160)
+    s.line([V(-14, 0, 0), V(-14, 0, 40)], (96, 72, 48), 2)
+    s.line([V(14, 0, 0), V(14, 0, 40)], (96, 72, 48), 2)
+    s.box(V(0, 1, 40), (22, 1, 10), (150, 124, 86), bias=1)
+    img = s.render()
+    d = ImageDraw.Draw(img)
+    # red painted skull-ish mark and slashes: readable danger sign without text
+    cx, cy = 96, 160 - 40 - 8
+    d.ellipse([cx - 6, cy - 8, cx + 6, cy + 2], fill=(170, 40, 34, 255))
+    d.rectangle([cx - 3, cy + 1, cx + 3, cy + 5], fill=(170, 40, 34, 255))
+    d.point([(cx - 3, cy - 4), (cx + 2, cy - 4)], fill=(150, 124, 86, 255))
+    d.line([(cx - 18, cy - 8), (cx - 12, cy + 6)], fill=(170, 40, 34, 255), width=2)
+    d.line([(cx + 12, cy - 8), (cx + 18, cy + 6)], fill=(170, 40, 34, 255), width=2)
+    return grunge(outline_img(img), 143, 0.14, dirt_bottom=0.1)
+
+
+def rubble_pile():
+    s = sc(150)
+    rng = random.Random(144)
+    s.poly([V(-50, 18, 0), V(50, 18, 0), V(30, -10, 18), V(-26, -12, 22)], (104, 98, 88))
+    for _ in range(26):
+        x, y = rng.uniform(-44, 44), rng.uniform(-8, 16)
+        z = 16 * (1 - abs(x) / 50) * (1 - (y + 8) / 30) + rng.uniform(0, 4)
+        col = rng.choice([(138, 80, 58), (150, 148, 138), (120, 116, 108), (112, 66, 50)])
+        s.box(V(x, y, z + 2), (rng.uniform(2, 5), rng.uniform(1.5, 3), rng.uniform(1.5, 3)), col, bias=rng.uniform(0, 2))
+    for _ in range(4):
+        x = rng.uniform(-30, 30)
+        s.line([V(x, 0, 10), V(x + rng.uniform(-8, 8), rng.uniform(-6, 6), 26)], (110, 70, 44), 1, bias=5)   # rebar
+    return grunge(s.render(), 144, 0.18, rust=0.1, dirt_bottom=0.2, leaves=0.012)
+
+
+def dead_tree():
+    s = Scene(CELL, CELL, (96, 186))
+    rng = random.Random(145)
+    trunk = (70, 60, 50)
+
+    def branch(p, d, length, width, depth):
+        q = p + d * length
+        s.line([p, q], trunk, max(1, int(width)), bias=depth)
+        if depth > 4 or length < 6:
+            return
+        for k in range(rng.randint(2, 3)):
+            nd = d + V(rng.uniform(-0.7, 0.7), rng.uniform(-0.4, 0.4), rng.uniform(-0.1, 0.35))
+            nd = nd / np.linalg.norm(nd)
+            branch(q, nd, length * rng.uniform(0.55, 0.75), width * 0.65, depth + 1)
+    branch(V(0, 0, 0), V(0, 0, 1), 60, 5, 0)
+    s.poly([V(-10, 6, 0), V(10, 6, 0), V(6, -4, 0), V(-6, -4, 0)], (60, 52, 40))
+    return grunge(s.render(), 145, 0.12, dirt_bottom=0.05)
+
+
+def bonfire():
+    s = sc(150)
+    for i in range(10):
+        a = 2 * math.pi * i / 10
+        s.ball(V(math.cos(a) * 16, math.sin(a) * 10, 3), 4, (110, 106, 98), bias=1 if math.sin(a) > 0 else 0)
+    for a in (0.3, 1.4, 2.6):
+        s.hcyl(V(math.cos(a) * 12, math.sin(a) * 7, 4), V(-math.cos(a) * 10, -math.sin(a) * 6, 8), 2.2, (96, 66, 40), bias=2)
+    for k, (dx, dz, r, col) in enumerate([(-2, 9, 5, (240, 140, 44)), (3, 12, 4.5, (250, 190, 70)), (0, 16, 3, (255, 232, 150))]):
+        s.ball(V(dx, 0, dz), r, col, bias=5 + k)
+    s.line([V(-24, 0, 0), V(-24, 0, 26)], (70, 60, 50), 1, bias=3)
+    s.line([V(24, 0, 0), V(24, 0, 26)], (70, 60, 50), 1, bias=3)
+    s.line([V(-24, 0, 26), V(24, 0, 26)], (70, 60, 50), 1, bias=3)
+    s.cyl(V(0, 0, 18), 5, 5, (60, 62, 60), bias=6)                                   # hanging pot
+    s.box(V(-36, 12, 4), (7, 4, 4), (104, 80, 54), bias=1)                          # log seats
+    s.box(V(36, 12, 4), (7, 4, 4), (104, 80, 54), bias=1)
+    return grunge(s.render(), 146, 0.12, dirt_bottom=0.1)
+
+
+def rain_tank():
+    s = sc(160)
+    s.box(V(0, 0, 3), (18, 16, 3), (104, 80, 54))                                  # pallet
+    s.box(V(0, 0, 24), (16, 14, 18), (190, 196, 190), face_cols={'front': (176, 182, 176)})
+    for x in (-16, 0, 16):
+        s.line([V(x, 14.2, 6), V(x, 14.2, 42)], (120, 124, 124), 1, bias=2)
+    for z in (6, 24, 42):
+        s.line([V(-16, 14.2, z), V(16, 14.2, z)], (120, 124, 124), 1, bias=2)
+    s.box(V(0, 0, 43), (6, 6, 1), (70, 70, 68), bias=3)
+    s.line([V(0, 0, 44), V(0, -10, 54), V(-30, -10, 54)], (110, 112, 110), 2, bias=4)   # gutter from a roof
+    s.box(V(10, 15, 10), (2, 1, 2), (180, 50, 40), bias=3)
+    s.cyl(V(24, 18, 0), 5, 10, (70, 92, 110), bias=2)                                # bucket
+    img = s.render()
+    a = np.array(img).astype(float)
+    water = (a[..., 3] > 0) & (a[..., 0] > 160) & (a[..., 1] > 160)
+    rng = np.random.default_rng(147)
+    lvl = rng.random(water.shape) < 0.08
+    a[water & lvl, :3] = (110, 140, 150)
+    return grunge(Image.fromarray(a.astype(np.uint8)), 147, 0.12, dirt_bottom=0.25)
+
+
+def junk_pile():
+    s = sc(150)
+    s.box(V(-26, 0, 16), (8, 7, 16), (196, 196, 186))                              # fridge
+    s.box(V(-26, 7.3, 18), (6, 0.3, 1), (120, 120, 116), edge=False, bias=1)
+    s.box(V(6, 6, 3), (22, 10, 3), (150, 130, 110), bias=0.5)                      # mattress
+    for i in range(5):
+        s.box(V(i * 8 - 4, 4, 7 + i % 2), (3, 2, 2), (110, 90, 70), bias=1)
+    for (x, y, c) in ((30, 8, (50, 56, 60)), (38, -2, (30, 32, 34)), (20, 16, (60, 70, 50))):
+        s.ball(V(x, y, 5), 6, c, bias=2)                                               # trash bags
+    s.cyl(V(-44, 10, 0), 6, 4, (32, 32, 32), bias=1)
+    s.line([V(-10, 0, 10), V(10, -8, 26)], (120, 110, 90), 1, bias=3)
+    return grunge(s.render(), 148, 0.16, rust=0.2, dirt_bottom=0.2, leaves=0.012)
+
+
 FNS = [market_stall, market_stall_b, water_tower, garden_beds, laundry_line, field_kitchen,
        platform_canopy, radio_mast, water_point, chicken_coop, long_table, fire_barrel,
        sandbag_nest, hesco_row, army_tent, flag_pole, searchlight_tower, ammo_bunker,
@@ -788,7 +1002,9 @@ FNS = [market_stall, market_stall_b, water_tower, garden_beds, laundry_line, fie
        jib_crane, scrap_heap, wind_turbine, fuel_station, car_on_blocks, furnace,
        solar_rig, container_shop,
        medical_tent, decon_frame, triage_canopy, herb_beds, incinerator, oxygen_rack,
-       ambulance, wash_station]
+       ambulance, wash_station,
+       shanty, tarp_shelter, scrap_barricade, tire_wall, burnt_car, graves,
+       warning_sign, rubble_pile, dead_tree, bonfire, rain_tank, junk_pile]
 assert len(FNS) == len(KINDS)
 
 
