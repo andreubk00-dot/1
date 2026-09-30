@@ -1,0 +1,10 @@
+OSTATOK 0.53.0 — ANIMATION / VISUAL POLISH
+
+Goals:
+- fix the static-looking player locomotion in 0.52.1;
+- replace the blocky player silhouette with a more readable 3/4 survival figure;
+- remove legacy doubled-leg rendering;
+- make infected use all four locomotion frames;
+- preserve the 80x60 player frame contract, atlas rows/columns, collisions and gameplay.
+
+Art remains original procedural pixel work produced for this project. User reference images are direction only and are not copied into runtime assets.

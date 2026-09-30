@@ -1,0 +1,5 @@
+1.21.0-stable
+
+Scope: Infected Variety & Encounter Balance stable promotion from accepted 1.21.0-dev5.
+No new infected archetypes, no high-risk visual rebuild, no save schema change.
+Developer tools remain code-only and are disabled because Stable has no -dev suffix.
