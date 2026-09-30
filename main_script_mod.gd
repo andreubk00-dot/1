@@ -18498,8 +18498,12 @@ func _build_ground(chunk,coord):
     # Keep the same logical road/sidewalk footprint as previous versions.
     # Only visuals changed, so old bases/AI/navigation assumptions stay intact.
     # 0.87: grass tufts, leaves, curbs and tiles are baked into ground_chunk_v12.
-    _add_ground_decals(chunk,coord)
-    _decorate_region_ground(chunk,coord,_chunk_profile(coord))
+    var ground_profile = _chunk_profile(coord)
+    var ground_poi = ground_profile.get("poi",{})
+    # 1.22-dev4: inhabited settlements are swept - no blood or loose debris decals.
+    if typeof(ground_poi) != TYPE_DICTIONARY or not bool(ground_poi.get("safe_settlement",false)):
+        _add_ground_decals(chunk,coord)
+    _decorate_region_ground(chunk,coord,ground_profile)
 
 func _decorate_region_ground(chunk,coord,profile):
     if bool(profile.get("legacy",false)) or coord == Vector2i(0,0):
@@ -18859,11 +18863,19 @@ func _decorate_major_poi_ground(chunk,ground_kind,coord=Vector2i.ZERO):
         surface = Color(0.135,0.145,0.14,1.0)
     elif g.begins_with("rail") or g.begins_with("factory") or g == "service_yard" or g == "garage_lanes":
         surface = Color(0.18,0.18,0.17,1.0)
+    elif g == "settlement_civic":
+        surface = Color(0.215,0.195,0.160,1.0)
+    elif g == "settlement_military":
+        surface = Color(0.190,0.192,0.165,1.0)
+    elif g == "settlement_industrial":
+        surface = Color(0.185,0.183,0.175,1.0)
+    elif g == "settlement_medical":
+        surface = Color(0.250,0.258,0.244,1.0)
     var mask = _rect(Vector2(384,384),Vector2(CHUNK_SIZE,CHUNK_SIZE),surface,chunk)
     mask.z_index = -8
     var yard_texture = Sprite2D.new()
     yard_texture.name = "CompoundSurface"
-    yard_texture.texture = CompoundSurface.texture(surface,g.begins_with("dacha") or g.begins_with("hunting"))
+    yard_texture.texture = CompoundSurface.texture(surface,g.begins_with("dacha") or g.begins_with("hunting") or g == "settlement_civic")
     yard_texture.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
     yard_texture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     yard_texture.region_enabled = true
@@ -19178,6 +19190,8 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
             int(prop.get("z",3)),
             float(prop.get("scale",0.5))
         )
+    if cell_data.has("settlement_style"):
+        _dress_faction_settlement(chunk,coord,cell_data,str(poi.get("name",poi_name)))
     _spawn_faction_npcs(chunk,poi_id,cell_offset)
     var vertical_entry = HighRiskFloorCatalog.ground_entry(poi_id,cell_offset)
     if not vertical_entry.is_empty():
@@ -19310,6 +19324,432 @@ func _dress_major_poi(chunk,coord,ground_kind):
                 order.erase(spot)
                 break
     chunk.set_meta("poi_set_pieces",placed)
+
+# ---------------------------------------------------------------------------
+# 1.22-dev4 faction settlements: authored town dressing.
+# Four settlements used to share one three-box template with a road barrier.
+# Each faction now has its own perimeter (palisade / FBS blocks + wire /
+# corrugated sheet / whitewashed mesh), ground language, gates and structures
+# from settlement_props_v1.png. Everything here is deterministic per sector and
+# purely physical: no containers, no loot and no save keys are introduced.
+const SETTLEMENT_PIECE_KINDS = [
+    "market_stall","market_stall_b","water_tower","garden_beds","laundry_line","field_kitchen",
+    "platform_canopy","radio_mast","water_point","chicken_coop","long_table","fire_barrel",
+    "sandbag_nest","hesco_row","army_tent","flag_pole","searchlight_tower","ammo_bunker",
+    "btr","jersey_blocks",
+    "jib_crane","scrap_heap","wind_turbine","fuel_station","car_on_blocks","furnace",
+    "solar_rig","container_shop",
+    "medical_tent","decon_frame","triage_canopy","herb_beds","incinerator","oxygen_rack",
+    "ambulance","wash_station"
+]
+const SETTLEMENT_STYLES = ["perron","rubezh","mechanics","lazaret"]
+const SETTLEMENT_WALL_Y_N = 30.0
+const SETTLEMENT_WALL_Y_S = 752.0
+const SETTLEMENT_WALL_X_W = 14.0
+const SETTLEMENT_WALL_X_E = 754.0
+const SETTLEMENT_GATE_HALF = 62.0
+# Warm practical light for fires, stall lanterns and garlands.
+const SETTLEMENT_FIRE_LIGHT = Color(1.0,0.64,0.30)
+
+func _settlement_accent(style:String) -> Color:
+    match style:
+        "perron": return Color("9a4a36")
+        "rubezh": return Color("5c6a42")
+        "mechanics": return Color("c9a13a")
+        "lazaret": return Color("b8433a")
+    return Color("8b7651")
+
+func _dress_faction_settlement(chunk,coord,cell_data:Dictionary,settlement_name:String):
+    var style = str(cell_data.get("settlement_style","perron"))
+    chunk.set_meta("faction_settlement",style)
+    _settlement_ground(chunk,coord,cell_data,style)
+    _settlement_perimeter(chunk,style,cell_data.get("perimeter",{}),settlement_name)
+    var placed = 0
+    var skipped = []
+    for piece in cell_data.get("set_pieces",[]):
+        if _settlement_piece(chunk,piece) != null:
+            placed += 1
+        else:
+            skipped.append(str(piece.get("kind","")))
+    chunk.set_meta("settlement_pieces",placed)
+    chunk.set_meta("settlement_pieces_skipped",skipped)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 40503 + coord.y * 91121 + 227)) + 1
+    for tree_pos in cell_data.get("trees",[]):
+        if _settlement_spot_clear(chunk,tree_pos,18.0):
+            _create_tree(chunk,tree_pos,rng.randf_range(0.82,1.08),true)
+    for garland in cell_data.get("garlands",[]):
+        _settlement_garland(chunk,garland[0],garland[1],style)
+    var quarantine = cell_data.get("quarantine",Rect2())
+    if typeof(quarantine) == TYPE_RECT2 and quarantine.size != Vector2.ZERO:
+        _settlement_quarantine_pen(chunk,quarantine)
+
+func _settlement_spot_clear(chunk,pos,radius:float) -> bool:
+    # Settlement pieces are authored, but a building archetype can still grow a
+    # porch or door swing into a yard. Never block a door or stand in a wall.
+    if pos.x < 8.0 or pos.x > CHUNK_SIZE - 8.0 or pos.y < 8.0 or pos.y > CHUNK_SIZE - 4.0:
+        return false
+    if _tree_blocks_door_swing(chunk,pos):
+        return false
+    for child in chunk.get_children():
+        if not is_instance_valid(child) or not child.has_meta("world_building"):
+            continue
+        var size = child.get_meta("building_size",Vector2.ZERO)
+        if typeof(size) != TYPE_VECTOR2 or size == Vector2.ZERO:
+            continue
+        var rect = Rect2(child.position - size * 0.5 - Vector2(radius,6.0),size + Vector2(radius * 2.0,30.0))
+        if rect.has_point(pos):
+            return false
+    var gp = chunk.global_position + pos
+    for n in get_tree().get_nodes_in_group("faction_npcs"):
+        if is_instance_valid(n) and n.global_position.distance_to(gp) < radius + 20.0:
+            return false
+    return true
+
+func _settlement_piece(chunk,piece:Dictionary):
+    var kind = str(piece.get("kind",""))
+    var pos = piece.get("pos",Vector2.ZERO)
+    var solid = piece.get("solid",Vector2.ZERO)
+    var radius = max(14.0,solid.x * 0.5)
+    if not _settlement_spot_clear(chunk,pos,radius):
+        return null
+    if kind.begins_with("poi:") or kind.begins_with("street:"):
+        var shared = null
+        if kind.begins_with("poi:"):
+            shared = _poi_set_piece(chunk,kind.trim_prefix("poi:"),pos,solid,7,bool(piece.get("flip",false)))
+        else:
+            shared = _street_furniture_sprite(kind.trim_prefix("street:"),chunk,pos,5)
+        if shared != null:
+            shared.set_meta("settlement_piece_kind",kind)
+        return shared
+    if kind.begins_with("prop:"):
+        var prop = _world_prop_sprite(kind.trim_prefix("prop:"),chunk,pos,5,float(piece.get("scale",0.5)))
+        if prop != null:
+            prop.z_as_relative = false
+            prop.set_meta("settlement_piece_kind",kind)
+        return prop
+    var index = SETTLEMENT_PIECE_KINDS.find(kind)
+    if index < 0:
+        return null
+    var piece_scale = float(piece.get("scale",0.5))
+    var node = Node2D.new()
+    node.position = Vector2(round(pos.x),round(pos.y))
+    node.z_index = 7
+    node.z_as_relative = false
+    node.add_to_group("poi_set_pieces")
+    node.add_to_group("settlement_pieces")
+    node.set_meta("poi_piece_kind",kind)
+    node.set_meta("settlement_piece_kind",kind)
+    chunk.add_child(node)
+    var shadow_w = max(10.0,solid.x * 0.62) if solid != Vector2.ZERO else 26.0 * piece_scale * 2.0
+    _ellipse(Vector2(5,1),shadow_w,4.0,Color(0.01,0.012,0.012,0.26),node)
+    var sprite = _facade_atlas_sprite(
+        node,"res://settlement_props_v1.png",
+        Rect2((index % 6) * 192,int(index / 6) * 192,192,192),
+        Vector2(0,-96.0 * piece_scale),piece_scale
+    )
+    if sprite != null and bool(piece.get("flip",false)) and kind in ["market_stall","market_stall_b","chicken_coop","field_kitchen","car_on_blocks","scrap_heap","btr","ambulance"]:
+        sprite.flip_h = true
+    if solid != Vector2.ZERO:
+        _add_static_rect(node,Vector2(0,-solid.y * 0.5 + 2.0),solid)
+    _settlement_piece_light(node,kind,piece_scale)
+    return node
+
+func _settlement_piece_light(node,kind:String,piece_scale:float):
+    # Visual-only practical lights; they fade in with the existing night factor.
+    match kind:
+        "fire_barrel":
+            _add_detail_light(node,Vector2(0,-30.0 * piece_scale * 2.0),SETTLEMENT_FIRE_LIGHT,0.78,1.05,true)
+            _ellipse(Vector2(0,2),22,7,Color(1.0,0.55,0.22,0.07),node)
+        "field_kitchen","furnace","incinerator":
+            _add_detail_light(node,Vector2(-6,-12),SETTLEMENT_FIRE_LIGHT,0.58,0.9,true)
+        "market_stall","market_stall_b","container_shop":
+            _add_detail_light(node,Vector2(0,-24.0 * piece_scale * 2.0),Color(1.0,0.80,0.52),0.42,0.8,true)
+        "searchlight_tower":
+            _add_detail_light(node,Vector2(10,-8),Color(0.92,0.95,1.0),0.66,1.6,true)
+        "platform_canopy","triage_canopy","decon_frame":
+            _add_detail_light(node,Vector2(0,-18),Color(0.92,0.96,0.90),0.32,1.0,true)
+
+func _settlement_garland(chunk,a:Vector2,b:Vector2,style:String):
+    # String of bulbs between two posts; a sagging polyline plus a couple of
+    # practical lights so the square glows warmly at night.
+    var root = Node2D.new()
+    root.z_index = 9
+    root.z_as_relative = false
+    root.set_meta("settlement_garland",true)
+    chunk.add_child(root)
+    var steps = max(4,int(a.distance_to(b) / 12.0))
+    var line = Line2D.new()
+    line.width = 1.0
+    line.default_color = Color(0.10,0.10,0.09,0.85)
+    var bulb_cols = [Color(1.0,0.82,0.46),Color(1.0,0.66,0.34),Color(0.96,0.90,0.66)]
+    if style == "mechanics":
+        bulb_cols = [Color(1.0,0.84,0.40),Color(0.96,0.94,0.80)]
+    for i in range(steps + 1):
+        var t = float(i) / float(steps)
+        var p = a.lerp(b,t) + Vector2(0,-34.0 + sin(t * PI) * 12.0)
+        line.add_point(p)
+        if i > 0 and i < steps and i % 2 == 0:
+            _ellipse(p + Vector2(0,2),1.4,1.4,bulb_cols[(i / 2) % bulb_cols.size()],root)
+    root.add_child(line)
+    for post in [a,b]:
+        _rect(post + Vector2(0,-17),Vector2(2,34),Color(0.20,0.17,0.13,1.0),root)
+        _ellipse(post + Vector2(1,1),4,1.5,Color(0.01,0.012,0.012,0.22),root)
+    var mid = a.lerp(b,0.5) + Vector2(0,-24)
+    _add_detail_light(root,mid,Color(1.0,0.76,0.44),0.46,1.25,true)
+
+func _settlement_quarantine_pen(chunk,rect:Rect2):
+    # Lazaret isolation yard: mesh fence with a single controlled opening.
+    var col = Color(0.70,0.73,0.70,0.9)
+    var top = rect.position.y
+    var bottom = rect.end.y
+    _create_fence(chunk,Vector2(rect.get_center().x,top),rect.size.x)
+    _create_fence(chunk,Vector2(rect.position.x + rect.size.x * 0.25 - 14.0,bottom),rect.size.x * 0.5 - 28.0)
+    _create_fence(chunk,Vector2(rect.end.x - rect.size.x * 0.25 + 14.0,bottom),rect.size.x * 0.5 - 28.0)
+    _world_prop_sprite("med_sign",chunk,Vector2(rect.get_center().x + 44.0,bottom - 18.0),6,0.5)
+    _create_world_label(chunk,Vector2(rect.get_center().x - 34.0,bottom + 4.0),"КАРАНТИН",6,Color("c8807a"))
+    for x in [rect.position.x,rect.end.x]:
+        _rect(Vector2(x,(top + bottom) * 0.5),Vector2(2,rect.size.y),col,chunk)
+        _add_static_rect(chunk,Vector2(x,(top + bottom) * 0.5),Vector2(6,rect.size.y))
+
+# ---------------------------------------------------------------- perimeter --
+func _settlement_perimeter(chunk,style:String,walls:Dictionary,settlement_name:String):
+    var row = max(0,SETTLEMENT_STYLES.find(style))
+    for side in walls.keys():
+        var gate = bool(walls[side])
+        # corner sectors: trim each run to the perpendicular wall so corners close cleanly
+        var x_from = SETTLEMENT_WALL_X_W if walls.has("w") else 0.0
+        var x_to = SETTLEMENT_WALL_X_E if walls.has("e") else float(CHUNK_SIZE)
+        var y_from = SETTLEMENT_WALL_Y_N if walls.has("n") else 0.0
+        var y_to = SETTLEMENT_WALL_Y_S if walls.has("s") else float(CHUNK_SIZE)
+        match str(side):
+            "n": _settlement_wall_h(chunk,row,SETTLEMENT_WALL_Y_N,gate,x_from,x_to)
+            "s": _settlement_wall_h(chunk,row,SETTLEMENT_WALL_Y_S,gate,x_from,x_to)
+            "w": _settlement_wall_v(chunk,row,SETTLEMENT_WALL_X_W,gate,y_from,y_to)
+            "e": _settlement_wall_v(chunk,row,SETTLEMENT_WALL_X_E,gate,y_from,y_to)
+        if gate:
+            _settlement_gate(chunk,style,str(side),settlement_name)
+    chunk.set_meta("settlement_walls",walls.keys())
+
+func _settlement_wall_h(chunk,row:int,y:float,gate:bool,x_from:float = 0.0,x_to:float = CHUNK_SIZE):
+    var spans = [[x_from,x_to]]
+    if gate:
+        spans = [[x_from,384.0 - SETTLEMENT_GATE_HALF],[384.0 + SETTLEMENT_GATE_HALF,x_to]]
+    var root = Node2D.new()
+    root.z_index = 6
+    root.z_as_relative = false
+    root.set_meta("settlement_wall","h")
+    chunk.add_child(root)
+    for span in spans:
+        var x0 = float(span[0])
+        var x1 = float(span[1])
+        var x = x0
+        while x < x1 - 0.5:
+            var w = min(64.0,x1 - x)
+            _facade_atlas_sprite(root,"res://settlement_walls_v1.png",Rect2(0,row * 128,w * 2.0,72),Vector2(x + w * 0.5,y - 18.0 + 4.0),0.5)
+            x += 64.0
+        _ellipse(Vector2((x0 + x1) * 0.5,y + 5.0),(x1 - x0) * 0.5,3.0,Color(0.01,0.012,0.012,0.20),root)
+        _add_static_rect(root,Vector2((x0 + x1) * 0.5,y - 2.0),Vector2(x1 - x0,10.0))
+
+func _settlement_wall_v(chunk,row:int,x:float,gate:bool,y_from:float = 0.0,y_to:float = CHUNK_SIZE):
+    var spans = [[y_from,y_to]]
+    if gate:
+        spans = [[y_from,384.0 - SETTLEMENT_GATE_HALF],[384.0 + SETTLEMENT_GATE_HALF,y_to]]
+    var root = Node2D.new()
+    root.z_index = 6
+    root.z_as_relative = false
+    root.set_meta("settlement_wall","v")
+    chunk.add_child(root)
+    for span in spans:
+        var y0 = float(span[0])
+        var y1 = float(span[1])
+        var y = y0
+        while y < y1 - 0.5:
+            var h = min(64.0,y1 - y)
+            _facade_atlas_sprite(root,"res://settlement_walls_v1.png",Rect2(128,row * 128,40,h * 2.0),Vector2(x,y + h * 0.5 - 20.0),0.5)
+            y += 64.0
+        _rect(Vector2(x + 7.0,(y0 + y1) * 0.5),Vector2(4.0,y1 - y0),Color(0.01,0.012,0.012,0.18),root)
+        _add_static_rect(root,Vector2(x,(y0 + y1) * 0.5 - 8.0),Vector2(12.0,y1 - y0))
+
+func _settlement_gate_post(chunk,row:int,pos:Vector2):
+    var node = Node2D.new()
+    node.position = pos
+    node.z_index = 7
+    node.z_as_relative = false
+    node.set_meta("settlement_gate_post",true)
+    chunk.add_child(node)
+    _ellipse(Vector2(3,1),9,3,Color(0.01,0.012,0.012,0.26),node)
+    _facade_atlas_sprite(node,"res://settlement_walls_v1.png",Rect2(168,row * 128,64,112),Vector2(0,-28),0.5)
+    _add_static_rect(node,Vector2(0,-3),Vector2(14,8))
+    return node
+
+func _settlement_gate(chunk,style:String,side:String,settlement_name:String):
+    var row = max(0,SETTLEMENT_STYLES.find(style))
+    var accent = _settlement_accent(style)
+    var horizontal = side == "n" or side == "s"
+    var a = Vector2.ZERO
+    var b = Vector2.ZERO
+    var inward = Vector2.ZERO
+    match side:
+        "n":
+            a = Vector2(384.0 - SETTLEMENT_GATE_HALF,SETTLEMENT_WALL_Y_N + 2.0)
+            b = Vector2(384.0 + SETTLEMENT_GATE_HALF,SETTLEMENT_WALL_Y_N + 2.0)
+            inward = Vector2(0,1)
+        "s":
+            a = Vector2(384.0 - SETTLEMENT_GATE_HALF,SETTLEMENT_WALL_Y_S + 2.0)
+            b = Vector2(384.0 + SETTLEMENT_GATE_HALF,SETTLEMENT_WALL_Y_S + 2.0)
+            inward = Vector2(0,-1)
+        "w":
+            a = Vector2(SETTLEMENT_WALL_X_W,384.0 - SETTLEMENT_GATE_HALF)
+            b = Vector2(SETTLEMENT_WALL_X_W,384.0 + SETTLEMENT_GATE_HALF)
+            inward = Vector2(1,0)
+        "e":
+            a = Vector2(SETTLEMENT_WALL_X_E,384.0 - SETTLEMENT_GATE_HALF)
+            b = Vector2(SETTLEMENT_WALL_X_E,384.0 + SETTLEMENT_GATE_HALF)
+            inward = Vector2(-1,0)
+    _settlement_gate_post(chunk,row,a)
+    _settlement_gate_post(chunk,row,b)
+    # Cloth pennants in faction colours on both posts.
+    for post in [a,b]:
+        var flag = Node2D.new()
+        flag.position = post + Vector2(0,-50)
+        flag.z_index = 8
+        flag.z_as_relative = false
+        chunk.add_child(flag)
+        _rect(Vector2(0,6),Vector2(1,14),Color(0.16,0.15,0.13,1.0),flag)
+        _poly(PackedVector2Array([Vector2(1,0),Vector2(13,3),Vector2(1,8)]),accent,flag)
+        _poly(PackedVector2Array([Vector2(1,0),Vector2(13,3),Vector2(12,4),Vector2(1,2)]),accent.lightened(0.25),flag)
+    # Name board over the opening, readable when walking in.
+    var mid = (a + b) * 0.5
+    var half_text = float(settlement_name.length()) * 2.1
+    var label_pos = mid + inward * (58.0 if side == "s" else 30.0) + Vector2(-half_text,-6)
+    if not horizontal:
+        label_pos = mid + inward * 30.0 + Vector2(-half_text * 2.0 - 4.0 if side == "e" else 4.0,-SETTLEMENT_GATE_HALF - 16.0)
+    _create_world_label(chunk,label_pos,settlement_name,6,Color("d2c28a"))
+    var gate_lamp = mid + inward * 34.0 + (Vector2(-SETTLEMENT_GATE_HALF - 18.0,0) if horizontal else Vector2(0,-SETTLEMENT_GATE_HALF - 18.0))
+    if _settlement_spot_clear(chunk,gate_lamp,10.0):
+        _create_lamp(chunk,gate_lamp)
+    # Faction-specific control post just inside the opening.
+    var side_off = Vector2(SETTLEMENT_GATE_HALF + 30.0,0) if horizontal else Vector2(0,SETTLEMENT_GATE_HALF + 30.0)
+    var post_a = mid + inward * 46.0 + side_off
+    var post_b = mid + inward * 46.0 - side_off
+    match style:
+        "perron":
+            _settlement_piece(chunk,{"kind":"fire_barrel","pos":post_a,"scale":0.5,"solid":Vector2(10,6)})
+            _settlement_piece(chunk,{"kind":"prop:road_barrier","pos":post_b,"scale":0.55,"solid":Vector2.ZERO})
+        "rubezh":
+            _settlement_piece(chunk,{"kind":"poi:guard_booth","pos":post_a,"solid":Vector2(34,18)})
+            _settlement_piece(chunk,{"kind":"sandbag_nest","pos":post_b,"scale":0.45,"solid":Vector2(40,10)})
+            if horizontal:
+                _poi_set_piece(chunk,"boom_barrier",Vector2(a.x + 6.0,a.y + inward.y * 16.0),Vector2.ZERO,7,false)
+        "mechanics":
+            _settlement_piece(chunk,{"kind":"poi:cable_drum","pos":post_a,"solid":Vector2(22,10)})
+            _settlement_piece(chunk,{"kind":"prop:traffic_cone","pos":post_b,"scale":0.5,"solid":Vector2.ZERO})
+            # painted hazard threshold across the lane
+            var bar = Node2D.new()
+            bar.z_index = -6
+            chunk.add_child(bar)
+            for i in range(8):
+                var t = (float(i) + 0.5) / 8.0
+                var p = a.lerp(b,t) + inward * 10.0
+                _rect(p,Vector2(8,6) if horizontal else Vector2(6,8),Color(0.78,0.62,0.18,0.55) if i % 2 == 0 else Color(0.08,0.08,0.07,0.45),bar)
+        "lazaret":
+            _settlement_piece(chunk,{"kind":"wash_station","pos":post_a,"scale":0.45,"solid":Vector2(30,8)})
+            _settlement_piece(chunk,{"kind":"prop:med_sign","pos":post_b + Vector2(0,-8),"scale":0.5,"solid":Vector2.ZERO})
+
+# ---------------------------------------------------------------- ground --
+func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
+    # Visual-only floor language (z below actors): trodden lanes that continue
+    # across sector borders, plus one identity mark per faction.
+    var layer = Node2D.new()
+    layer.name = "SettlementGround"
+    layer.z_index = -7
+    chunk.add_child(layer)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 2654435 + coord.y * 97531 + 4099)) + 1
+    var idx = int(cell_data.get("settlement_index",4))
+    match style:
+        "perron":
+            var lane = Color(0.30,0.26,0.19,0.55)
+            _rect(Vector2(384,384),Vector2(96,CHUNK_SIZE),lane,layer)
+            _rect(Vector2(384,384),Vector2(CHUNK_SIZE,88),lane,layer)
+            for i in range(26):
+                var p = Vector2(rng.randf_range(20,748),rng.randf_range(20,748))
+                if abs(p.x - 384.0) < 60.0 or abs(p.y - 384.0) < 56.0:
+                    continue
+                _ellipse(p,rng.randf_range(14,40),rng.randf_range(5,12),Color(0.20,0.26,0.13,rng.randf_range(0.35,0.6)),layer)
+                for k in range(3):
+                    _rect(p + Vector2(rng.randf_range(-16,16),rng.randf_range(-4,4)),Vector2(1,3),Color(0.34,0.42,0.20,0.8),layer)
+            if idx == 4:
+                # brick-paved market square
+                for gx in range(0,11):
+                    for gy in range(0,8):
+                        var c = Vector2(250 + gx * 26,236 + gy * 26)
+                        var shade = 0.29 + 0.025 * float((gx * 7 + gy * 3) % 3)
+                        _rect(c,Vector2(25,25),Color(shade * 0.62,shade * 0.52,shade * 0.44,0.62),layer)
+                        _rect(c + Vector2(-1,-1),Vector2(21,21),Color(shade + 0.07,shade - 0.02,shade - 0.07,0.62),layer)
+            if idx >= 3 and idx <= 5:
+                # the old branch line the community grew around
+                _rect(Vector2(384,520),Vector2(CHUNK_SIZE,26),Color(0.17,0.15,0.12,0.9),layer)
+                for x in range(6,CHUNK_SIZE,22):
+                    _rect(Vector2(x,520),Vector2(6,30),Color(0.26,0.20,0.14,0.95),layer)
+                _rect(Vector2(384,511),Vector2(CHUNK_SIZE,2),Color(0.46,0.44,0.40,1.0),layer)
+                _rect(Vector2(384,529),Vector2(CHUNK_SIZE,2),Color(0.46,0.44,0.40,1.0),layer)
+        "rubezh":
+            var road = Color(0.14,0.145,0.13,0.85)
+            _rect(Vector2(384,384),Vector2(92,CHUNK_SIZE),road,layer)
+            _rect(Vector2(384,384),Vector2(CHUNK_SIZE,86),road,layer)
+            for x in range(10,CHUNK_SIZE,40):
+                _rect(Vector2(x,384),Vector2(18,2),Color(0.70,0.70,0.62,0.35),layer)
+                _rect(Vector2(384,x),Vector2(2,18),Color(0.70,0.70,0.62,0.35),layer)
+            for i in range(2):
+                var y0 = rng.randf_range(560,700)
+                _rect(Vector2(384,y0),Vector2(CHUNK_SIZE,3),Color(0.08,0.08,0.07,0.25),layer)
+                _rect(Vector2(384,y0 + 14),Vector2(CHUNK_SIZE,3),Color(0.08,0.08,0.07,0.25),layer)
+            var parade = cell_data.get("parade",Rect2())
+            if typeof(parade) == TYPE_RECT2 and parade.size != Vector2.ZERO:
+                _rect(parade.get_center(),parade.size,Color(0.27,0.27,0.25,0.9),layer)
+                var edge = Color(0.80,0.80,0.72,0.55)
+                _rect(Vector2(parade.get_center().x,parade.position.y),Vector2(parade.size.x,2),edge,layer)
+                _rect(Vector2(parade.get_center().x,parade.end.y),Vector2(parade.size.x,2),edge,layer)
+                _rect(Vector2(parade.position.x,parade.get_center().y),Vector2(2,parade.size.y),edge,layer)
+                _rect(Vector2(parade.end.x,parade.get_center().y),Vector2(2,parade.size.y),edge,layer)
+                for r in range(3):
+                    for c in range(5):
+                        _rect(parade.position + Vector2(40 + c * 48,70 + r * 44),Vector2(10,2),edge,layer)
+        "mechanics":
+            var lane = Color(0.15,0.15,0.14,0.8)
+            _rect(Vector2(384,384),Vector2(100,CHUNK_SIZE),lane,layer)
+            _rect(Vector2(384,384),Vector2(CHUNK_SIZE,92),lane,layer)
+            var yellow = Color(0.74,0.60,0.20,0.45)
+            for x in range(0,CHUNK_SIZE,28):
+                _rect(Vector2(x + 7,340),Vector2(14,2),yellow,layer)
+                _rect(Vector2(x + 7,428),Vector2(14,2),yellow,layer)
+                _rect(Vector2(336,x + 7),Vector2(2,14),yellow,layer)
+                _rect(Vector2(432,x + 7),Vector2(2,14),yellow,layer)
+            for i in range(14):
+                var p = Vector2(rng.randf_range(30,738),rng.randf_range(30,738))
+                _ellipse(p,rng.randf_range(8,26),rng.randf_range(3,8),Color(0.03,0.03,0.035,rng.randf_range(0.22,0.4)),layer)
+        "lazaret":
+            var path = Color(0.40,0.41,0.39,0.8)
+            var border = Color(0.70,0.72,0.68,0.6)
+            _rect(Vector2(384,384),Vector2(84,CHUNK_SIZE),path,layer)
+            _rect(Vector2(384,384),Vector2(CHUNK_SIZE,78),path,layer)
+            for off in [-42.0,42.0]:
+                _rect(Vector2(384 + off,384),Vector2(2,CHUNK_SIZE),border,layer)
+            for off in [-39.0,39.0]:
+                _rect(Vector2(384,384 + off),Vector2(CHUNK_SIZE,2),border,layer)
+            for i in range(12):
+                var p = Vector2(rng.randf_range(30,738),rng.randf_range(30,738))
+                if abs(p.x - 384.0) < 60.0 or abs(p.y - 384.0) < 56.0:
+                    continue
+                _ellipse(p,rng.randf_range(18,40),rng.randf_range(7,13),Color(0.22,0.30,0.18,0.55),layer)
+            if idx == 4 or idx == 3:
+                var c = Vector2(604,392) if idx == 4 else Vector2(170,486)
+                _ellipse(c,46,26,Color(0.62,0.64,0.60,0.5),layer)
+                _ellipse(c,42,23,Color(0.28,0.29,0.27,0.9),layer)
+                _rect(c,Vector2(40,10),Color(0.70,0.26,0.22,0.75),layer)
+                _rect(c,Vector2(12,26),Color(0.70,0.26,0.22,0.75),layer)
 
 func _chunk_has_player_base(coord:Vector2i) -> bool:
     for rec in base_objects:
@@ -20344,8 +20784,8 @@ func _safe_tree_position(chunk,rng):
 
 
 
-func _create_tree(chunk,pos,scale_factor):
-    if _tree_position_forbidden(chunk,pos):
+func _create_tree(chunk,pos,scale_factor,force = false):
+    if not force and _tree_position_forbidden(chunk,pos):
         return null
     var tree = Node2D.new()
     tree.position = pos
@@ -20438,6 +20878,9 @@ func _decorate_street_furniture(chunk,coord):
     # 1.15 encounter scenes intentionally replace generic verge clutter so their
     # silhouettes remain readable and nothing spawns through event props.
     if chunk != null and chunk.has_meta("world_event_id"):
+        chunk.set_meta("street_furniture_count",0)
+        return
+    if chunk != null and chunk.has_meta("faction_settlement"):
         chunk.set_meta("street_furniture_count",0)
         return
     # 0.87: visual-only street dressing on the free verges beside the vertical
