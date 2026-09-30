@@ -146,17 +146,17 @@ const TOWNS = {
 }
 
 const CLUTTER = {
-    "perron":["shanty","tarp_shelter","rain_tank","junk_pile","tire_wall","bonfire"],
-    "rubezh":["scrap_barricade","tire_wall","burnt_car","rubble_pile","warning_sign","dead_tree"],
-    "mechanics":["burnt_car","junk_pile","tire_wall","rubble_pile","shanty","rain_tank","scrap_barricade"],
-    "lazaret":["rain_tank","tarp_shelter","junk_pile","dead_tree","warning_sign","graves"]
+    "perron":["shanty","tarp_shelter","rain_tank","junk_pile","tire_wall","bonfire","swing_set","cart","firewood_rack"],
+    "rubezh":["scrap_barricade","tire_wall","burnt_car","rubble_pile","warning_sign","dead_tree","oil_drums"],
+    "mechanics":["burnt_car","junk_pile","tire_wall","rubble_pile","shanty","rain_tank","scrap_barricade","oil_drums"],
+    "lazaret":["rain_tank","tarp_shelter","junk_pile","dead_tree","warning_sign","graves","swing_set"]
 }
 
 const BACKYARD = {
-    "perron":["garden_beds","poi:woodpile","laundry_line","chicken_coop","garden_beds","water_point"],
-    "rubezh":["prop:ammo_crate","poi:pallets_tarp","jersey_blocks","sandbag_nest","prop:supply_crate"],
-    "mechanics":["scrap_heap","poi:pallets_tarp","poi:cable_drum","poi:pipe_stack","car_on_blocks"],
-    "lazaret":["herb_beds","laundry_line","street:bench","herb_beds","street:planter"]
+    "perron":["garden_beds","firewood_rack","laundry_line","chicken_coop","dog_kennel","water_point","wheelbarrow","bicycle"],
+    "rubezh":["prop:ammo_crate","poi:pallets_tarp","jersey_blocks","sandbag_nest","oil_drums","dog_kennel"],
+    "mechanics":["scrap_heap","oil_drums","poi:cable_drum","poi:pipe_stack","car_on_blocks","bicycle","wheelbarrow"],
+    "lazaret":["herb_beds","laundry_line","street:bench","bicycle","street:planter","wheelbarrow"]
 }
 
 # Yard presets: pieces relative to the block centre (blocks are ~290 x 290).
@@ -246,7 +246,9 @@ const PIECE_DEFAULT_SCALE = {
     "sandbag_nest":0.74,"hesco_row":0.78,"jersey_blocks":0.74,"wash_station":0.66,"oxygen_rack":0.66,
     "solar_rig":0.66,"triage_canopy":0.74,"decon_frame":0.7,"medical_tent":0.78,"army_tent":0.8,
     "shanty":0.8,"tarp_shelter":0.72,"scrap_barricade":0.7,"tire_wall":0.62,"burnt_car":0.78,"graves":0.6,
-    "warning_sign":0.52,"rubble_pile":0.66,"dead_tree":0.9,"bonfire":0.56,"rain_tank":0.6,"junk_pile":0.66
+    "warning_sign":0.52,"rubble_pile":0.66,"dead_tree":0.9,"bonfire":0.56,"rain_tank":0.6,"junk_pile":0.66,
+    "bus_stop":0.66,"kiosk":0.66,"swing_set":0.62,"dog_kennel":0.55,"wheelbarrow":0.5,"bicycle":0.5,
+    "poster_board":0.55,"oil_drums":0.56,"firewood_rack":0.6,"cart":0.56
 }
 
 # Collision footprints (world px, bottom-anchored) for the set pieces.
@@ -265,6 +267,9 @@ const PIECE_SOLIDS = {
     "shanty":Vector2(46,14),"tarp_shelter":Vector2(50,10),"scrap_barricade":Vector2(56,10),"tire_wall":Vector2(44,8),
     "burnt_car":Vector2(50,14),"graves":Vector2(48,10),"warning_sign":Vector2.ZERO,"rubble_pile":Vector2(50,10),
     "dead_tree":Vector2(6,6),"bonfire":Vector2.ZERO,"rain_tank":Vector2(18,10),"junk_pile":Vector2(44,10),
+    "pole_wood":Vector2(6,4),"pole_concrete":Vector2(6,4),"bus_stop":Vector2(64,10),"kiosk":Vector2(40,14),
+    "swing_set":Vector2(56,6),"dog_kennel":Vector2(22,10),"wheelbarrow":Vector2.ZERO,"bicycle":Vector2.ZERO,
+    "poster_board":Vector2(40,4),"oil_drums":Vector2(40,12),"firewood_rack":Vector2(56,10),"cart":Vector2(40,12),
     "poi:hedgehogs":Vector2.ZERO,"poi:pipe_stack":Vector2(58,14),"poi:h_tank":Vector2(96,18),"poi:silo":Vector2(28,16)
 }
 

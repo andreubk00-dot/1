@@ -93,6 +93,28 @@ the rest of the world.
     cemetery in Лазарет.
   - Warning signs stand at the Рубеж and Лазарет gates.
 
+## Detail pass 2: roads, utilities, smoke
+
+- **Road markings fixed.** Lane lines now follow the street axis exactly. They stop before the
+  crossing, which gets stop lines and worn zebras instead of paint running through it. Paint is
+  faded and chipped per dash. Perron cobbles carry wheel ruts instead of paint.
+- **No tiled repetition.** Ground textures are now 512 px. Potholes, puddles, mud, oil, repair
+  patches, ruts and clogged storm drains are individual decals
+  (`settlement_ground_decals_v1.png`) scattered per street and lane, so they no longer repeat
+  in rows.
+- **Power lines.** Wooden (Перрон, Лазарет) or concrete poles stand along the west-east
+  streets. Three sagging wires run between them and on into the next sector. Service drops
+  run to nearby roofs.
+- **Street life.** Poster boards, bus-stop shelters, kiosks, oil drums, swings, dog kennels,
+  wheelbarrows, bicycles, firewood racks and carts. Back gardens and yard clutter pick from
+  them per faction.
+- **Houses.** Notices by the doors, house number plates, electricity meters, faction stencils
+  (wheel, shield, gear, cross).
+- **Live smoke.** Chimneys, stove pipes, the boiler house, field kitchen, forge, incinerator
+  and shanty stoves emit drifting smoke. Fire barrels and fire pits throw sparks. Smoke is
+  no longer baked into the sprites.
+- **Parade ground** now uses a textured surface instead of a flat fill.
+
 ## Other visual work
 
 - `settlement_props_v1.png`: 36 yard structures (stalls, water tower, tents, BTR, cranes,

@@ -10,6 +10,7 @@ var only = ""
 var overview = false
 var closeup = false
 var night = false
+var audit = false
 # gameplay-zoom spots: [cell offset, local position]
 const CLOSEUPS = [[Vector2i(0,0),Vector2(384,420)],[Vector2i(0,0),Vector2(250,650)],[Vector2i(-1,-1),Vector2(300,250)],[Vector2i(1,0),Vector2(560,600)]]
 
@@ -25,6 +26,8 @@ func _initialize():
             closeup = true
         if arg == "--qa-night":
             night = true
+        if arg == "--qa-audit":
+            audit = true
     call_deferred("run")
 
 func run():
@@ -51,6 +54,24 @@ func run():
             continue
         var settlement_id = str(FactionCatalog.faction(faction_id).get("settlement_id",""))
         var anchor:Vector2i = RegionCatalog.poi_by_id(settlement_id).get("coord",Vector2i.ZERO)
+        if audit:
+            # every sector centre and its lane corner at gameplay zoom
+            var k = 0
+            for offset in FactionSettlementCatalog.footprint(settlement_id):
+                for local in [Vector2(384,384),Vector2(740,740)]:
+                    var c = anchor + offset
+                    game.player.global_position = Vector2(c) * 768.0 + local + Vector2(0,60)
+                    for i in range(20):
+                        await process_frame
+                    game.world_minutes = (22.5 if night else 13.0) * 60.0
+                    await process_frame
+                    cam.global_position = Vector2(c) * 768.0 + local
+                    cam.zoom = Vector2(1.0,1.0)
+                    await process_frame
+                    await RenderingServer.frame_post_draw
+                    root.get_texture().get_image().save_png("%s/%s_audit_%02d.png" % [output,faction_id,k])
+                    k += 1
+            continue
         if closeup:
             var n = 0
             for spot in CLOSEUPS:

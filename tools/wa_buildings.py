@@ -34,6 +34,8 @@ class B:
             self.m.rect(self.front, 0, 0, W, plinth_h, plinth)
             self.m.rect(self.front, 0, plinth_h - 0.8, W, 0.8, dark(plinth, 0.75))
         self.style = mid.split('_')[0]
+        self.smoke = []              # model-space screen points (x, y - z) where live smoke rises
+        self.steam = []
         self.win_rects = []          # (u, v, w, h) on the main front face
         self.decay = True
         self.door_x = 0.0
@@ -178,6 +180,11 @@ class B:
             self.m.poly3([V(x - 17, self.y1 + depth, z - 3), V(x + 17, self.y1 + depth, z - 3), V(x + 17, self.y1, z + 2), V(x - 17, self.y1, z + 2)],
                          col, MAT[mat][1], bias=60, frame=(V(x - 17, self.y1 + depth, z - 3), V(1, 0, 0), norm3(V(0, -depth, 5))))
             self.m.box(x - 17, x + 17, self.y1 + depth - 1.2, self.y1 + depth, z - 5, z - 3, mat, bias=61, cap=False)
+        u0 = self.fu(x)
+        self.front.decals.append(('notice', dict(u=u0 - DOOR_W / 2 - 12, v=14, n=self.rng.randint(1, 3))))
+        self.front.decals.append(('plate', dict(u=u0 + DOOR_W / 2 + 3, v=DOOR_H - 8)))
+        if self.rng.random() < 0.7:
+            self.front.decals.append(('meter', dict(u=u0 + DOOR_W / 2 + 12, v=16)))
         if lamp:
             self.m.rect(self.front, self.fu(x) + DOOR_W / 2 + 3, DOOR_H + 1, 3, 3, (60, 58, 54))
             self.m.rect(self.front, self.fu(x) + DOOR_W / 2 + 3.5, DOOR_H - 1.5, 2, 2.5, (250, 214, 140), lit_shade=False)
@@ -301,6 +308,13 @@ class B:
             spot = self._free_wall_spot(w, 6, 6, 22)
             if spot:
                 f.decals.append(('graffiti', dict(u=spot[0], v=spot[1], w=w, h=r.uniform(3, 6), underline=r.random() < 0.3)))
+        # faction stencil on the wall
+        emb = {'perron': ('wheel', (150, 60, 46)), 'rubezh': ('shield', (84, 98, 62)),
+               'mech': ('gear', (200, 160, 50)), 'laz': ('cross', (176, 48, 42))}.get(self.style)
+        if emb and r.random() < 0.65:
+            spot = self._free_wall_spot(12, 12, 16)
+            if spot:
+                f.decals.append(('emblem', dict(u=spot[0], v=spot[1], col=emb[1], style=emb[0])))
         # rust / water streaks from the eaves
         for _ in range(int(self.W // 22)):
             u = r.uniform(3, self.W - 3)
@@ -349,12 +363,13 @@ class B:
         self.m.box(x - w / 2, x + w / 2, y - w / 2, y + w / 2, z - 6, z + h, mat, bias=200)
         self.m.box(x - w / 2 - 1, x + w / 2 + 1, y - w / 2 - 1, y + w / 2 + 1, z + h, z + h + 2, (cap_col, 'none'), bias=201)
         if smoke:
-            for k, (dx, dz, r) in enumerate([(1, 6, 3.0), (3, 13, 4.0), (2, 21, 5.0)]):
-                self.m.cyl(x + dx, y, z + h + dz, z + h + dz + r * 1.2, r, ((150, 150, 146), 'none'), segs=8, bias=260 + k)
+            self.smoke.append((x, y - (z + h + 2)))
 
-    def pipe(self, x, y, h=14.0, r=2.2, mat='metal', cap=True):
+    def pipe(self, x, y, h=14.0, r=2.2, mat='metal', cap=True, smoke=False):
         z = self.roof_z(x, y)
         self.m.cyl(x, y, z - 4, z + h, r, mat, bias=200)
+        if smoke:
+            self.smoke.append((x, y - (z + h + 2)))
         if cap:
             self.m.cyl(x, y, z + h, z + h + 2, r + 1.5, mat, bias=201)
 
@@ -495,7 +510,7 @@ def perron_station():
     b.m.add(clock)
     clock.decals.append(('rect', dict(u=6.4, v=6.4, w=1.2, h=6, col=(30, 30, 30), lit_shade=False)))
     clock.decals.append(('rect', dict(u=6.4, v=6.4, w=4.5, h=1.2, col=(30, 30, 30), lit_shade=False)))
-    b.chimney(-90, -20, 12)
+    b.chimney(-90, -20, 12, smoke=True)
     b.chimney(90, -20, 12)
     b.drainpipe(b.x0 + 5); b.drainpipe(b.x1 - 5)
     return b
@@ -587,7 +602,7 @@ def rubezh_hq():
     b.flat('tar', 'concrete_s', 5)
     b.mast(-100, -30, 56)
     b.dish(80, -30, 7)
-    b.pipe(40, 10, 8)
+    b.pipe(40, 10, 8, smoke=True)
     b.m.box(96, 116, -10, 10, 82, 96, ((150, 150, 144), 'none'), bias=200)       # roof water tank
     b.m.line3([V(0, 0, 87), V(0, 0, 140)], (180, 182, 178), 1, bias=220)          # flag pole
     fl = Face(V(0, 0.5, 124), V(1, 0, 0), V(0, 0, 1), 26, 14, (84, 98, 62), 'none', bias=221, outline=True)
@@ -601,7 +616,7 @@ def rubezh_barracks():
     b.door(-60, canopy=('slate', 10), frame=(60, 60, 58))
     b.windows(14, 14, 20, 30, style='cross', frame=(170, 170, 162))
     b.gable('slate', 30)
-    b.pipe(-80, -10, 12); b.pipe(0, -10, 12); b.pipe(80, -10, 12)
+    b.pipe(-80, -10, 12, smoke=True); b.pipe(0, -10, 12); b.pipe(80, -10, 12, smoke=True)
     b.roof_patch(40, 20, 26, 16, 'tin_olive')
     b.drainpipe(b.x0 + 4); b.drainpipe(b.x1 - 4)
     b.moss = 0.05
@@ -712,7 +727,7 @@ def mech_hangar():
     b.gable('steel', 22, over=5)
     b.roof_patch(-80, 20, 40, 22, 'steel_rust')
     b.roof_patch(60, -20, 30, 18, 'steel_blue')
-    b.pipe(100, -10, 16, 3)
+    b.pipe(100, -10, 16, 3, smoke=True)
     b.rust = 0.18
     return b
 
@@ -739,8 +754,7 @@ def mech_boiler():
     b.m.cyl(40, -30, b.H - 4, b.H + 120, 9, 'brick', segs=14, bias=200)
     for z in (b.H + 100, b.H + 108):
         b.m.cyl(40, -30, z, z + 4, 9.6, ((200, 60, 44), 'none'), segs=14, bias=201)
-    for k, (dz, r) in enumerate([(128, 7), (140, 9), (154, 11)]):
-        b.m.cyl(44 + k * 4, -30, b.H + dz, b.H + dz + r, r, ((110, 108, 104), 'none'), segs=10, bias=260 + k)
+    b.smoke.append((40, -30 - (b.H + 124)))
     b.m.cyl(-40, -10, b.H - 2, b.H + 8, 6, 'metal', bias=200)
     b.rust = 0.08
     return b
@@ -845,7 +859,7 @@ def laz_hospital():
     b.front.decals.append(('cross', dict(u=b.fu(0), v=72, s=6, col=(176, 48, 42), disc=(230, 230, 222))))
     b.hip('tin_green', 36)
     b.roof_cross(-70, 26, 11)
-    b.chimney(80, -20, 12, mat='plaster')
+    b.chimney(80, -20, 12, mat='plaster', smoke=True)
     b.pipe(40, -30, 8)
     return b
 
@@ -912,7 +926,7 @@ def laz_residence():
         b.m.box(x - 16, x + 16, b.y1, b.y1 + 8, 40, 43, ((180, 184, 176), 'none'), bias=55)
         b.m.box(x - 16, x + 16, b.y1 + 7, b.y1 + 8, 43, 50, ((120, 130, 124), 'none'), bias=56)
     b.hip('tin_red', 30)
-    b.chimney(-60, -10, 12, mat='plaster')
+    b.chimney(-60, -10, 12, mat='plaster', smoke=True)
     b.antenna(40, 10, 24)
     return b
 
@@ -924,8 +938,7 @@ def laz_laundry():
     b.signboard(40, 40, 50, 7, col=(220, 222, 214), border=(60, 90, 80))
     b.gable('tin_green', 22)
     b.m.cyl(-40, -10, b.roof_z(-40, -10) - 4, b.roof_z(-40, -10) + 26, 5, 'metal', bias=200)
-    for k, (dz, r) in enumerate([(30, 5), (38, 6.5), (48, 8)]):
-        b.m.cyl(-40 + k * 2, -10, b.roof_z(-40, -10) + dz, b.roof_z(-40, -10) + dz + r, r, ((220, 222, 220), 'none'), segs=10, bias=260 + k)
+    b.steam.append((-40, -10 - (b.roof_z(-40, -10) + 26)))
     return b
 
 
@@ -1049,12 +1062,14 @@ def build_all(P, gd_path):
             rpx, rpy = meta[(key, 'roof')]
             fpx, fpy = meta[(key, 'facade')]
             sign = 'Rect2(%s,%s,%s,%s)' % tuple(_gd(float(v)) for v in b.sign) if b.sign else 'Rect2()'
+            smoke = '[' + ','.join('Vector2(%s,%s)' % (_gd(float(px)), _gd(float(py))) for px, py in b.smoke) + ']'
+            steam = '[' + ','.join('Vector2(%s,%s)' % (_gd(float(px)), _gd(float(py))) for px, py in b.steam) + ']'
             entries.append('    "%s":{"faction":"%s","archetype":"%s","size":Vector2(%s,%s),"facade_height":%s,"roof_rise":%s,'
                            '"door_x":%s,"atlas":"res://%s","roof_region":Rect2(%d,%d,%d,%d),"roof_pos":Vector2(%s,%s),'
-                           '"facade_region":Rect2(%d,%d,%d,%d),"facade_pos":Vector2(%s,%s),"sign":%s,"leaf":%d}' % (
+                           '"facade_region":Rect2(%d,%d,%d,%d),"facade_pos":Vector2(%s,%s),"sign":%s,"leaf":%d,"smoke":%s,"steam":%s}' % (
                                key, fac, b.archetype, _gd(b.W), _gd(b.D), _gd(b.H), _gd(float(b.roof_rise)), _gd(b.door_x), name,
                                rx, ry, rw, rh, _gd(float(rpx)), _gd(float(rpy)), fx, fy, fw, fh, _gd(float(fpx)), _gd(float(fpy)),
-                               sign, ['perron', 'rubezh', 'mechanics', 'lazaret'].index(fac)))
+                               sign, ['perron', 'rubezh', 'mechanics', 'lazaret'].index(fac), smoke, steam))
     lines.append(',\n'.join(entries))
     lines += ['}', '', 'static func has(model_id:String) -> bool:', '    return MODELS.has(model_id)', '',
               'static func model(model_id:String) -> Dictionary:', '    return MODELS.get(model_id,{}).duplicate(true)', '']

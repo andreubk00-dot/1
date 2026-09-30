@@ -690,6 +690,49 @@ def _draw_decal(d, c, f, kind, p, face_col, rng, layer=None):
             x += seg * 0.8
         if p.get('underline'):
             L(u, v - 1, u + w, v - 1.5, col, 1)
+    elif kind == 'notice':
+        u, v = p['u'], p['v']
+        for i in range(p.get('n', 2)):
+            w, h = rng.uniform(3.5, 6), rng.uniform(4.5, 7)
+            a, b = u + rng.uniform(-4, 4) + i * 4.5, v + rng.uniform(-3, 3)
+            pc = rng.choice([(214, 208, 186), (200, 196, 170), (206, 190, 120), (190, 190, 180)])
+            R(a, b, a + w, b + h, pc)
+            for k in range(3):
+                L(a + 0.8, b + h - 1.5 - k * 1.6, a + w - 0.8, b + h - 1.5 - k * 1.6, (110, 104, 92))
+            if rng.random() < 0.4:
+                d.polygon([P(pt(a + w, b)), P(pt(a + w - 2, b)), P(pt(a + w, b + 2))], fill=(150, 146, 130, 255))   # curled corner
+    elif kind == 'plate':
+        u, v = p['u'], p['v']
+        R(u, v, u + 7, v + 4, (40, 70, 120))
+        R(u + 0.6, v + 0.6, u + 6.4, v + 3.4, (48, 82, 136))
+        L(u + 1.5, v + 2, u + 5.5, v + 2, (220, 220, 214))
+    elif kind == 'meter':
+        u, v = p['u'], p['v']
+        R(u, v, u + 6, v + 8, (120, 124, 120))
+        R(u + 1, v + 4, u + 5, v + 7, (50, 60, 64))
+        L(u + 3, v + 8, u + 3, v + 16, (30, 30, 30))
+    elif kind == 'emblem':
+        u, v, col, sty = p['u'], p['v'], p['col'], p['style']
+        r = 5.0
+        cx, cy = u + r, v + r
+        if sty == 'wheel':
+            pts = [P(pt(cx + math.cos(a) * r, cy + math.sin(a) * r)) for a in np.linspace(0, 2 * math.pi, 17)]
+            d.line(pts, fill=col + (255,), width=2)
+            for a in np.linspace(0, math.pi, 4, endpoint=False):
+                L(cx - math.cos(a) * r, cy - math.sin(a) * r, cx + math.cos(a) * r, cy + math.sin(a) * r, col)
+        elif sty == 'shield':
+            d.polygon([P(pt(cx - r, cy + r)), P(pt(cx + r, cy + r)), P(pt(cx + r, cy)), P(pt(cx, cy - r * 1.2)), P(pt(cx - r, cy))], fill=col + (255,))
+            L(cx - r, cy + r * 0.3, cx + r, cy + r * 0.3, (200, 190, 150), 2)
+        elif sty == 'gear':
+            for a in np.linspace(0, 2 * math.pi, 8, endpoint=False):
+                L(cx + math.cos(a) * r * 0.6, cy + math.sin(a) * r * 0.6, cx + math.cos(a) * r * 1.15, cy + math.sin(a) * r * 1.15, col, 2)
+            pts = [P(pt(cx + math.cos(a) * r * 0.75, cy + math.sin(a) * r * 0.75)) for a in np.linspace(0, 2 * math.pi, 17)]
+            d.polygon(pts, fill=col + (255,))
+            pts = [P(pt(cx + math.cos(a) * r * 0.3, cy + math.sin(a) * r * 0.3)) for a in np.linspace(0, 2 * math.pi, 11)]
+            d.polygon(pts, fill=dark(face_col, 0.9) + (255,))
+        else:
+            R(cx - r, cy - r * 0.33, cx + r, cy + r * 0.33, col)
+            R(cx - r * 0.33, cy - r, cx + r * 0.33, cy + r, col)
     elif kind == 'streak':
         # rain / rust streaks down from window sills
         u, v, h = p['u'], p['v'], p['h']

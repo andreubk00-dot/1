@@ -11,7 +11,8 @@ import random
 import numpy as np
 from wa_core import Tex, fbm, LEAF_ORANGE
 
-S = 256
+S = 512
+K = (S // 256) ** 2        # feature counts scale with the texture area
 
 
 def _base(col, seed, big=64, fine=12, k_big=0.30, k_fine=0.14):
@@ -34,7 +35,7 @@ def _leaves(t, seed, dense=0.05, sparse=0.006):
 
 
 def _cracks(t, rng, n, col=(26, 26, 28), hi=(78, 78, 76), branch=0.6):
-    for _ in range(n):
+    for _ in range(n * K):
         t.crack(rng.uniform(0, S), rng.uniform(0, S), rng.randint(14, 46), col, hi, branch, rng.uniform(0, math.pi))
 
 
@@ -42,7 +43,7 @@ def _weeds(t, rng, mask, n):
     ys, xs = np.nonzero(mask)
     if len(xs) == 0:
         return
-    for _ in range(n):
+    for _ in range(n * K):
         i = rng.randrange(len(xs))
         x, y = xs[i], ys[i]
         for k in range(rng.randint(2, 4)):
@@ -55,7 +56,7 @@ def asphalt(seed=301):
     A = _all(t)
     t.speckle(A, 0.05, [(70, 70, 69), (46, 46, 48)], seed=seed + 3)
     # repair patches with sealed edges
-    for _ in range(4):
+    for _ in range(4 * K):
         x, y, w, h = rng.randrange(S), rng.randrange(S), rng.randint(20, 46), rng.randint(14, 34)
         m = np.zeros((S, S), bool)
         for yy in range(y, y + h):
@@ -63,18 +64,12 @@ def asphalt(seed=301):
                 m[yy % S, xx % S] = True
         t.mul(m, 0.86)
         t.speckle(m, 0.05, [(44, 44, 46)], seed=x)
-    _cracks(t, rng, 26)
-    # alligator patch + potholes with rainwater
-    for _ in range(2):
+    _cracks(t, rng, 7, (38, 38, 40), (72, 72, 70), 0.35)
+    # alligator patches (potholes / puddles are separate decals placed per street)
+    for _ in range(2 * K):
         cx, cy = rng.uniform(0, S), rng.uniform(0, S)
         for _ in range(12):
             t.crack(cx + rng.uniform(-12, 12), cy + rng.uniform(-9, 9), rng.randint(4, 9), (30, 30, 32), None, 0.2)
-    for _ in range(3):
-        cx, cy = rng.randrange(S), rng.randrange(S)
-        rx, ry = rng.uniform(4, 8), rng.uniform(3, 5)
-        t.blend(t.mask_ellipse(cx, cy, rx + 1.5, ry + 1.2), (36, 34, 32), 0.8)
-        t.blend(t.mask_ellipse(cx, cy, rx, ry), (40, 46, 54), 0.9)
-        t.speckle(t.mask_ellipse(cx, cy, rx * 0.6, ry * 0.5), 0.1, [(100, 112, 124)], seed=cx)
     wet = fbm(S, S, 80, seed + 9, 3) < 0.34
     t.blend(wet, (44, 50, 58), 0.3)
     _weeds(t, rng, A, 40)
@@ -101,7 +96,7 @@ def concrete_slabs(seed=302):
     t.blend(joint, (48, 50, 46), 0.9)
     _weeds(t, rng, joint, 160)
     t.speckle(A, 0.01, [(72, 64, 50)], seed=seed + 5)          # rust / oil spots
-    for _ in range(4):
+    for _ in range(4 * K):
         cx, cy = rng.randrange(S), rng.randrange(S)
         t.blend(t.mask_ellipse(cx, cy, rng.uniform(6, 16), rng.uniform(3, 7)), (58, 56, 52), 0.55)
     _leaves(t, seed, 0.02, 0.004)
@@ -130,10 +125,9 @@ def cobble(seed=303):
     gaps = (t.rgb.sum(axis=2) < 170)
     _weeds(t, rng, gaps, 160)
     t.speckle(gaps, 0.03, [(58, 74, 40), (66, 84, 44)], seed=seed + 4)
-    for _ in range(3):
+    for _ in range(3 * K):
         cx, cy = rng.randrange(S), rng.randrange(S)
-        t.blend(t.mask_ellipse(cx, cy, rng.uniform(8, 16), rng.uniform(4, 7)), (54, 48, 38), 0.7)
-        t.blend(t.mask_ellipse(cx + 1, cy, rng.uniform(4, 8), rng.uniform(2, 4)), (58, 64, 70), 0.6)
+        t.blend(t.mask_ellipse(cx, cy, rng.uniform(8, 16), rng.uniform(4, 7)), (54, 48, 38), 0.5)
     _leaves(t, seed, 0.04, 0.008)
     return t.image()
 
@@ -143,20 +137,9 @@ def dirt_road(seed=304):
     t = _base((86, 72, 54), seed, 70, 12, 0.34, 0.2)
     A = _all(t)
     t.speckle(A, 0.07, [(104, 94, 78), (66, 56, 42), (120, 112, 98)], seed=seed + 3)   # gravel
-    # wheel ruts along x (the texture is rotated in game for vertical streets)
-    for yc in (84, 116, 180, 212):
-        m = np.zeros((S, S), bool)
-        for x in range(S):
-            y = int(yc + 3 * math.sin(x / 40.0 * math.pi))
-            for d in range(-3, 4):
-                m[(y + d) % S, x] = True
-        t.mul(m, 0.82)
-    for _ in range(6):
+    for _ in range(6 * K):
         cx, cy = rng.randrange(S), rng.randrange(S)
-        rx, ry = rng.uniform(6, 16), rng.uniform(3, 7)
-        t.blend(t.mask_ellipse(cx, cy, rx, ry), (48, 42, 34), 0.8)
-        t.blend(t.mask_ellipse(cx + 1, cy, rx * 0.7, ry * 0.6), (60, 66, 72), 0.7)          # puddle
-        t.speckle(t.mask_ellipse(cx + 1, cy, rx * 0.5, ry * 0.4), 0.08, [(112, 120, 128)], seed=cx)
+        t.blend(t.mask_ellipse(cx, cy, rng.uniform(6, 16), rng.uniform(3, 7)), (70, 58, 44), 0.35)   # soft damp spots
     grass = fbm(S, S, 50, seed + 20, 3) > 0.62
     t.blend(grass, (60, 70, 40), 0.55)
     _weeds(t, rng, grass, 300)
@@ -222,7 +205,7 @@ def oil_concrete(seed=308):
     joint[::64, :] = True
     t.blend(joint, (54, 54, 52), 0.8)
     t.speckle(A, 0.05, [(104, 104, 100), (70, 70, 68)], seed=seed + 3)
-    for _ in range(9):
+    for _ in range(9 * K):
         cx, cy = rng.randrange(S), rng.randrange(S)
         rx, ry = rng.uniform(6, 22), rng.uniform(3, 10)
         t.blend(t.mask_ellipse(cx, cy, rx, ry), (30, 30, 32), 0.6)
@@ -281,6 +264,94 @@ def grass_dry(seed=312):
     return grass_leaves(seed, dry=0.25)
 
 
+# ---------------------------------------------------------------- ground decals --
+# 8 cells of 96 x 64 at 1x. Placed individually in game so nothing repeats in rows.
+DECALS = ['puddle_a', 'puddle_b', 'pothole', 'mud', 'oil', 'patch', 'ruts', 'drain']
+DW, DH = 96, 64
+
+
+def _decal(kind, seed):
+    rng = random.Random(seed)
+    t = Tex(DW, DH, (0, 0, 0), alpha=0, seed=seed)
+    cx, cy = DW / 2, DH / 2
+
+    def blob(rx, ry, jag=0.25, n=14):
+        pts = []
+        for i in range(n):
+            a = 2 * math.pi * i / n
+            r = 1 + rng.uniform(-jag, jag)
+            pts.append((cx + math.cos(a) * rx * r, cy + math.sin(a) * ry * r))
+        return t.mask_poly(pts)
+
+    def put(m, col, alpha=255):
+        t.rgb[m] = col
+        t.a[m] = alpha
+
+    if kind in ('puddle_a', 'puddle_b'):
+        rx, ry = (40, 22) if kind == 'puddle_a' else (30, 18)
+        rim = blob(rx, ry, 0.3)
+        put(rim, (40, 36, 30), 200)
+        water = blob(rx - 4, ry - 3, 0.3)
+        put(water, (46, 56, 66), 235)
+        sky = water & (np.mgrid[0:DH, 0:DW][0] < cy - 2)
+        t.blend(sky, (78, 92, 104), 0.5)
+        t.speckle(water, 0.02, [(120, 134, 146), (96, 110, 122)], seed=seed)
+        for _ in range(8):
+            x, y = rng.uniform(cx - rx * 0.6, cx + rx * 0.6), rng.uniform(cy - ry * 0.5, cy + ry * 0.5)
+            t.px(int(x) % DW, int(y) % DH, rng.choice(LEAF_ORANGE))
+    elif kind == 'pothole':
+        rim = blob(24, 14, 0.35)
+        put(rim, (34, 32, 30), 240)
+        t.speckle(rim, 0.2, [(70, 68, 64), (52, 50, 48)], seed=seed)
+        hole = blob(17, 9, 0.35)
+        put(hole, (38, 46, 56), 245)
+        t.speckle(hole, 0.05, [(110, 124, 136)], seed=seed + 1)
+    elif kind == 'mud':
+        m = blob(42, 24, 0.4, 18)
+        put(m, (62, 50, 36), 170)
+        t.speckle(m, 0.08, [(80, 66, 48), (48, 40, 30)], seed=seed)
+        for i in range(4):
+            y = int(cy - 10 + i * 6)
+            for x in range(8, DW - 8, 3):
+                if m[y % DH, x]:
+                    t.px(x, y % DH, (44, 36, 26), 210)
+    elif kind == 'oil':
+        m = blob(34, 18, 0.35)
+        put(m, (20, 20, 24), 150)
+        t.speckle(m, 0.04, [(70, 50, 90), (40, 80, 70), (90, 80, 40)], seed=seed)
+    elif kind == 'patch':
+        m = t.mask_rect(14, 16, DW - 14, DH - 16)
+        put(m, (40, 40, 42), 230)
+        t.speckle(m, 0.06, [(52, 52, 54), (32, 32, 34)], seed=seed)
+        edge = m & ~t.mask_rect(16, 18, DW - 16, DH - 18)
+        put(edge, (26, 26, 28), 240)
+    elif kind == 'ruts':
+        for y0 in (22, 42):
+            for x in range(DW):
+                y = y0 + int(2 * math.sin(x / 18.0 + seed))
+                for d in range(-2, 3):
+                    t.px(x, (y + d) % DH, (46, 38, 28), 120 - abs(d) * 30)
+    elif kind == 'drain':
+        m = t.mask_rect(34, 24, 62, 40)
+        put(m, (60, 62, 60), 255)
+        for x in range(36, 62, 3):
+            t.line([(x, 26), (x, 38)], (22, 22, 22), wrap=False)
+        rim = t.mask_rect(32, 22, 64, 42) & ~m
+        put(rim, (96, 96, 90), 255)
+        leaves = blob(20, 10, 0.5) & ~t.mask_rect(32, 22, 64, 42)
+        t.leaves(leaves, 0.25, seed=seed)
+        t.a[leaves & (t.a == 0) & (np.random.default_rng(seed).random((DH, DW)) < 0.25)] = 0
+    return t.image()
+
+
+def build_decals(P):
+    from PIL import Image
+    out = Image.new('RGBA', (DW * len(DECALS), DH), (0, 0, 0, 0))
+    for i, k in enumerate(DECALS):
+        out.alpha_composite(_decal(k, 400 + i), (i * DW, 0))
+    out.save(os.path.join(P, 'settlement_ground_decals_v1.png'))
+
+
 MATERIALS = {
     'asphalt': asphalt, 'concrete_slabs': concrete_slabs, 'cobble': cobble, 'dirt_road': dirt_road,
     'grass': grass_leaves, 'grass_dry': grass_dry, 'lawn': lawn_overgrown, 'dirt_yard': dirt_yard,
@@ -291,6 +362,7 @@ MATERIALS = {
 def build_all(P):
     for name, fn in MATERIALS.items():
         fn().save(os.path.join(P, 'settlement_ground_%s_v1.png' % name))
+    build_decals(P)
 
 
 if __name__ == '__main__':

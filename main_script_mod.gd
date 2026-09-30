@@ -19356,8 +19356,15 @@ const SETTLEMENT_PIECE_KINDS = [
     "medical_tent","decon_frame","triage_canopy","herb_beds","incinerator","oxygen_rack",
     "ambulance","wash_station",
     "shanty","tarp_shelter","scrap_barricade","tire_wall","burnt_car","graves",
-    "warning_sign","rubble_pile","dead_tree","bonfire","rain_tank","junk_pile"
+    "warning_sign","rubble_pile","dead_tree","bonfire","rain_tank","junk_pile",
+    "pole_wood","pole_concrete","bus_stop","kiosk","swing_set","dog_kennel",
+    "wheelbarrow","bicycle","poster_board","oil_drums","firewood_rack","cart"
 ]
+# art pixel (in the 192 px atlas cell) where live smoke / sparks leave a piece
+const SETTLEMENT_EMITTERS = {
+    "field_kitchen":[Vector2(101,98),"smoke"],"furnace":[Vector2(61,69),"smoke"],"incinerator":[Vector2(117,65),"smoke"],
+    "fire_barrel":[Vector2(86,147),"fire"],"bonfire":[Vector2(99,165),"fire"],"shanty":[Vector2(125,114),"smoke"]
+}
 const SETTLEMENT_STYLES = ["perron","rubezh","mechanics","lazaret"]
 const SETTLEMENT_WALL_Y_N = 30.0
 const SETTLEMENT_WALL_Y_S = 752.0
@@ -19401,6 +19408,8 @@ func _dress_faction_settlement(chunk,coord,cell_data:Dictionary,settlement_name:
     var quarantine = cell_data.get("quarantine",Rect2())
     if typeof(quarantine) == TYPE_RECT2 and quarantine.size != Vector2.ZERO:
         _settlement_quarantine_pen(chunk,quarantine)
+    _settlement_utilities(chunk,cell_data,style)
+    _settlement_street_life(chunk,coord,cell_data,style)
     _settlement_clutter(chunk,coord,cell_data,style)
 
 func _settlement_spot_clear(chunk,pos,radius:float) -> bool:
@@ -19476,6 +19485,12 @@ func _settlement_piece(chunk,piece:Dictionary):
 
 func _settlement_piece_light(node,kind:String,piece_scale:float):
     # Visual-only practical lights; they fade in with the existing night factor.
+    if SETTLEMENT_EMITTERS.has(kind):
+        var em = SETTLEMENT_EMITTERS[kind]
+        var p = (em[0] - Vector2(96,192)) * piece_scale
+        _settlement_smoke_emitter(node,p,"fire_smoke" if em[1] == "fire" else "smoke")
+        if em[1] == "fire":
+            _settlement_spark_emitter(node,p + Vector2(0,4))
     match kind:
         "fire_barrel","bonfire":
             _add_detail_light(node,Vector2(0,-30.0 * piece_scale * 2.0),SETTLEMENT_FIRE_LIGHT,0.78,1.05,true)
@@ -19533,6 +19548,104 @@ func _settlement_quarantine_pen(chunk,rect:Rect2):
         _rect(Vector2(x,(top + bottom) * 0.5),Vector2(2,rect.size.y),col,chunk)
         _add_static_rect(chunk,Vector2(x,(top + bottom) * 0.5),Vector2(6,rect.size.y))
 
+
+
+# ---------------------------------------------------------------- utilities --
+# Power / phone lines on poles along both main streets. Poles sit on the street
+# edge; three sagging wires run pole to pole and on into the next sector, so the
+# lines read as one network over the whole town.
+const SETTLEMENT_POLE_ROWS = [96.0,256.0,512.0,672.0]
+const SETTLEMENT_POLE_ARM = {"pole_wood":58.0,"pole_concrete":52.0}
+
+func _settlement_pole_top(kind:String,pos:Vector2,scale_value:float) -> Vector2:
+    return pos + Vector2(0,(float(SETTLEMENT_POLE_ARM.get(kind,56.0)) - 192.0) * scale_value)
+
+func _settlement_wire(root,a:Vector2,b:Vector2,sag:float,col:Color):
+    var line = Line2D.new()
+    line.width = 1.0
+    line.default_color = col
+    line.antialiased = false
+    var steps = 10
+    for i in range(steps + 1):
+        var t = float(i) / float(steps)
+        line.add_point(a.lerp(b,t) + Vector2(0,sag * 4.0 * t * (1.0 - t)))
+    root.add_child(line)
+
+func _settlement_utilities(chunk,cell_data:Dictionary,style:String):
+    var kind = "pole_wood" if style == "perron" or style == "lazaret" else "pole_concrete"
+    var scale_value = 0.62
+    var offset = cell_data.get("settlement_offset",Vector2i.ZERO)
+    var root = Node2D.new()
+    root.name = "SettlementWires"
+    root.z_index = 40
+    root.z_as_relative = false
+    root.set_meta("settlement_wires",true)
+    chunk.add_child(root)
+    var wire_col = Color(0.07,0.07,0.07,0.85)
+    var arms = [-18.0,-6.0,18.0]
+    # Lines run along the west-east streets only: seen from above a north-south
+    # wire would be a straight stroke over the whole street and everyone on it.
+    for axis in [1]:
+        var tops = []
+        for k in SETTLEMENT_POLE_ROWS:
+            var pos = Vector2(341.0,k) if axis == 0 else Vector2(k,341.0)
+            var node = _settlement_piece(chunk,{"kind":kind,"pos":pos,"scale":scale_value,"solid":Vector2(6,4),"flip":false})
+            if node != null:
+                node.add_to_group("settlement_poles")
+                tops.append(_settlement_pole_top(kind,pos,scale_value))
+        # continue into the next sector unless the town wall is there
+        var next_ok = (offset.y < 1) if axis == 0 else (offset.x < 1)
+        if next_ok:
+            var nxt = Vector2(341.0,768.0 + SETTLEMENT_POLE_ROWS[0]) if axis == 0 else Vector2(768.0 + SETTLEMENT_POLE_ROWS[0],341.0)
+            tops.append(_settlement_pole_top(kind,nxt,scale_value))
+        for i in range(tops.size() - 1):
+            var a = tops[i]
+            var b = tops[i + 1]
+            for arm in arms:
+                var o = Vector2(arm * scale_value,0) if axis == 1 else Vector2(arm * scale_value,0)
+                if axis == 1:
+                    o = Vector2(0,arm * scale_value * 0.3)
+                _settlement_wire(root,a + o,b + o,10.0 if axis == 1 else 4.0,wire_col)
+    # a sagging service drop from the nearest pole to every building roof
+    for child in chunk.get_children():
+        if not child.has_meta("world_building") or not child.has_meta("settlement_model"):
+            continue
+        var size = child.get_meta("building_size",Vector2.ZERO)
+        var fh = float(child.get_meta("facade_height",50.0)) if child.has_meta("facade_height") else 50.0
+        var attach = child.position + Vector2(size.x * 0.5 - 10.0,-size.y * 0.5 - fh + 6.0)
+        var best = null
+        var best_d = 999999.0
+        for pole in get_tree().get_nodes_in_group("settlement_poles"):
+            if not is_instance_valid(pole) or pole.get_parent() != chunk:
+                continue
+            var d = pole.position.distance_to(attach)
+            if d < best_d:
+                best_d = d
+                best = pole
+        if best != null and best_d < 170.0:
+            _settlement_wire(root,_settlement_pole_top(kind,best.position,scale_value) + Vector2(0,3),attach,14.0,Color(0.06,0.06,0.06,0.7))
+
+# ---------------------------------------------------------------- street life --
+func _settlement_street_life(chunk,coord,cell_data:Dictionary,style:String):
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 55511 + coord.y * 33911 + 5)) + 3
+    var idx = int(cell_data.get("settlement_index",4))
+    var spots = []
+    # a poster / notice board on one crossing corner in every sector
+    spots.append(["poster_board",[Vector2(298,462),Vector2(470,300),Vector2(470,462),Vector2(298,298)][rng.randi_range(0,3)]])
+    if style != "rubezh":
+        # bus stops survive as shelters / waiting points along the main street
+        if rng.randf() < 0.55:
+            spots.append(["bus_stop",[Vector2(250,454),Vector2(520,454),Vector2(250,326),Vector2(520,326)][rng.randi_range(0,3)]])
+        if idx == 4 or rng.randf() < 0.25:
+            spots.append(["kiosk",[Vector2(476,478),Vector2(292,478),Vector2(476,292)][rng.randi_range(0,2)]])
+    else:
+        spots.append(["oil_drums",[Vector2(476,478),Vector2(292,478)][rng.randi_range(0,1)]])
+    for spot in spots:
+        var kind = str(spot[0])
+        var piece = FactionSettlementCatalog._piece(kind,spot[1])
+        if _settlement_clutter_spot(chunk,spot[1],max(12.0,piece["solid"].x * 0.5),true):
+            _settlement_piece(chunk,piece)
 
 # ---------------------------------------------------------------- survival clutter --
 # The towns are inhabited, not restored: potholes and litter on the streets,
@@ -19858,7 +19971,8 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
     _settlement_tex(layer,mats[1],Rect2(0,0,CHUNK_SIZE,CHUNK_SIZE),origin)
     _settlement_tex(layer,mats[0],Rect2(336,0,96,CHUNK_SIZE),origin,true)
     _settlement_tex(layer,mats[0],Rect2(0,336,CHUNK_SIZE,96),origin)
-    _settlement_street_marks(layer,style,rng)
+    _settlement_street_marks(layer,style,rng,idx)
+    _settlement_road_decals(layer,cell_data,style,rng)
     # town square on the central crossing
     if idx == 4:
         var sq = Rect2(300,300,168,168)
@@ -19910,7 +20024,8 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
         _rect(Vector2(384,y + 1),Vector2(CHUNK_SIZE,1),Color(0.20,0.19,0.18,1.0),layer)
     var parade = cell_data.get("parade",Rect2())
     if typeof(parade) == TYPE_RECT2 and parade.size != Vector2.ZERO:
-        _rect(parade.get_center(),parade.size,Color(0.29,0.29,0.27,1.0),layer)
+        _settlement_tex(layer,"asphalt",parade,chunk.global_position)
+        _rect(parade.get_center(),parade.size,Color(0.30,0.31,0.28,0.25),layer)
         var edge = Color(0.80,0.80,0.72,0.55)
         _rect(Vector2(parade.get_center().x,parade.position.y + 6),Vector2(parade.size.x - 12,2),edge,layer)
         _rect(Vector2(parade.get_center().x,parade.end.y - 6),Vector2(parade.size.x - 12,2),edge,layer)
@@ -19927,35 +20042,152 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
         _rect(pad,Vector2(30,6),Color(0.70,0.26,0.22,0.85),layer)
         _rect(pad,Vector2(9,18),Color(0.70,0.26,0.22,0.85),layer)
 
-func _settlement_street_marks(layer,style:String,rng):
+func _settlement_paint(layer,center:Vector2,size:Vector2,col:Color,rng):
+    # worn road paint: random fade, chipped gaps, never perfectly crisp
+    if rng.randf() < 0.08:
+        return
+    var c = Color(col.r,col.g,col.b,col.a * rng.randf_range(0.55,1.0))
+    _rect(center,size,c,layer)
+    for i in range(rng.randi_range(0,2)):
+        var along_x = size.x >= size.y
+        var chip = Vector2(rng.randf_range(2,5),size.y) if along_x else Vector2(size.x,rng.randf_range(2,5))
+        var off = Vector2(rng.randf_range(-size.x * 0.4,size.x * 0.4),0) if along_x else Vector2(0,rng.randf_range(-size.y * 0.4,size.y * 0.4))
+        _rect(center + off,chip,Color(0.16,0.16,0.16,0.55),layer)
+
+func _settlement_street_marks(layer,style:String,rng,idx:int = -1):
+    # Markings follow the street axes exactly (x/y = 384); they stop short of the
+    # crossing, which gets stop lines and worn zebras instead of running through.
+    var keep_out = 96.0 if idx == 4 else 58.0
     match style:
         "perron":
-            # worn wheel ruts along the cobbles
-            for off in [-18.0,18.0]:
-                _rect(Vector2(384 + off,384),Vector2(6,768),Color(0.22,0.19,0.14,0.45),layer)
-                _rect(Vector2(384,384 + off),Vector2(768,6),Color(0.22,0.19,0.14,0.45),layer)
+            # no paint on the cobbles: worn wheel ruts along both carriageways
+            for off in [-17.0,17.0]:
+                for k in range(0,768,48):
+                    if abs(float(k) + 24.0 - 384.0) > keep_out:
+                        _rect(Vector2(384 + off,k + 24),Vector2(5,48),Color(0.22,0.19,0.14,rng.randf_range(0.25,0.45)),layer)
+                        _rect(Vector2(k + 24,384 + off),Vector2(48,5),Color(0.22,0.19,0.14,rng.randf_range(0.25,0.45)),layer)
         "rubezh":
-            # white lane dashes over the concrete slab texture
-            for k in range(12,768,40):
-                if abs(k - 384) > 50:
-                    _rect(Vector2(384 + 22,k),Vector2(2,16),Color(0.78,0.78,0.70,0.45),layer)
-                    _rect(Vector2(k,384 + 22),Vector2(16,2),Color(0.78,0.78,0.70,0.45),layer)
+            var white = Color(0.80,0.80,0.72,0.55)
+            for k in range(8,768,40):
+                var c = float(k) + 8.0
+                if abs(c - 384.0) > keep_out:
+                    _settlement_paint(layer,Vector2(384,c),Vector2(2,16),white,rng)
+                    _settlement_paint(layer,Vector2(c,384),Vector2(16,2),white,rng)
+            _settlement_crossing_paint(layer,rng,keep_out,white,false)
         "mechanics":
-            var yellow = Color(0.78,0.62,0.18,0.55)
+            var yellow = Color(0.80,0.64,0.18,0.62)
+            var white = Color(0.78,0.78,0.72,0.42)
             for k in range(0,768,28):
-                if abs(k - 384) > 50:
-                    _rect(Vector2(384,k + 7),Vector2(2,14),yellow,layer)
-                    _rect(Vector2(k + 7,384),Vector2(14,2),yellow,layer)
+                var c = float(k) + 7.0
+                if abs(c - 384.0) > keep_out:
+                    _settlement_paint(layer,Vector2(384,c),Vector2(2,14),yellow,rng)
+                    _settlement_paint(layer,Vector2(c,384),Vector2(14,2),yellow,rng)
+            # edge lines along both kerbs
+            for k in range(0,768,32):
+                var c = float(k) + 16.0
+                if abs(c - 384.0) > keep_out + 8.0:
+                    for e in [343.0,425.0]:
+                        _settlement_paint(layer,Vector2(e,c),Vector2(2,32),white,rng)
+                        _settlement_paint(layer,Vector2(c,e),Vector2(32,2),white,rng)
+            _settlement_crossing_paint(layer,rng,keep_out,white,true)
             for i in range(18):
                 var p = Vector2(rng.randf_range(20,748),rng.randf_range(20,748))
-                _ellipse(p,rng.randf_range(8,24),rng.randf_range(3,7),Color(0.03,0.03,0.035,rng.randf_range(0.25,0.45)),layer)
-            for c in [Vector2(360,120),Vector2(408,640),Vector2(120,408)]:
-                _ellipse(c,6,3,Color(0.08,0.08,0.08,0.9),layer)
+                _ellipse(p,rng.randf_range(8,24),rng.randf_range(3,7),Color(0.03,0.03,0.035,rng.randf_range(0.18,0.32)),layer)
         "lazaret":
-            # darker border band along the paved avenues
+            # darker border band along the paved avenues + zebras at the crossing
             for off in [-44.0,44.0]:
-                _rect(Vector2(384 + off,384),Vector2(4,768),Color(0.46,0.47,0.44,0.9),layer)
-                _rect(Vector2(384,384 + off),Vector2(768,4),Color(0.46,0.47,0.44,0.9),layer)
+                _rect(Vector2(384 + off,384),Vector2(4,768),Color(0.40,0.41,0.38,0.9),layer)
+                _rect(Vector2(384,384 + off),Vector2(768,4),Color(0.40,0.41,0.38,0.9),layer)
+            _settlement_crossing_paint(layer,rng,keep_out,Color(0.86,0.86,0.82,0.5),true)
+
+func _settlement_crossing_paint(layer,rng,keep_out:float,col:Color,zebra:bool):
+    # stop lines on the right-hand half of each approach, zebra just beyond them
+    var d = keep_out - 6.0
+    _settlement_paint(layer,Vector2(365,384 - d),Vector2(34,3),col,rng)      # from the north
+    _settlement_paint(layer,Vector2(403,384 + d),Vector2(34,3),col,rng)      # from the south
+    _settlement_paint(layer,Vector2(384 - d,403),Vector2(3,34),col,rng)      # from the west
+    _settlement_paint(layer,Vector2(384 + d,365),Vector2(3,34),col,rng)      # from the east
+    if not zebra:
+        return
+    var z0 = keep_out + 4.0
+    for i in range(10):
+        var across = 342.0 + float(i) * 9.0 + 2.0
+        for sgn in [-1.0,1.0]:
+            _settlement_paint(layer,Vector2(across,384 + sgn * (z0 + 10.0)),Vector2(5,18),col,rng)
+            _settlement_paint(layer,Vector2(384 + sgn * (z0 + 10.0),across),Vector2(18,5),col,rng)
+
+# ---------------------------------------------------------------- road decals --
+const SETTLEMENT_DECALS = ["puddle_a","puddle_b","pothole","mud","oil","patch","ruts","drain"]
+
+func _settlement_decal(parent,kind:String,pos:Vector2,rot:float = 0.0,scale_value:float = 1.0):
+    var atlas = load("res://settlement_ground_decals_v1.png")
+    var index = SETTLEMENT_DECALS.find(kind)
+    if atlas == null or index < 0:
+        return null
+    var tex = AtlasTexture.new()
+    tex.atlas = atlas
+    tex.region = Rect2(index * 96,0,96,64)
+    var sprite = Sprite2D.new()
+    sprite.texture = tex
+    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    sprite.position = Vector2(round(pos.x),round(pos.y))
+    sprite.rotation = rot
+    sprite.scale = Vector2(scale_value,scale_value)
+    sprite.flip_h = int(pos.x + pos.y) % 2 == 0
+    sprite.modulate = Color(1,1,1,0.82 if kind != "ruts" else 1.0)
+    parent.add_child(sprite)
+    return sprite
+
+func _settlement_road_decals(layer,cell_data:Dictionary,style:String,rng):
+    var idx = int(cell_data.get("settlement_index",4))
+    var street_kinds = {
+        "perron":["mud","puddle_a","puddle_b","mud"],
+        "rubezh":["puddle_b","oil","patch","mud"],
+        "mechanics":["pothole","puddle_a","oil","patch","pothole"],
+        "lazaret":["puddle_b","puddle_a","mud"]
+    }.get(style,["puddle_a"])
+    # main streets
+    for axis in [0,1]:
+        var along = 30.0
+        while along < 740.0:
+            along += rng.randf_range(60.0,110.0)
+            if abs(along - 384.0) < (110.0 if idx == 4 else 64.0) or along > 740.0:
+                continue
+            if rng.randf() < 0.35:
+                continue
+            var across = 384.0 + rng.randf_range(-30.0,30.0)
+            var pos = Vector2(across,along) if axis == 0 else Vector2(along,across)
+            var kind = street_kinds[rng.randi_range(0,street_kinds.size() - 1)]
+            _settlement_decal(layer,kind,pos,(PI * 0.5 if axis == 0 else 0.0) + rng.randf_range(-0.2,0.2),rng.randf_range(0.34,0.5))
+    # lanes along the sector borders (outer lanes run inside the wall)
+    var offset = cell_data.get("settlement_offset",Vector2i.ZERO)
+    var dirt = style == "perron" or style == "rubezh"
+    var bands = []
+    bands.append([1,(732.0 if offset.y == 1 else 760.0)])                        # south lane (horizontal)
+    bands.append([0,(740.0 if offset.x == 1 else 760.0)])                        # east lane (vertical)
+    if offset.y == -1:
+        bands.append([1,44.0])
+    if offset.x == -1:
+        bands.append([0,30.0])
+    for band in bands:
+        var vertical = int(band[0]) == 0
+        var c = float(band[1])
+        var k = 40.0
+        while k < 740.0:
+            var pos = Vector2(c,k) if vertical else Vector2(k,c)
+            if dirt:
+                _settlement_decal(layer,"ruts",pos,PI * 0.5 if vertical else 0.0,0.72)
+                k += 66.0
+                if rng.randf() < 0.3:
+                    _settlement_decal(layer,["puddle_b","mud","mud"][rng.randi_range(0,2)],pos + (Vector2(0,30) if vertical else Vector2(30,0)),rng.randf_range(-0.3,0.3),rng.randf_range(0.32,0.46))
+            else:
+                if rng.randf() < 0.4:
+                    _settlement_decal(layer,["pothole","puddle_b","patch","oil"][rng.randi_range(0,3)],pos,rng.randf_range(-0.3,0.3),rng.randf_range(0.32,0.46))
+                k += rng.randf_range(70.0,120.0)
+    # storm drains clogged with leaves at the kerb corners
+    for p in [Vector2(339,300),Vector2(429,468),Vector2(300,429),Vector2(468,339)]:
+        if rng.randf() < 0.6:
+            _settlement_decal(layer,"drain",p,0.0,0.5)
 
 # ---------------------------------------------------------------- street furniture --
 func _settlement_streets(chunk,coord,cell_data:Dictionary,style:String):
@@ -21007,6 +21239,83 @@ func _build_settlement_model_facade(facade,model:Dictionary,size:Vector2,door_x:
 func _build_settlement_model_roof(roof,model:Dictionary,facade_height:float):
     # Roof node origin = footprint centre lifted by the facade height (+8).
     _settlement_model_sprite(roof,model,"roof_region",model.get("roof_pos",Vector2.ZERO) + Vector2(0,facade_height))
+    # live chimney smoke / laundry steam (model-space points share the roof transform)
+    for p in model.get("smoke",[]):
+        _settlement_smoke_emitter(roof,p + Vector2(0,facade_height),"smoke")
+    for p in model.get("steam",[]):
+        _settlement_smoke_emitter(roof,p + Vector2(0,facade_height),"steam")
+
+var _settlement_puff_texture = null
+
+func _settlement_puff_tex():
+    if _settlement_puff_texture == null:
+        var img = Image.create(24,24,false,Image.FORMAT_RGBA8)
+        for y in range(24):
+            for x in range(24):
+                var d = Vector2(x - 11.5,y - 11.5).length() / 11.5
+                var a = clamp(1.0 - d,0.0,1.0)
+                img.set_pixel(x,y,Color(1,1,1,a * a * (0.7 + 0.3 * float((x * 7 + y * 3) % 5) / 4.0)))
+        _settlement_puff_texture = ImageTexture.create_from_image(img)
+    return _settlement_puff_texture
+
+func _settlement_smoke_emitter(parent,pos:Vector2,kind:String = "smoke"):
+    # Drifting smoke: particles live in world space so the wind carries them off.
+    var p = CPUParticles2D.new()
+    p.position = pos
+    p.texture = _settlement_puff_tex()
+    p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    p.local_coords = false
+    p.amount = 18 if kind != "fire_smoke" else 12
+    p.lifetime = 4.2 if kind == "smoke" else (2.6 if kind == "steam" else 3.0)
+    p.preprocess = p.lifetime
+    p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+    p.emission_sphere_radius = 1.5
+    p.direction = Vector2(0.15,-1.0)
+    p.spread = 10.0
+    p.gravity = Vector2(5.0,-3.0)
+    p.initial_velocity_min = 7.0
+    p.initial_velocity_max = 12.0
+    p.damping_min = 1.0
+    p.damping_max = 2.0
+    p.scale_amount_min = 1.1
+    p.scale_amount_max = 1.5
+    var curve = Curve.new()
+    curve.add_point(Vector2(0.0,0.3))
+    curve.add_point(Vector2(1.0,1.0))
+    p.scale_amount_curve = curve
+    var ramp = Gradient.new()
+    var base = Color(0.58,0.57,0.55) if kind == "smoke" else (Color(0.86,0.87,0.86) if kind == "steam" else Color(0.40,0.38,0.36))
+    ramp.set_color(0,Color(base.r,base.g,base.b,0.0))
+    ramp.set_color(1,Color(base.r,base.g,base.b,0.0))
+    ramp.add_point(0.1,Color(base.r,base.g,base.b,0.72 if kind != "steam" else 0.6))
+    ramp.add_point(0.55,Color(base.r,base.g,base.b,0.42))
+    p.color_ramp = ramp
+    p.add_to_group("settlement_smoke")
+    parent.add_child(p)
+    return p
+
+func _settlement_spark_emitter(parent,pos:Vector2):
+    var p = CPUParticles2D.new()
+    p.position = pos
+    p.local_coords = false
+    p.amount = 6
+    p.lifetime = 0.9
+    p.preprocess = 1.0
+    p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+    p.emission_sphere_radius = 3.0
+    p.direction = Vector2(0,-1)
+    p.spread = 28.0
+    p.gravity = Vector2(3.0,-10.0)
+    p.initial_velocity_min = 12.0
+    p.initial_velocity_max = 24.0
+    p.scale_amount_min = 1.5
+    p.scale_amount_max = 2.0
+    var ramp = Gradient.new()
+    ramp.set_color(0,Color(1.0,0.86,0.45,1.0))
+    ramp.set_color(1,Color(1.0,0.35,0.1,0.0))
+    p.color_ramp = ramp
+    parent.add_child(p)
+    return p
 
 func _update_roofs(delta):
     for rec in roof_records:
