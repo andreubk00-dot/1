@@ -33,6 +33,8 @@ const SettlementCrisis = preload("res://world/settlement_crisis.gd")
 const FactionEndgame = preload("res://world/faction_endgame.gd")
 const FactionSettlementCatalog = preload("res://world/faction_settlement_catalog.gd")
 const SettlementBuildingModels = preload("res://world/settlement_building_models.gd")
+const HighRiskBuildingModels = preload("res://world/high_risk_building_models.gd")
+const HighRiskSiteCatalog = preload("res://world/high_risk_site_catalog.gd")
 const TraderCatalog = preload("res://world/trader_catalog.gd")
 const TradingMarket = preload("res://world/trading_market.gd")
 const ContractCatalog = preload("res://world/contract_catalog.gd")
@@ -19176,7 +19178,8 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
     chunk.set_meta("poi_flow_stage",int(cell_data.get("flow_stage",-1)))
     chunk.set_meta("poi_access_points",cell_data.get("access_points",[]).duplicate(true))
     _decorate_major_poi_ground(chunk,str(cell_data.get("ground","")),coord)
-    _decorate_high_risk_ground_identity(chunk,poi_id,cell_offset)
+    if not HighRiskSiteCatalog.has(poi_id):
+        _decorate_high_risk_ground_identity(chunk,poi_id,cell_offset)
 
     var poi_name = str(poi.get("short_name",poi.get("name","ОБЪЕКТ")))
     # settlements: the sector name sits on the street corner, not behind a facade
@@ -19212,6 +19215,16 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
             archetype_data = archetype_data.duplicate(true)
             archetype_data["high_risk_skin"] = HIGH_RISK_SKIN_MEDICAL_ENTRY_V03
             archetype_data["door_x"] = 0.0
+        else:
+            # 1.23-dev2: every other High Risk building wears an authored exterior
+            # model fitted to its gameplay footprint (tools/wa_hr_buildings.py).
+            var hr_model_id = HighRiskBuildingModels.model_id(poi_id,cell_offset,building_id)
+            if hr_model_id != "":
+                var hr_model = HighRiskBuildingModels.model(hr_model_id)
+                if hr_model.get("size",Vector2.ZERO) == size:
+                    archetype_data = archetype_data.duplicate(true)
+                    archetype_data["settlement_model"] = hr_model_id
+                    archetype_data["door_x"] = float(hr_model.get("door_x",0.0)) / max(1.0,size.x)
         var loot_table = str(spec.get("loot",archetype_data.get("loot",profile.get("loot_theme","residential"))))
         var building_node = _create_building(chunk,coord,building_id,pos,size,sign_text,wall_color,true,archetype_id,archetype_data)
         _apply_authored_building_metadata(building_node,profile,archetype_id,archetype_data,loot_table,role,cell_offset)
@@ -19258,7 +19271,10 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
             1,
             str(vertical_entry.get("label","ЛЕСТНИЦА"))
         )
-    _dress_major_poi(chunk,coord,str(cell_data.get("ground","")))
+    if HighRiskSiteCatalog.has(poi_id):
+        _dress_high_risk_site(chunk,coord,poi_id,cell_offset,cell_data)
+    else:
+        _dress_major_poi(chunk,coord,str(cell_data.get("ground","")))
     return true
 
 const POI_PROP_KINDS = [
@@ -19497,7 +19513,11 @@ func _settlement_piece(chunk,piece:Dictionary):
             prop.z_as_relative = false
             prop.set_meta("settlement_piece_kind",kind)
         return prop
+    var atlas_path = "res://settlement_props_v1.png"
     var index = SETTLEMENT_PIECE_KINDS.find(kind)
+    if kind.begins_with("hr:"):
+        atlas_path = "res://art/high_risk/hr_props_v1.png"
+        index = HR_PIECE_KINDS.find(kind.trim_prefix("hr:"))
     if index < 0:
         return null
     var piece_scale = float(piece.get("scale",0.5))
@@ -19513,7 +19533,7 @@ func _settlement_piece(chunk,piece:Dictionary):
     var shadow_w = max(10.0,solid.x * 0.62) if solid != Vector2.ZERO else 26.0 * piece_scale * 2.0
     _ellipse(Vector2(5,1),shadow_w,4.0,Color(0.01,0.012,0.012,0.26),node)
     var sprite = _facade_atlas_sprite(
-        node,"res://settlement_props_v1.png",
+        node,atlas_path,
         Rect2((index % 6) * 192,int(index / 6) * 192,192,192),
         Vector2(0,-96.0 * piece_scale),piece_scale
     )
@@ -19542,6 +19562,12 @@ func _settlement_piece_light(node,kind:String,piece_scale:float):
             _add_detail_light(node,Vector2(0,-24.0 * piece_scale * 2.0),Color(1.0,0.80,0.52),0.42,0.8,true)
         "searchlight_tower":
             _add_detail_light(node,Vector2(10,-8),Color(0.92,0.95,1.0),0.66,1.6,true)
+        "hr:light_mast":
+            # floodlight head ~160 art px above the base
+            _add_detail_light(node,Vector2(0,-158.0 * piece_scale),Color(0.90,0.94,1.0),0.9,2.2,true)
+            _ellipse(Vector2(0,30),70,26,Color(0.85,0.9,1.0,0.035),node)
+        "hr:heli_wreck","hr:burnt_ambulance","hr:tank_wreck":
+            _settlement_smoke_emitter(node,Vector2(0,-30.0 * piece_scale),"fire_smoke")
         "platform_canopy","triage_canopy","decon_frame":
             _add_detail_light(node,Vector2(0,-18),Color(0.92,0.96,0.90),0.32,1.0,true)
 
@@ -20298,6 +20324,340 @@ func _settlement_yard_fences(chunk,cell_data:Dictionary,style:String):
             while yy < r.end.y:
                 _rect(Vector2(edge_x,yy),Vector2(3,3),post,root)
                 yy += 16.0
+
+
+# -----------------------------------------------------------------------------
+# 1.23-dev2: High Risk sites are dressed as places, not as six equal yards.
+# Ground materials, a PO-2 concrete perimeter, per-sector landmarks and clutter
+# come from world/high_risk_site_catalog.gd; art from art/high_risk/hr_props_v1.png.
+const HR_PIECE_KINDS = [
+    "heli_wreck","tank_wreck","vent_head","cooling_fans","light_mast","hazmat_drums",
+    "body_bags","decon_tunnel","container_stack","generator_trailer","crater","sandbag_wall",
+    "burnt_ambulance","fuel_bowser","lattice_mast","dragon_teeth","cable_spool_yard","rail_cart",
+    "po2_fence","po2_fence_v","gate_pillar","hospital_sign","quarantine_sign","cryo_trailer"
+]
+# collision footprints at a 0.5 display scale (scaled with the piece)
+const HR_PIECE_SOLIDS = {
+    "heli_wreck":Vector2(100,22),"tank_wreck":Vector2(96,24),"vent_head":Vector2(40,22),"cooling_fans":Vector2(100,20),
+    "light_mast":Vector2(10,8),"hazmat_drums":Vector2(52,14),"body_bags":Vector2.ZERO,"decon_tunnel":Vector2(130,22),
+    "container_stack":Vector2(110,22),"generator_trailer":Vector2(64,16),"crater":Vector2.ZERO,"sandbag_wall":Vector2(124,10),
+    "burnt_ambulance":Vector2(90,22),"fuel_bowser":Vector2(96,22),"lattice_mast":Vector2(16,12),"dragon_teeth":Vector2(110,14),
+    "rail_cart":Vector2(44,14),"gate_pillar":Vector2(14,10),"hospital_sign":Vector2.ZERO,"quarantine_sign":Vector2.ZERO,
+    "cryo_trailer":Vector2(96,22)
+}
+const HR_GROUND_PAINT = Color(0.80,0.78,0.70,0.42)
+
+func _hr_piece_dict(kind:String,pos:Vector2,scale_value:float = -1.0) -> Dictionary:
+    if kind.begins_with("hr:"):
+        var k = kind.trim_prefix("hr:")
+        var sc = scale_value if scale_value > 0.0 else 0.62
+        var solid = (HR_PIECE_SOLIDS.get(k,Vector2.ZERO) * sc / 0.5).round()
+        return {"kind":kind,"pos":pos,"scale":sc,"solid":solid,"flip":(int(pos.x + pos.y) % 3) == 0}
+    var piece = FactionSettlementCatalog._piece(kind,pos,scale_value)
+    return piece
+
+func _hr_block_reason(chunk,pos:Vector2,radius:float) -> String:
+    if pos.x < radius * 0.5 + 6.0 or pos.x > CHUNK_SIZE - radius * 0.5 - 6.0 or pos.y < 20.0 or pos.y > CHUNK_SIZE - 8.0:
+        return "edge"
+    if not _settlement_spot_clear(chunk,pos,radius):
+        return "building/door"
+    var gp = chunk.global_position + pos
+    for group in ["interactable","high_risk_floor_transitions","poi_set_pieces"]:
+        for n in get_tree().get_nodes_in_group(group):
+            if is_instance_valid(n) and n.global_position.distance_to(gp) < radius + (26.0 if group != "poi_set_pieces" else 18.0):
+                return group + ":" + str(n.get_meta("poi_piece_kind",n.get_meta("interaction_type",n.name)))
+    return "fence/container" if not _hr_spot_clear(chunk,pos,radius) else ""
+
+func _hr_spot_clear(chunk,pos:Vector2,radius:float) -> bool:
+    # Authored dressing must never block a door, cache, stair, workbench or fence line.
+    if pos.x < radius * 0.5 + 6.0 or pos.x > CHUNK_SIZE - radius * 0.5 - 6.0 or pos.y < 20.0 or pos.y > CHUNK_SIZE - 8.0:
+        return false
+    if not _settlement_spot_clear(chunk,pos,radius):
+        return false
+    var gp = chunk.global_position + pos
+    for group in ["interactable","high_risk_floor_transitions","poi_set_pieces"]:
+        for n in get_tree().get_nodes_in_group(group):
+            if is_instance_valid(n) and n.global_position.distance_to(gp) < radius + (26.0 if group != "poi_set_pieces" else 18.0):
+                return false
+    for child in chunk.get_children():
+        if bool(child.get_meta("world_fence",false)):
+            var length = float(child.get_meta("fence_length",0.0))
+            var axis = Vector2.RIGHT.rotated(child.rotation)
+            var rel = pos - child.position
+            var along = rel.dot(axis)
+            var across = abs(rel.dot(axis.orthogonal()))
+            if abs(along) < length * 0.5 + radius and across < radius + 10.0:
+                return false
+        if child.has_meta("container_key") and child.position.distance_to(pos) < radius + 30.0:
+            return false
+    return true
+
+func _hr_place(chunk,piece:Dictionary,search:float = 165.0):
+    # Authored spot first; if a door, cache, stair or fence is in the way, look for
+    # the nearest clear spot in widening rings instead of dropping the landmark.
+    var solid = piece.get("solid",Vector2.ZERO)
+    var radius = max(14.0,solid.x * 0.5)
+    var origin = piece.get("pos",Vector2.ZERO)
+    var found = false
+    var ring = 0.0
+    while ring <= search and not found:
+        var steps = 1 if ring == 0.0 else 12
+        for k in range(steps):
+            var cand = origin + Vector2(cos(TAU * float(k) / float(steps)),sin(TAU * float(k) / float(steps)) * 0.7) * ring
+            if _hr_spot_clear(chunk,cand,radius):
+                piece["pos"] = cand.round()
+                found = true
+                break
+        ring += 15.0
+    if not found:
+        return null
+    var node = _settlement_piece(chunk,piece)
+    if node != null:
+        node.set_meta("high_risk_piece",str(piece.get("kind","")))
+    return node
+
+func _dress_high_risk_site(chunk,coord,poi_id:String,cell_offset:Vector2i,cell_data:Dictionary) -> void:
+    var site = HighRiskSiteCatalog.site(poi_id)
+    var cell = HighRiskSiteCatalog.cell(poi_id,cell_offset)
+    var style = str(site.get("style",""))
+    chunk.set_meta("high_risk_site_style",style)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 72221 + coord.y * 13331 + 77)) + 5
+    _hr_ground(chunk,coord,site,cell,cell_offset,rng)
+    if bool(site.get("perimeter",false)):
+        _hr_perimeter(chunk,poi_id,cell_offset,style)
+    var placed = 0
+    var skipped = []
+    for raw in cell.get("pieces",[]):
+        var piece = _hr_piece_dict(str(raw[0]),raw[1],float(raw[2]) if raw.size() > 2 else -1.0)
+        if _hr_place(chunk,piece) != null:
+            placed += 1
+        else:
+            skipped.append(str(raw[0]))
+    # clutter in the open yard (south half), avoiding everything authored above
+    var pool = site.get("clutter",[])
+    for i in range(7):
+        if pool.is_empty():
+            break
+        var kind = str(pool[rng.randi_range(0,pool.size() - 1)])
+        var piece = _hr_piece_dict(kind,Vector2.ZERO)
+        for attempt in range(10):
+            piece["pos"] = Vector2(rng.randf_range(40.0,520.0),rng.randf_range(480.0,740.0))
+            piece["flip"] = rng.randf() < 0.5
+            if _hr_place(chunk,piece,0.0) != null:
+                placed += 1
+                break
+    _hr_vegetation(chunk,coord,style,cell,rng)
+    chunk.set_meta("high_risk_pieces",placed)
+    chunk.set_meta("high_risk_pieces_skipped",skipped)
+
+func _hr_vegetation(chunk,coord,style:String,cell:Dictionary,rng):
+    # weeds and leaf drifts along building feet and fences; real trees only where
+    # the site has lawns or has been taken back by the forest (Vector).
+    var count = {"clinic":14,"quarantine":10,"bastion":8,"vector":26}.get(style,10)
+    for i in range(count):
+        var p = Vector2(rng.randf_range(24,744),rng.randf_range(460,748))
+        if not _hr_spot_clear(chunk,p,10.0):
+            continue
+        var kind = [3,4,5,6,7,2][rng.randi_range(0,5)]
+        if style == "vector":
+            kind = [0,1,2,4,3,7][rng.randi_range(0,5)]
+        var veg = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),p,rng.randf_range(0.42,0.58))
+        if veg != null:
+            veg.z_as_relative = false
+            veg.z_index = -6 if kind >= 5 else 6
+            veg.flip_h = rng.randf() < 0.5
+            veg.add_to_group("world_vegetation")
+    var trees = 0
+    var want = {"clinic":2,"vector":4}.get(style,0)
+    for attempt in range(want * 4):
+        if trees >= want:
+            break
+        var p = Vector2(rng.randf_range(40,740),rng.randf_range(480,740))
+        if style == "vector" and rng.randf() < 0.5:
+            p = Vector2(rng.randf_range(30,740),rng.randf_range(30,80))
+        if _hr_spot_clear(chunk,p,26.0) and _create_tree(chunk,p,rng.randf_range(0.7,0.9) if style == "vector" else rng.randf_range(0.85,1.05),true) != null:
+            trees += 1
+
+# ---------------------------------------------------------------- ground --
+func _hr_ground(chunk,coord,site:Dictionary,cell:Dictionary,offset:Vector2i,rng):
+    var mats = site.get("ground",["asphalt","pavement","lawn"])
+    var layer = Node2D.new()
+    layer.name = "HighRiskGround"
+    layer.z_index = -7
+    chunk.add_child(layer)
+    var origin = chunk.global_position
+    _settlement_tex(layer,str(mats[0]),Rect2(0,0,CHUNK_SIZE,CHUNK_SIZE),origin)
+    # kerbed service road along the open yard edge of every sector
+    _settlement_tex(layer,str(mats[1]),Rect2(0,458,CHUNK_SIZE,16),origin)
+    _rect(Vector2(384,458),Vector2(CHUNK_SIZE,2),Color(0.62,0.62,0.58,0.5),layer)
+    var lawn = cell.get("lawn",Rect2())
+    if typeof(lawn) == TYPE_RECT2 and lawn.size != Vector2.ZERO:
+        _rect(lawn.get_center() + Vector2(1,2),lawn.size + Vector2(2,2),Color(0.02,0.02,0.02,0.3),layer)
+        _settlement_tex(layer,"pavement",lawn,origin)
+        _settlement_tex(layer,str(mats[2]),lawn.grow(-4.0),origin)
+    _hr_paint(layer,str(cell.get("paint","")),offset,rng)
+    # weather: puddles, oil, potholes and mud scattered over the open ground
+    var decal_pool = {"clinic":["puddle_a","pothole","oil","patch","puddle_b"],"quarantine":["mud","puddle_a","mud","puddle_b","ruts"],
+        "bastion":["patch","oil","puddle_b","pothole"],"vector":["mud","puddle_b","patch"]}.get(str(site.get("style","")),["puddle_a"])
+    for i in range(9):
+        var p = Vector2(rng.randf_range(40,730),rng.randf_range(470,740))
+        _settlement_decal(layer,decal_pool[rng.randi_range(0,decal_pool.size() - 1)],p,rng.randf_range(-0.4,0.4),rng.randf_range(0.36,0.56))
+
+func _hr_dash(layer,a:Vector2,b:Vector2,col:Color,dash:float,gap:float,width:float,rng):
+    var length = a.distance_to(b)
+    var dir = (b - a).normalized()
+    var t = 0.0
+    while t < length:
+        var e = min(length,t + dash)
+        var c = a + dir * ((t + e) * 0.5)
+        var size = Vector2(e - t,width) if abs(dir.x) > abs(dir.y) else Vector2(width,e - t)
+        _settlement_paint(layer,c,size,col,rng)
+        t += dash + gap
+
+func _hr_paint(layer,kind:String,offset:Vector2i,rng):
+    var paint = HR_GROUND_PAINT
+    match kind:
+        "parking":
+            for x in range(60,520,46):
+                _settlement_paint(layer,Vector2(x,520),Vector2(2,56),paint,rng)
+                _settlement_paint(layer,Vector2(x,700),Vector2(2,56),paint,rng)
+            _hr_dash(layer,Vector2(40,610),Vector2(520,610),Color(0.86,0.76,0.30,0.45),20,14,2,rng)
+        "ambulance_bay":
+            for x in range(280,520,60):
+                _settlement_paint(layer,Vector2(x,560),Vector2(2,90),paint,rng)
+            _rect(Vector2(400,700),Vector2(36,8),Color(0.70,0.24,0.20,0.6),layer)
+            _rect(Vector2(400,700),Vector2(10,30),Color(0.70,0.24,0.20,0.6),layer)
+            _hr_dash(layer,Vector2(260,620),Vector2(520,620),Color(0.86,0.76,0.30,0.45),18,12,2,rng)
+        "helipad":
+            var c = Vector2(250,610)
+            for i in range(28):
+                var a0 = TAU * float(i) / 28.0
+                _rect(c + Vector2(cos(a0) * 70.0,sin(a0) * 46.0),Vector2(7,4),Color(0.86,0.76,0.30,0.6),layer)
+            _rect(c + Vector2(-16,0),Vector2(5,40),Color(0.88,0.88,0.84,0.6),layer)
+            _rect(c + Vector2(16,0),Vector2(5,40),Color(0.88,0.88,0.84,0.6),layer)
+            _rect(c,Vector2(36,5),Color(0.88,0.88,0.84,0.6),layer)
+        "garden":
+            for i in range(4):
+                _rect(Vector2(60 + i * 120,600),Vector2(14,240),Color(0.44,0.43,0.40,0.6),layer)     # paths
+        "hatched":
+            for i in range(14):
+                var x0 = 40.0 + float(i) * 34.0
+                _settlement_paint(layer,Vector2(x0,600),Vector2(14,4),Color(0.86,0.74,0.20,0.5),rng)
+            _hr_dash(layer,Vector2(40,580),Vector2(520,580),Color(0.86,0.74,0.20,0.5),30,8,3,rng)
+            _hr_dash(layer,Vector2(40,622),Vector2(520,622),Color(0.86,0.74,0.20,0.5),30,8,3,rng)
+        "service":
+            _hr_dash(layer,Vector2(40,610),Vector2(520,610),paint,22,14,2,rng)
+        "duckboards":
+            # plank walkways laid over the mud
+            for y in [600.0,660.0]:
+                var x = 40.0
+                while x < 520.0:
+                    _rect(Vector2(x + 7,y),Vector2(12,20),Color(0.42,0.33,0.22,0.95),layer)
+                    _rect(Vector2(x + 7,y + 10),Vector2(12,2),Color(0.22,0.17,0.12,0.9),layer)
+                    x += 14.0 if rng.randf() > 0.06 else 22.0
+        "gravel":
+            pass
+        "burn_pit":
+            # scorched ground built from overlapping soft blots, not one black disc
+            for i in range(14):
+                var a1 = rng.randf_range(0,TAU)
+                var r1 = rng.randf_range(0,52)
+                var c1 = Vector2(300,610) + Vector2(cos(a1) * r1,sin(a1) * r1 * 0.6)
+                _ellipse(c1,rng.randf_range(22,40),rng.randf_range(12,22),Color(0.16,0.13,0.10,0.16),layer)
+            _ellipse(Vector2(300,612),34,18,Color(0.10,0.08,0.07,0.32),layer)
+            for i in range(30):
+                var a0 = rng.randf_range(0,TAU)
+                var r0 = rng.randf_range(20,80)
+                _rect(Vector2(300,610) + Vector2(cos(a0) * r0,sin(a0) * r0 * 0.6),Vector2(3,2),Color(0.70,0.68,0.62,0.6),layer)  # ash, bones
+        "apron","taxi":
+            var yellow = Color(0.86,0.70,0.20,0.55)
+            _hr_dash(layer,Vector2(20,600),Vector2(748,600),yellow,26,10,3,rng)
+            if kind == "apron":
+                for x in range(80,520,96):
+                    _settlement_paint(layer,Vector2(x,540),Vector2(3,60),HR_GROUND_PAINT,rng)
+            else:
+                _settlement_paint(layer,Vector2(300,680),Vector2(120,3),yellow,rng)
+                _settlement_paint(layer,Vector2(240,660),Vector2(3,40),yellow,rng)
+        "parade":
+            var r = Rect2(120,510,360,200)
+            _rect(r.get_center(),r.size,Color(0.32,0.32,0.30,0.6),layer)
+            for e in [r.position.y,r.end.y]:
+                _settlement_paint(layer,Vector2(r.get_center().x,e),Vector2(r.size.x,2),HR_GROUND_PAINT,rng)
+            for row in range(3):
+                for col in range(6):
+                    _settlement_paint(layer,r.position + Vector2(40 + col * 56,50 + row * 50),Vector2(12,2),HR_GROUND_PAINT,rng)
+        "rail_to_shaft","service_road","pads":
+            if kind == "rail_to_shaft":
+                var x = 475.0 if offset == Vector2i(0,0) else 182.0
+                var top = 437.0 if offset == Vector2i(0,0) else 377.0
+                var y = top
+                while y < CHUNK_SIZE:
+                    _rect(Vector2(x,y + 5),Vector2(30,6),Color(0.30,0.22,0.15,0.95),layer)
+                    y += 14.0
+                for dx in [-9.0,9.0]:
+                    _rect(Vector2(x + dx,(top + CHUNK_SIZE) * 0.5),Vector2(2,CHUNK_SIZE - top),Color(0.50,0.48,0.44,1.0),layer)
+            elif kind == "pads":
+                for c in [Vector2(130,560),Vector2(330,560)]:
+                    _rect(c,Vector2(150,80),Color(0.46,0.46,0.42,0.55),layer)
+                    _rect(c,Vector2(146,76),Color(0.38,0.38,0.35,0.5),layer)
+            _hr_dash(layer,Vector2(20,466),Vector2(748,466),Color(0.80,0.80,0.74,0.35),18,16,2,rng)
+
+# ---------------------------------------------------------------- perimeter --
+func _hr_perimeter(chunk,poi_id:String,offset:Vector2i,style:String):
+    var fp = PoiCatalog.footprint(poi_id)
+    var sides = {}
+    if not fp.has(offset + Vector2i(0,-1)):
+        sides["n"] = true
+    if not fp.has(offset + Vector2i(0,1)):
+        sides["s"] = true
+    if not fp.has(offset + Vector2i(-1,0)):
+        sides["w"] = true
+    if not fp.has(offset + Vector2i(1,0)):
+        sides["e"] = true
+    var root = Node2D.new()
+    root.name = "HighRiskPerimeter"
+    root.z_index = 6
+    root.z_as_relative = false
+    root.set_meta("high_risk_perimeter",sides.keys())
+    chunk.add_child(root)
+    var gap = 66.0
+    var x_from = 12.0 if sides.has("w") else 0.0
+    var x_to = 756.0 if sides.has("e") else float(CHUNK_SIZE)
+    var y_from = 14.0 if sides.has("n") else 0.0
+    var y_to = 754.0 if sides.has("s") else float(CHUNK_SIZE)
+    for side in sides.keys():
+        var horizontal = side == "n" or side == "s"
+        var c = 14.0 if side == "n" else (754.0 if side == "s" else (12.0 if side == "w" else 756.0))
+        var spans = [[x_from,384.0 - gap],[384.0 + gap,x_to]] if horizontal else [[y_from,384.0 - gap],[384.0 + gap,y_to]]
+        for span in spans:
+            var a = float(span[0])
+            var b = float(span[1])
+            if horizontal:
+                # PO-2 panels are ~33 px wide in game: spread a whole number of them over the span
+                var n = max(1,int(floor((b - a) / 32.0)))
+                var step = (b - a) / float(n)
+                for i in range(n):
+                    _facade_atlas_sprite(root,"res://art/high_risk/hr_props_v1.png",Rect2(0,3 * 192 + 96,192,96),Vector2(a + step * (float(i) + 0.5),c - 24.0),0.5)
+                _rect(Vector2((a + b) * 0.5,c + 3.0),Vector2(b - a,3.0),Color(0.01,0.012,0.012,0.22),root)
+                _add_static_rect(root,Vector2((a + b) * 0.5,c - 2.0),Vector2(b - a,8.0))
+            else:
+                _rect(Vector2(c,(a + b) * 0.5 - 26.0),Vector2(7.0,b - a),Color(0.58,0.57,0.53,1.0),root)
+                _rect(Vector2(c - 2.5,(a + b) * 0.5 - 26.0),Vector2(2.0,b - a),Color(0.70,0.69,0.64,1.0),root)
+                _rect(Vector2(c + 4.5,(a + b) * 0.5),Vector2(3.0,b - a),Color(0.01,0.012,0.012,0.2),root)
+                var y = a
+                while y < b:
+                    _rect(Vector2(c,y - 26.0),Vector2(9.0,4.0),Color(0.48,0.47,0.44,1.0),root)
+                    _rect(Vector2(c,y - 30.0),Vector2(1.0,6.0),Color(0.30,0.30,0.30,1.0),root)
+                    y += 30.0
+                _rect(Vector2(c - 1.0,(a + b) * 0.5 - 32.0),Vector2(1.0,b - a),Color(0.62,0.63,0.62,0.9),root)
+                _add_static_rect(root,Vector2(c,(a + b) * 0.5 - 8.0),Vector2(10.0,b - a))
+        # gate pillars with lamps at the opening
+        for g in [384.0 - gap,384.0 + gap]:
+            var pos = Vector2(g,c + 2.0) if horizontal else Vector2(c,g + 6.0)
+            var pillar = _settlement_piece(chunk,{"kind":"hr:gate_pillar","pos":pos,"scale":0.5,"solid":Vector2(12,8),"flip":false})
+            if pillar != null:
+                _add_detail_light(pillar,Vector2(0,-38),Color(1.0,0.88,0.62),0.45,0.9,true)
 
 func _chunk_has_player_base(coord:Vector2i) -> bool:
     for rec in base_objects:
@@ -21381,7 +21741,7 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     # 1.22-dev4: faction settlement buildings carry an authored exterior model.
     var settlement_model = {}
     if archetype_id != "" and str(archetype_data.get("settlement_model","")) != "":
-        settlement_model = SettlementBuildingModels.model(str(archetype_data.get("settlement_model","")))
+        settlement_model = _exterior_model(str(archetype_data.get("settlement_model","")))
     if not settlement_model.is_empty():
         building.set_meta("settlement_model",str(archetype_data.get("settlement_model","")))
 
@@ -21513,6 +21873,13 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
         var behind = rec["behind"]
         rec["behind"] = Rect2(behind.position - Vector2(0,rise),behind.size + Vector2(0,rise))
     return building
+
+func _exterior_model(model_id:String) -> Dictionary:
+    if SettlementBuildingModels.has(model_id):
+        return SettlementBuildingModels.model(model_id)
+    if HighRiskBuildingModels.has(model_id):
+        return HighRiskBuildingModels.model(model_id)
+    return {}
 
 func _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data):
     _poly(PackedVector2Array([

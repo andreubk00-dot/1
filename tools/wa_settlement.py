@@ -1158,6 +1158,12 @@ def cart():
     return grunge(s.render(), 160, 0.14, dirt_bottom=0.1, leaves=0.008)
 
 
+import wa_vehicles as WV
+btr = lambda: WV.btr80(119)
+ambulance = lambda: WV.uaz_ambulance(False, 135)
+car_on_blocks = lambda: WV.car_on_blocks(125)
+burnt_car = lambda: WV.lada((120, 60, 44), True, 141)
+
 FNS = [market_stall, market_stall_b, water_tower, garden_beds, laundry_line, field_kitchen,
        platform_canopy, radio_mast, water_point, chicken_coop, long_table, fire_barrel,
        sandbag_nest, hesco_row, army_tent, flag_pole, searchlight_tower, ammo_bunker,

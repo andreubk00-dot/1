@@ -37,6 +37,7 @@ class B:
         self.smoke = []              # model-space screen points (x, y - z) where live smoke rises
         self.steam = []
         self.win_rects = []          # (u, v, w, h) on the main front face
+        self.blockers = []           # wall areas covered by signs / canopies: no windows there
         self.decay = True
         self.door_x = 0.0
         self.roof_rise = 0.0
@@ -117,7 +118,7 @@ class B:
 
     def arch(self, mat, over=3.0):
         r = self.W / 2
-        zs = 0.62
+        zs = getattr(self, 'arch_zs', 0.62)
         front = self.m.arch_y(self.x0, self.x1, self.y0, self.y1, self.H, mat, segs=14, bias=100, zs=zs)
         self.roof_rise = r * zs
         self.roof_fn = lambda x, y: self.H + zs * math.sqrt(max(0.0, r * r - x * x))
@@ -175,6 +176,9 @@ class B:
         self.opening_xs.append((x, DOOR_W / 2 + 6))
         if canopy:
             mat, depth = canopy
+            zc = DOOR_H + 5
+            # seen from above the canopy hides the wall from (z - depth) to its top edge
+            self.blockers.append((self.fu(x) - 19, zc - 6 - depth, 38, depth + 10))
             z = DOOR_H + 5
             col = MAT[mat][0]
             self.m.poly3([V(x - 17, self.y1 + depth, z - 3), V(x + 17, self.y1 + depth, z - 3), V(x + 17, self.y1, z + 2), V(x - 17, self.y1, z + 2)],
@@ -224,10 +228,10 @@ class B:
     # --- post-apocalyptic wear ------------------------------------------------------
     WINDOW_WEAR = {
         # broken, boarded, plywood, sandbags, taped, stovepipe
-        'perron': (0.14, 0.16, 0.08, 0.0, 0.04, 0.07),
-        'rubezh': (0.08, 0.10, 0.04, 0.24, 0.06, 0.03),
-        'mech':   (0.18, 0.08, 0.14, 0.0, 0.03, 0.04),
-        'laz':    (0.05, 0.07, 0.05, 0.0, 0.26, 0.02),
+        'perron': (0.14, 0.16, 0.08, 0.0, 0.0, 0.07),
+        'rubezh': (0.08, 0.10, 0.04, 0.24, 0.0, 0.03),
+        'mech':   (0.18, 0.08, 0.14, 0.0, 0.0, 0.04),
+        'laz':    (0.05, 0.07, 0.05, 0.0, 0.0, 0.02),
     }
 
     def _window_state(self, u, v, w, h):
@@ -250,7 +254,14 @@ class B:
         elif kind == 'sandbags':
             f.decals.append(('sandbags', dict(u=u, v=v - 1, w=w, h=h * 0.62)))
         elif kind == 'tape':
-            f.decals.append(('tape', dict(u=u, v=v, w=w, h=h)))
+            return
+            if w > h * 2.0:
+                # long strip windows are taped in square bays, not one stretched X
+                n = max(1, int(round(w / h)))
+                for i in range(n):
+                    f.decals.append(('tape', dict(u=u + i * w / n, v=v, w=w / n, h=h)))
+            else:
+                f.decals.append(('tape', dict(u=u, v=v, w=w, h=h)))
         elif kind == 'stovepipe':
             # буржуйка: a stove pipe through a plywood-closed pane, soot above it
             f.decals.append(('plywood', dict(u=u, v=v, w=w, h=h, col=(128, 110, 84))))
@@ -288,15 +299,18 @@ class B:
         # plaster fallen off down to the brick
         if plaster:
             for _ in range(int(area // 3500) + 1):
-                spot = self._free_wall_spot(r.uniform(10, 22), r.uniform(7, 13))
+                pw, ph = r.uniform(10, 22), r.uniform(7, 13)
+                spot = self._free_wall_spot(pw, ph)
                 if spot:
-                    f.decals.append(('peel', dict(u=spot[0], v=spot[1], w=r.uniform(10, 22), h=r.uniform(7, 13))))
+                    f.decals.append(('peel', dict(u=spot[0], v=spot[1], w=pw, h=ph)))
+                    self.win_rects.append((spot[0], spot[1], pw, ph))
         # corrugated / plywood patches over damage
         n_patch = {'perron': 2, 'rubezh': 1, 'mech': 3, 'laz': 1}.get(self.style, 1)
         for _ in range(r.randint(0, n_patch)):
             w, h = r.uniform(12, 26), r.uniform(10, 18)
             spot = self._free_wall_spot(w, h)
             if spot:
+                self.win_rects.append((spot[0], spot[1], w, h))
                 if r.random() < 0.5 or self.style == 'mech':
                     f.decals.append(('sheet', dict(u=spot[0], v=spot[1], w=w, h=h, col=r.choice([(124, 128, 128), (128, 84, 54), (76, 102, 118)]))))
                 else:
@@ -316,10 +330,14 @@ class B:
             if spot:
                 f.decals.append(('emblem', dict(u=spot[0], v=spot[1], col=emb[1], style=emb[0])))
         # rust / water streaks from the eaves
+        top = max([v + h for (_u, v, _w, h) in self.win_rects] + [0.0])
+        room = max(0.0, self.H - 1 - top - 2)
         for _ in range(int(self.W // 22)):
+            if room < 4:
+                break
             u = r.uniform(3, self.W - 3)
             col = (112, 70, 44) if (steel or r.random() < 0.3) else dark(MAT[wall][0], 0.8)
-            f.decals.append(('streak', dict(u=u, v=self.H - 1, h=r.uniform(6, 20), col=col)))
+            f.decals.append(('streak', dict(u=u, v=self.H - 1, h=min(room, r.uniform(6, 20)), col=col)))
         # scorch marks: the region saw fighting
         if r.random() < {'perron': 0.25, 'rubezh': 0.45, 'mech': 0.35, 'laz': 0.15}.get(self.style, 0.2):
             spot = self._free_wall_spot(16, 18, 2)
@@ -349,10 +367,30 @@ class B:
                 bx, by = r.uniform(self.x0 + 14, self.x1 - 14), r.uniform(self.y0 + 10, self.y1 - 10)
                 self.m.cyl(bx, by, self.roof_z(bx, by) - 1, self.roof_z(bx, by) + 9, 4.5, ((70, 92, 110), 'none'), segs=10, bias=185)   # rain barrel
 
+    OPENING_DECALS = ('window', 'broken', 'boards', 'plywood', 'plastic', 'tape', 'sandbags', 'streak', 'soot')
+
+    def apply_blockers(self):
+        """drop windows (and their damage) that a sign board or canopy would cut through"""
+        if not self.blockers:
+            return
+        keep = []
+        for kind, p in self.front.decals:
+            if kind in self.OPENING_DECALS:
+                u, v = p.get('u', 0.0), p.get('v', 0.0)
+                w, h = p.get('w', 0.5), p.get('h', 0.5)
+                if kind == 'streak':
+                    v, h = v - h, h
+                hit = any(u < bu + bw and u + w > bu and v < bv + bh and v + h > bv for (bu, bv, bw, bh) in self.blockers)
+                if hit:
+                    continue
+            keep.append((kind, p))
+        self.front.decals = keep
+
     def signboard(self, x, z, w, h=8.0, col=(40, 44, 42), border=(150, 140, 110)):
         u = self.fu(x) - w / 2
         self.m.rect(self.front, u, z, w, h, col, border=border, lit_shade=False)
         self.sign = (x, z, w, h)
+        self.blockers.append((u - 2, z - 2, w + 4, h + 4))
 
     # --- attachments ------------------------------------------------------------
     def roof_z(self, x, y):
@@ -446,6 +484,7 @@ class B:
         r = self.rust if rust is None else rust
         mo = self.moss if moss is None else moss
         self.wear()
+        self.apply_blockers()
         c = render(self.m, grime=g + 0.05, rust=r + (0.05 if self.style in ('mech', 'rubezh') else 0.02), moss=mo + 0.03)
         # leaves collect on roofs far more than on walls
         split = int(round((self.D / 2 - self.H - c.y0) * DENS))

@@ -582,15 +582,17 @@ def _draw_decal(d, c, f, kind, p, face_col, rng, layer=None):
         ImageDraw.Draw(ov).polygon([P(pt(u, v)), P(pt(u + w, v)), P(pt(u + w, v + h)), P(pt(u, v + h))], fill=(10, 10, 12, a))
         layer.alpha_composite(ov)
     elif kind == 'boards':
+        # planks nailed across the opening: they rest on the frame, never float past it
         u, v, w, h = p['u'], p['v'], p['w'], p['h']
-        R(u - 0.5, v - 0.5, u + w + 0.5, v + h + 0.5, (26, 24, 22))
+        R(u, v, u + w, v + h, (26, 24, 22))
         for i, t in enumerate(p.get('rows', (0.2, 0.55, 0.85))):
             b = v + h * t
-            sl = rng.uniform(-1.6, 1.6)
-            pc = mix(p.get('col', (132, 104, 72)), (60, 50, 40), rng.uniform(0, 0.35))
-            d.polygon([P(pt(u - 2, b - 1.4 + sl)), P(pt(u + w + 2, b - 1.4 - sl)), P(pt(u + w + 2, b + 1.4 - sl)), P(pt(u - 2, b + 1.4 + sl))], fill=pc + (255,))
-            d.line([P(pt(u - 2, b - 1.4 + sl)), P(pt(u + w + 2, b - 1.4 - sl))], fill=dark(pc, 0.6) + (255,))
-            for a in (u - 1, u + w + 1):
+            sl = rng.choice((-0.5, 0.0, 0.5))
+            pc = mix(p.get('col', (132, 104, 72)), (60, 50, 40), rng.uniform(0, 0.3))
+            th = min(1.6, h * 0.12)
+            d.polygon([P(pt(u - 1, b - th + sl)), P(pt(u + w + 1, b - th - sl)), P(pt(u + w + 1, b + th - sl)), P(pt(u - 1, b + th + sl))], fill=pc + (255,))
+            d.line([P(pt(u - 1, b + th + sl)), P(pt(u + w + 1, b + th - sl))], fill=dark(pc, 0.62) + (255,))
+            for a in (u + 0.5, u + w - 0.5):
                 d.point(P(pt(a, b)), fill=(40, 40, 40, 255))
     elif kind == 'plywood':
         u, v, w, h = p['u'], p['v'], p['w'], p['h']
@@ -603,17 +605,24 @@ def _draw_decal(d, c, f, kind, p, face_col, rng, layer=None):
         if rng.random() < 0.5:
             L(u + 1, v + 1, u + w - 1, v + h - 1, dark(pc, 0.7))
     elif kind == 'broken':
+        # shattered pane: jagged hole and cracks stay inside the frame
         u, v, w, h = p['u'], p['v'], p['w'], p['h']
-        cx, cy = u + w * rng.uniform(0.3, 0.7), v + h * rng.uniform(0.3, 0.7)
+        ix0, ix1, iy0, iy1 = u + 0.8, u + w - 0.8, v + 0.8, v + h - 0.8
+
+        def cl(a, b):
+            return (min(ix1, max(ix0, a)), min(iy1, max(iy0, b)))
+        cx, cy = u + w * rng.uniform(0.35, 0.65), v + h * rng.uniform(0.35, 0.65)
+        sz = rng.uniform(0.45, 0.85)
         pts = []
         for i in range(9):
             a = 2 * math.pi * i / 9
-            r = rng.uniform(0.35, 0.95)
-            pts.append(P(pt(min(u + w, max(u, cx + math.cos(a) * w * 0.5 * r)), min(v + h, max(v, cy + math.sin(a) * h * 0.5 * r)))))
+            r = rng.uniform(0.45, 1.0) * sz
+            pts.append(P(pt(*cl(cx + math.cos(a) * w * 0.5 * r, cy + math.sin(a) * h * 0.5 * r))))
         d.polygon(pts, fill=(14, 14, 14, 255))
         for i in range(3):
             a = rng.uniform(0, 2 * math.pi)
-            L(cx, cy, cx + math.cos(a) * w * 0.6, cy + math.sin(a) * h * 0.6, (150, 164, 170))
+            ex, ey = cl(cx + math.cos(a) * w * 0.7, cy + math.sin(a) * h * 0.7)
+            L(cx, cy, ex, ey, (150, 164, 170))
     elif kind == 'tape':
         u, v, w, h = p['u'], p['v'], p['w'], p['h']
         tc = (206, 196, 150)
@@ -641,27 +650,30 @@ def _draw_decal(d, c, f, kind, p, face_col, rng, layer=None):
                        fill=(18, 16, 14, int(70 * (1 - t))))
         layer.alpha_composite(ov)
     elif kind == 'peel':
-        # plaster fallen off: an irregular hole showing the brick underneath
+        # plaster fallen off: a ragged-edged patch of exposed brick courses
         u, v, w, h = p['u'], p['v'], p['w'], p['h']
-        pts = []
-        for i in range(10):
-            a = 2 * math.pi * i / 10
-            r = rng.uniform(0.55, 1.0)
-            pts.append((u + w / 2 + math.cos(a) * w / 2 * r, v + h / 2 + math.sin(a) * h / 2 * r))
-        bc = shade((138, 80, 60), f.n)
-        d.polygon([P(pt(a, b)) for a, b in pts], fill=bc + (255,))
-        b = v + 1.5
-        row = 0
-        while b < v + h:
-            L(u + w * 0.15, b, u + w * 0.85, b, dark(bc, 0.72))
-            a = u + (row % 2) * 3
-            while a < u + w:
-                if abs(a - (u + w / 2)) < w * 0.38:
-                    L(a, b - 3, a, b, dark(bc, 0.8))
+        bc = shade((132, 78, 58), f.n)
+        rows = max(2, int(h // 3))
+        edge = []
+        for i in range(rows + 1):
+            b0 = v + h * i / rows
+            inset_l = rng.uniform(0, w * 0.25) if 0 < i < rows else w * 0.3
+            inset_r = rng.uniform(0, w * 0.25) if 0 < i < rows else w * 0.3
+            edge.append((b0, u + inset_l, u + w - inset_r))
+        for i in range(rows):
+            b0, l0, r0 = edge[i]
+            b1, l1, r1 = edge[i + 1]
+            l, r = max(l0, l1), min(r0, r1)
+            if r - l < 2:
+                continue
+            R(l, b0, r, b1, bc)
+            L(l, b1, r, b1, dark(bc, 0.7))
+            a = l + (i % 2) * 3
+            while a < r - 1:
+                L(a, b0, a, b1, dark(bc, 0.78))
                 a += 6
-            b += 3
-            row += 1
-        d.line([P(pt(a, b)) for a, b in pts + [pts[0]]], fill=mix(face_col, (240, 236, 224), 0.25) + (255,))
+            L(l - 0.5, b0, l - 0.5, b1, mix(face_col, (240, 236, 224), 0.3))
+            L(r + 0.5, b0, r + 0.5, b1, dark(face_col, 0.75))
     elif kind == 'sheet':
         # corrugated patch screwed over a damaged wall area
         u, v, w, h = p['u'], p['v'], p['w'], p['h']
@@ -733,6 +745,46 @@ def _draw_decal(d, c, f, kind, p, face_col, rng, layer=None):
         else:
             R(cx - r, cy - r * 0.33, cx + r, cy + r * 0.33, col)
             R(cx - r * 0.33, cy - r, cx + r * 0.33, cy + r, col)
+    elif kind == 'hazard':
+        # warning plate: yellow square with a black radiation / bio symbol
+        u, v, sz = p['u'], p['v'], p.get('s', 10.0)
+        R(u, v, u + sz, v + sz, (214, 176, 44))
+        L(u, v, u + sz, v, (30, 30, 30)); L(u, v + sz, u + sz, v + sz, (30, 30, 30))
+        L(u, v, u, v + sz, (30, 30, 30)); L(u + sz, v, u + sz, v + sz, (30, 30, 30))
+        cx, cy, r = u + sz / 2, v + sz / 2, sz * 0.36
+        if p.get('sym', 'rad') == 'rad':
+            for a0 in (math.pi / 2, math.pi / 2 + 2 * math.pi / 3, math.pi / 2 + 4 * math.pi / 3):
+                pts = [P(pt(cx, cy))] + [P(pt(cx + math.cos(a) * r, cy + math.sin(a) * r)) for a in np.linspace(a0 - 0.5, a0 + 0.5, 5)]
+                d.polygon(pts, fill=(30, 30, 30, 255))
+            R(cx - r * 0.18, cy - r * 0.18, cx + r * 0.18, cy + r * 0.18, (214, 176, 44))
+        else:
+            for a0 in (math.pi / 2, math.pi / 2 + 2 * math.pi / 3, math.pi / 2 + 4 * math.pi / 3):
+                ox, oy = cx + math.cos(a0) * r * 0.45, cy + math.sin(a0) * r * 0.45
+                pts = [P(pt(ox + math.cos(a) * r * 0.5, oy + math.sin(a) * r * 0.5)) for a in np.linspace(0, 2 * math.pi, 12)]
+                d.line(pts, fill=(30, 30, 30, 255), width=2)
+    elif kind == 'plastic':
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        ov = Image.new('RGBA', c.img.size, (0, 0, 0, 0))
+        od = ImageDraw.Draw(ov)
+        od.polygon([P(pt(u - 1, v - 1)), P(pt(u + w + 1, v - 1)), P(pt(u + w + 1, v + h + 1)), P(pt(u - 1, v + h + 1))], fill=(206, 214, 210, 150))
+        for i in range(3):
+            a = u + w * (i + 1) / 4 + rng.uniform(-1, 1)
+            od.line([P(pt(a, v)), P(pt(a + rng.uniform(-2, 2), v + h))], fill=(240, 244, 240, 170), width=1)
+        layer.alpha_composite(ov)
+        L(u - 1, v + h + 1, u + w + 1, v + h + 1, (170, 150, 90))           # tape along the top
+    elif kind == 'breach':
+        # blown-out wall section: ragged hole into a dark interior, brick edge, hanging rebar
+        u, v, w, h = p['u'], p['v'], p['w'], p['h']
+        pts = []
+        for i in range(14):
+            a = 2 * math.pi * i / 14
+            rr = rng.uniform(0.6, 1.0)
+            pts.append((u + w / 2 + math.cos(a) * w / 2 * rr, v + h / 2 + math.sin(a) * h / 2 * rr))
+        d.polygon([P(pt(a, b)) for a, b in pts], fill=(18, 16, 14, 255))
+        d.line([P(pt(a, b)) for a, b in pts + [pts[0]]], fill=(120, 76, 58, 255), width=2)
+        for i in range(4):
+            a = u + w * rng.uniform(0.2, 0.8)
+            L(a, v + h * 0.9, a + rng.uniform(-3, 3), v + h * rng.uniform(0.3, 0.6), (96, 70, 50))
     elif kind == 'streak':
         # rain / rust streaks down from window sills
         u, v, h = p['u'], p['v'], p['h']

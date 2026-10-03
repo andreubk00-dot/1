@@ -3,7 +3,7 @@ Usage: python3 tools/build_world_art.py <project_dir>"""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PIL import Image
-import wa_ground, wa_building, wa_props, wa_facade, wa_detail, wa_poi, wa_interior, wa_settlement, wa_settlement_ground, wa_buildings, prop_regions
+import wa_ground, wa_building, wa_props, wa_facade, wa_detail, wa_poi, wa_interior, wa_settlement, wa_settlement_ground, wa_buildings, wa_hr_buildings, wa_hr_props, prop_regions
 
 P = sys.argv[1]
 wa_ground.build(os.path.join(P, 'ground_chunk_v12.png'))
@@ -23,5 +23,7 @@ wa_poi.build_all(P)
 wa_settlement.build_all(P)
 wa_settlement_ground.build_all(P)
 wa_buildings.build_all(P, os.path.join(P, 'world', 'settlement_building_models.gd'))
+wa_hr_buildings.build_all(P, os.path.join(P, 'world', 'high_risk_building_models.gd'))
+wa_hr_props.build_all(P)
 wa_interior.build_all(P, prop_regions.load(os.path.join(P, 'main_script_mod.gd')))
 print('world art ok')
