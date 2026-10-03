@@ -28,11 +28,13 @@ func run():
     await process_frame
 
     var original_version = ProjectSettings.get_setting("application/config/version","")
-    check(str(original_version) == "1.22.0-dev3", "1.22-dev3 project version mismatch")
+    check(str(original_version) == "1.22.0", "1.22.0 Stable project version mismatch")
+    check(not game._developer_tools_available(), "developer tools must default to disabled in stable")
+    check(not InputMap.has_action("developer_panel"), "stable build must not create the F10 developer action")
     check(game._developer_pois().size() == RegionCatalog.POIS.size(), "developer POI list must cover all active main POIs")
     check(RegionCatalog.POIS.size() >= 13, "main POI catalog unexpectedly shrank")
 
-    # Stable release guard is still tested explicitly even though this branch is a dev build.
+    # Stable release guard is the production default in this build.
     ProjectSettings.set_setting("application/config/version","1.22.0")
     check(not game._developer_tools_available(), "developer tools must be unavailable in a stable build")
     game.developer_invulnerable = false
@@ -42,8 +44,8 @@ func run():
     game._developer_set_no_aggro(true)
     check(not game.developer_no_aggro, "stable guard allowed no-aggro")
     check(not game._developer_teleport_to_poi("central_clinic"), "stable guard allowed developer teleport")
-    ProjectSettings.set_setting("application/config/version",original_version)
-    check(game._developer_tools_available(), "developer tools did not enable in 1.22-dev3")
+    ProjectSettings.set_setting("application/config/version","1.22.0-dev-test")
+    check(game._developer_tools_available(), "developer tools did not enable under an explicit dev suffix")
 
     # Invulnerability blocks direct enemy hits and normalizes combat/medical damage state.
     game.developer_invulnerable = true
@@ -157,7 +159,7 @@ func run():
     check(game._developer_tools_available(), "developer tools unexpectedly disabled before dev test cleanup")
 
     ProjectSettings.set_setting("application/config/version",original_version)
-    check(game._developer_tools_available(), "dev tools must remain enabled after stable-guard test cleanup")
+    check(not game._developer_tools_available(), "developer tools remained enabled after restoring stable version")
     enemy.queue_free()
     game.free()
     print("DEVELOPER MODE: %d checks, %d failures" % [checks,failures])

@@ -1,5 +1,7 @@
-1.21.0-stable
+1.23.0-dev1
 
-Scope: Infected Variety & Encounter Balance stable promotion from accepted 1.21.0-dev5.
-No new infected archetypes, no high-risk visual rebuild, no save schema change.
-Developer tools remain code-only and are disabled because Stable has no -dev suffix.
+Scope: High Risk Visual Rework.
+Base: 1.22.0 Stable.
+First approved 3D master integrated into the production 2D gameplay pipeline:
+Regional Clinical Complex No.4 reception building, model v03.
+Save schema remains 122. Existing 1.22 visual source files are unchanged; new art is additive.

@@ -28,7 +28,7 @@ func run():
     root.add_child(game)
     await process_frame
 
-    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.22.0-dev3", "current build version mismatch")
+    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.22.0", "current build version mismatch")
     check(game.INFECTED_ARCHETYPES.has("spitter"), "Spitter archetype missing")
     var spec = game.INFECTED_ARCHETYPES["spitter"]
     var normal = game.INFECTED_ARCHETYPES["normal"]

@@ -2,6 +2,9 @@ extends RefCounted
 const FactionCatalog = preload("res://world/faction_catalog.gd")
 const FactionEconomy = preload("res://world/faction_economy.gd")
 const ContractCatalog = preload("res://world/contract_catalog.gd")
+const FactionRelations = preload("res://world/faction_relations.gd")
+const SettlementCrisis = preload("res://world/settlement_crisis.gd")
+const FactionEndgame = preload("res://world/faction_endgame.gd")
 
 const OFFER_SLOTS_PER_FACTION = 2
 const OFFER_LIFETIME_DAYS = 3
@@ -84,8 +87,12 @@ static func _template_active(state:Dictionary,template_id:String) -> bool:
 static func _candidate_score(state:Dictionary,faction_id:String,template:Dictionary) -> float:
     var need_key = str(template.get("need_key","technical"))
     var resource = float(state.get("factions",{}).get(faction_id,{}).get("resources",{}).get(need_key,50.0))
-    # Lower settlement resource = higher priority. Authored order is used as a stable tie break.
-    return 100.0 - resource
+    # Lower settlement resource = higher priority. Emergency contracts jump to the front
+    # only while their actual resource is in shortage/crisis.
+    var score = 100.0 - resource + float(template.get("priority_bonus",0.0))
+    if bool(template.get("crisis_only",false)):
+        score += SettlementCrisis.crisis_priority_bonus(state,faction_id,need_key)
+    return score
 
 static func _sorted_candidates(state:Dictionary,faction_id:String,world_day:int) -> Array:
     var rep = FactionEconomy.reputation(state,faction_id)
@@ -94,6 +101,15 @@ static func _sorted_candidates(state:Dictionary,faction_id:String,world_day:int)
         var template_id = str(template.get("template_id",""))
         if rep < int(template.get("min_rep",0)):
             continue
+        if bool(template.get("crisis_only",false)) and not SettlementCrisis.crisis_contract_available(state,faction_id,str(template.get("need_key","technical"))):
+            continue
+        if not FactionEndgame.template_available(state,template):
+            continue
+        var conflict = template.get("conflict",{})
+        if typeof(conflict) == TYPE_DICTIONARY and not conflict.is_empty():
+            var conflict_id = str(conflict.get("id",""))
+            if conflict_id != "" and FactionRelations.conflict_resolved(state,conflict_id):
+                continue
         if _template_active(state,template_id) or _history_recent(state,template_id,world_day):
             continue
         var route = template.get("reward",{}).get("route",{})
@@ -192,6 +208,40 @@ static func contract_by_id(state:Dictionary,contract_id:String) -> Dictionary:
                     return row.duplicate(true)
     return {}
 
+static func _conflict_id(contract:Dictionary) -> String:
+    var conflict = contract.get("conflict",{})
+    if typeof(conflict) != TYPE_DICTIONARY:
+        return ""
+    return str(conflict.get("id",""))
+
+static func _remove_conflict_offers(state:Dictionary,conflict_id:String) -> void:
+    if conflict_id == "":
+        return
+    var offers = state.get("contracts",{}).get("offers",{})
+    if typeof(offers) != TYPE_DICTIONARY:
+        return
+    for faction_id in offers.keys():
+        var rows = offers.get(faction_id,[])
+        if typeof(rows) != TYPE_ARRAY:
+            continue
+        var kept = []
+        for row in rows:
+            if typeof(row) == TYPE_DICTIONARY and _conflict_id(row) == conflict_id:
+                continue
+            kept.append(row)
+        offers[faction_id] = kept
+    state["contracts"]["offers"] = offers
+
+static func consequence_text(state:Dictionary,contract:Dictionary) -> String:
+    var parts = []
+    var conflict = FactionRelations.conflict_warning(state,contract)
+    if conflict != "":
+        parts.append(conflict)
+    var endgame = FactionEndgame.warning(state,contract)
+    if endgame != "":
+        parts.append(endgame)
+    return "\n".join(parts)
+
 static func accept(state:Dictionary,contract_id:String,world_day:int) -> Dictionary:
     ensure_state(state,world_day)
     var active = state["contracts"]["active"]
@@ -206,6 +256,13 @@ static func accept(state:Dictionary,contract_id:String,world_day:int) -> Diction
             for existing in active.values():
                 if str(existing.get("faction","")) == faction_id:
                     return {"ok":false,"reason":"У этой фракции уже есть активный контракт."}
+            var conflict_id = _conflict_id(row)
+            if conflict_id != "":
+                if FactionRelations.conflict_resolved(state,conflict_id):
+                    return {"ok":false,"reason":"Этот спор между фракциями уже решён."}
+                for existing in active.values():
+                    if _conflict_id(existing) == conflict_id:
+                        return {"ok":false,"reason":"Уже принят противоположный контракт по этому спору. Сначала откажитесь от него."}
             row["accepted_day"] = max(1,world_day)
             active[contract_id] = row
             rows.remove_at(i)
@@ -300,12 +357,22 @@ static func complete(state:Dictionary,contract_id:String,world_day:int) -> Dicti
             state["world_routes"][opened_route] = route_record
     if state.get("factions",{}).has(faction_id):
         state["factions"][faction_id]["completed_contracts"] = int(state["factions"][faction_id].get("completed_contracts",0)) + 1
+    var conflict_outcome = FactionRelations.apply_contract_outcome(state,contract,world_day)
+    if not conflict_outcome.is_empty():
+        _remove_conflict_offers(state,str(conflict_outcome.get("id","")))
+    var endgame_outcome = FactionEndgame.apply_contract_outcome(state,contract,world_day)
     active.erase(contract_id)
     state["contracts"]["active"] = active
     _append_history(state,contract,world_day,"completed")
+    var affected_factions = [faction_id]
+    if not conflict_outcome.is_empty():
+        var loser = str(conflict_outcome.get("loser",""))
+        if loser != "" and loser not in affected_factions:
+            affected_factions.append(loser)
     return {
         "ok":true,"tickets":int(reward.get("tickets",0)),"reputation":int(reward.get("reputation",0)),
-        "opened_route":opened_route,"faction":faction_id,"title":str(contract.get("title","КОНТРАКТ"))
+        "opened_route":opened_route,"faction":faction_id,"title":str(contract.get("title","КОНТРАКТ")),
+        "conflict_outcome":conflict_outcome,"endgame_outcome":endgame_outcome,"affected_factions":affected_factions
     }
 
 static func requirement_text(contract:Dictionary,item_names:Dictionary = {}) -> String:

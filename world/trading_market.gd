@@ -2,6 +2,8 @@ extends RefCounted
 const FactionCatalog = preload("res://world/faction_catalog.gd")
 const FactionEconomy = preload("res://world/faction_economy.gd")
 const TraderCatalog = preload("res://world/trader_catalog.gd")
+const SettlementCrisis = preload("res://world/settlement_crisis.gd")
+const FactionEndgame = preload("res://world/faction_endgame.gd")
 
 # Stateless transaction math. Inventory mutation stays in main_script_mod.gd so the
 # existing grid/instance invariants remain the single source of truth.
@@ -36,9 +38,11 @@ static func sell_price(state:Dictionary,trader_id:String,item_id:String) -> int:
     if data.is_empty() or not TraderCatalog.accepts_item(trader_id,item_id):
         return 0
     var faction_id = str(data.get("faction",""))
-    # 54% baseline preserves a specialist premium while keeping the spread non-inverting even at
-    # trusted reputation + fully supplied settlements (the cheapest possible buy price).
-    return max(1,int(floor(TraderCatalog.base_value(item_id) * 0.54 * FactionEconomy.sell_multiplier(state,faction_id,item_id))))
+    # Keep a hard spread cap after all scarcity/reputation modifiers. Crisis demand can make a
+    # settlement pay more for needed goods, but never enough for a buy->sell arbitrage loop.
+    var raw = max(1,int(floor(TraderCatalog.base_value(item_id) * 0.54 * FactionEconomy.sell_multiplier(state,faction_id,item_id))))
+    var retail = buy_price(state,trader_id,item_id)
+    return mini(raw,max(1,int(floor(retail * 0.80))))
 
 static func buy_quote(state:Dictionary,trader_id:String,item_id:String,quantity:int = 1) -> Dictionary:
     var qty = max(1,quantity)
@@ -64,43 +68,72 @@ static func sell_quote(state:Dictionary,trader_id:String,item_id:String,quantity
         return {"ok":false,"reason":"У торговца не хватает талонов","unit":unit,"total":total}
     return {"ok":true,"unit":unit,"total":total,"quantity":qty}
 
-static func _apply_supply_effect(state:Dictionary,faction_id:String,item_id:String,quantity:int) -> void:
+static func _resource_effect(state:Dictionary,faction_id:String,item_id:String,quantity:int,direction:float) -> void:
     var category = FactionCatalog.item_category(item_id)
     var qty = max(0,quantity)
+    if qty <= 0:
+        return
+    var resource_id = ""
+    var per_unit = 0.0
     if category in ["food","water","household"]:
-        FactionEconomy.adjust_resource(state,faction_id,"food",0.14 * qty)
+        resource_id = "food"
+        per_unit = 0.14
     elif category in ["medicine","medical","chemicals"]:
-        FactionEconomy.adjust_resource(state,faction_id,"medicine",0.18 * qty)
+        resource_id = "medicine"
+        per_unit = 0.18
     elif category in ["parts","tools","electronics","technical","fuel"]:
-        FactionEconomy.adjust_resource(state,faction_id,"technical",0.16 * qty)
+        resource_id = "technical"
+        per_unit = 0.16
     elif category in ["ammo","weapon","armor"]:
-        FactionEconomy.adjust_resource(state,faction_id,"security",0.10 * qty)
+        resource_id = "security"
+        per_unit = 0.10
+    if resource_id != "":
+        FactionEconomy.adjust_resource(state,faction_id,resource_id,per_unit * qty * direction)
+
+static func _apply_supply_effect(state:Dictionary,faction_id:String,item_id:String,quantity:int) -> void:
+    _resource_effect(state,faction_id,item_id,quantity,1.0)
+
+static func _apply_demand_effect(state:Dictionary,faction_id:String,item_id:String,quantity:int) -> void:
+    # Buying finite stock from a settlement consumes a small amount of the matching abstract
+    # resource. Selling the same goods back restores the same amount, closing the old
+    # buy->sell->resource-inflation exploit while preserving legitimate inter-settlement trade.
+    _resource_effect(state,faction_id,item_id,quantity,-1.0)
 
 static func apply_purchase(state:Dictionary,trader_id:String,item_id:String,quantity:int,total:int) -> bool:
     ensure_state(state,1)
+    if quantity <= 0:
+        return false
+    var data = TraderCatalog.trader(trader_id)
+    if data.is_empty():
+        return false
+    var quote = buy_quote(state,trader_id,item_id,quantity)
+    if not bool(quote.get("ok",false)) or int(quote.get("total",-1)) != total:
+        return false
     var traders = state["traders"]
     if not traders.has(trader_id):
         return false
     var record = traders[trader_id]
     var current_stock = max(0,int(record.get("stock",{}).get(item_id,0)))
-    if current_stock < quantity or int(state.get("currency_tickets",0)) < total:
-        return false
     record["stock"][item_id] = current_stock - quantity
     record["ticket_reserve"] = clamp(int(record.get("ticket_reserve",0)) + total,0,5000)
     traders[trader_id] = record
     state["traders"] = traders
     FactionEconomy.add_tickets(state,-total)
+    _apply_demand_effect(state,str(data.get("faction","")),item_id,quantity)
     return true
 
 static func apply_sale(state:Dictionary,trader_id:String,item_id:String,quantity:int,total:int) -> bool:
     ensure_state(state,1)
+    if quantity <= 0:
+        return false
     var data = TraderCatalog.trader(trader_id)
     if data.is_empty() or not TraderCatalog.accepts_item(trader_id,item_id):
         return false
+    var quote = sell_quote(state,trader_id,item_id,quantity)
+    if not bool(quote.get("ok",false)) or int(quote.get("total",-1)) != total:
+        return false
     var traders = state["traders"]
     var record = traders[trader_id]
-    if int(record.get("ticket_reserve",0)) < total:
-        return false
     record["ticket_reserve"] = max(0,int(record.get("ticket_reserve",0)) - total)
     record["stock"][item_id] = max(0,int(record.get("stock",{}).get(item_id,0))) + quantity
     traders[trader_id] = record
@@ -129,15 +162,16 @@ static func barter_quote(state:Dictionary,trader_id:String,buy_item:String,buy_q
 
 static func apply_barter(state:Dictionary,trader_id:String,buy_item:String,buy_qty:int,sell_item:String,sell_qty:int,ticket_delta:int) -> bool:
     ensure_state(state,1)
+    if buy_qty <= 0 or sell_qty <= 0 or buy_item == sell_item:
+        return false
     var data = TraderCatalog.trader(trader_id)
-    if data.is_empty() or stock(state,trader_id,buy_item) < buy_qty:
+    if data.is_empty():
+        return false
+    var quote = barter_quote(state,trader_id,buy_item,buy_qty,sell_item,sell_qty)
+    if not bool(quote.get("ok",false)) or int(quote.get("ticket_delta",999999)) != ticket_delta:
         return false
     var traders = state["traders"]
     var record = traders[trader_id]
-    if ticket_delta > 0 and int(state.get("currency_tickets",0)) < ticket_delta:
-        return false
-    if ticket_delta < 0 and int(record.get("ticket_reserve",0)) < -ticket_delta:
-        return false
     record["stock"][buy_item] = max(0,int(record["stock"].get(buy_item,0)) - buy_qty)
     record["stock"][sell_item] = max(0,int(record["stock"].get(sell_item,0))) + sell_qty
     record["ticket_reserve"] = clamp(int(record.get("ticket_reserve",0)) + ticket_delta,0,5000)
@@ -146,6 +180,7 @@ static func apply_barter(state:Dictionary,trader_id:String,buy_item:String,buy_q
     FactionEconomy.add_tickets(state,-ticket_delta)
     var faction_id = str(data.get("faction",""))
     FactionEconomy.record_sale(state,faction_id,sell_item,sell_qty)
+    _apply_demand_effect(state,faction_id,buy_item,buy_qty)
     _apply_supply_effect(state,faction_id,sell_item,sell_qty)
     return true
 
@@ -168,15 +203,20 @@ static func restock(state:Dictionary,trader_id:String,world_day:int,force:bool =
     if not force and world_day < due:
         return false
     var faction_id = str(data.get("faction",""))
-    var resource_key = _resource_key_for_faction(faction_id)
-    var resource = float(state.get("factions",{}).get(faction_id,{}).get("resources",{}).get(resource_key,50.0))
-    var supply_mult = 0.45 + clamp(resource / 100.0,0.0,1.0) * 0.75
+    var condition = FactionEconomy.settlement_condition(state,faction_id)
     for spec in data.get("stock",[]):
         var item_id = str(spec.get("id",""))
         var base_qty = max(1,int(spec.get("qty",1)))
-        var target = max(1,int(round(base_qty * supply_mult)))
+        var resource_id = SettlementCrisis.resource_for_item(item_id)
+        var resource = condition if resource_id == "" else SettlementCrisis.resource_value(state,faction_id,resource_id)
+        var supply_mult = (0.45 + clamp(resource / 100.0,0.0,1.0) * 0.75) * SettlementCrisis.restock_factor(state,faction_id,item_id) * FactionEndgame.restock_factor(state,faction_id,item_id)
+        var required_rep = TraderCatalog.required_rep(trader_id,item_id)
+        var target = 0
+        if SettlementCrisis.allows_restock(state,faction_id,item_id,required_rep):
+            target = max(1,int(round(base_qty * supply_mult))) + FactionEndgame.reserve_bonus(state,faction_id,item_id)
+        # Never delete stock already visible to the player; crisis only suppresses future replenishment.
         record["stock"][item_id] = max(int(record["stock"].get(item_id,0)),target)
-    var reserve_target = int(round(float(data.get("ticket_reserve",300)) * (0.55 + 0.45 * clamp(resource / 100.0,0.0,1.0))))
+    var reserve_target = int(round(float(data.get("ticket_reserve",300)) * (0.50 + 0.50 * clamp(condition / 100.0,0.0,1.0))))
     record["ticket_reserve"] = max(int(record.get("ticket_reserve",0)),reserve_target)
     record["last_restock_day"] = max(1,world_day)
     traders[trader_id] = record

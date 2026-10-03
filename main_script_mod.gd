@@ -6,7 +6,7 @@ var map_markers = {}
 var map_marker_kind = null
 var map_marker_text = null
 
-# 1.22-dev3: persistent faction/economy/contracts foundation. UI/trader interaction layers consume
+# 1.22.0 Stable: faction/economy/contracts/relations/supply-events/crisis/endgame are feature-complete. UI/trader interaction layers consume
 # this canonical state instead of inventing parallel reputation or currency stores.
 var faction_state = FactionEconomy.default_state()
 
@@ -27,6 +27,10 @@ const ExpeditionJournal = preload("res://world/expedition_journal.gd")
 const SupplyPlan = preload("res://world/supply_plan.gd")
 const FactionCatalog = preload("res://world/faction_catalog.gd")
 const FactionEconomy = preload("res://world/faction_economy.gd")
+const FactionRelations = preload("res://world/faction_relations.gd")
+const SupplyEventSystem = preload("res://world/supply_event_system.gd")
+const SettlementCrisis = preload("res://world/settlement_crisis.gd")
+const FactionEndgame = preload("res://world/faction_endgame.gd")
 const FactionSettlementCatalog = preload("res://world/faction_settlement_catalog.gd")
 const SettlementBuildingModels = preload("res://world/settlement_building_models.gd")
 const TraderCatalog = preload("res://world/trader_catalog.gd")
@@ -2631,9 +2635,9 @@ func _run_runtime_smoke_tests():
     _record_test(pv_ranged_back_outline != null and pv_ranged_front_outline != null,"Runtime firearm arm rig не создан")
 
     if self_test_failures.is_empty():
-        print("OSTATOK 1.22.0-dev3 SELFTEST: OK")
+        print("OSTATOK 1.23.0-dev1 SELFTEST: OK")
     else:
-        print("OSTATOK 1.22.0-dev3 SELFTEST: FAILURES = ",self_test_failures.size())
+        print("OSTATOK 1.23.0-dev1 SELFTEST: FAILURES = ",self_test_failures.size())
         for failure_message in self_test_failures:
             print("  - ",failure_message)
 
@@ -2689,7 +2693,7 @@ func _show_import_not_ready_screen() -> void:
 
 func _ready():
     # Keep application/config/name stable: Godot derives the existing user:// path from it.
-    DisplayServer.window_set_title("OSTATOK 1.22.0-dev3 — Contracts / World Influence")
+    DisplayServer.window_set_title("OSTATOK 1.23.0-dev1 — High Risk Visual Rework")
     y_sort_enabled = true
     if not _runtime_import_cache_ready():
         _show_import_not_ready_screen()
@@ -2721,6 +2725,7 @@ func _ready():
     _load_state()
     TradingMarket.ensure_state(faction_state,world_day)
     ContractSystem.ensure_state(faction_state,world_day)
+    SupplyEventSystem.ensure_state(faction_state,world_day)
 
     if inventory_entries.is_empty() and not has_meta("loaded_save"):
         _grid_add(inventory_entries, "makarov", 1, INV_W, INV_H)
@@ -4420,6 +4425,8 @@ func _unhandled_input(event):
                     if debug_advanced_minutes >= 1440.0:
                         world_day += 1
                         FactionEconomy.daily_tick(faction_state)
+                        var supply_result = SupplyEventSystem.daily_tick(faction_state,world_day,_supply_event_blocked_chunks())
+                        _apply_supply_event_day_result(supply_result)
                         TradingMarket.restock_all(faction_state,world_day)
                         ContractSystem.refresh_offers(faction_state,world_day,false)
                     world_minutes = fmod(debug_advanced_minutes,1440.0)
@@ -10424,6 +10431,10 @@ func _expedition_route_chunks(from_coord:Vector2i,to_coord:Vector2i) -> Array:
 func _region_map_cell_tooltip(coord:Vector2i) -> String:
     if _has_home() and coord == _home_chunk():
         return "ДОМ: %s • сектор %d:%d" % [str(expedition_journal["home"]["name"]),coord.x,coord.y]
+    var supply_event = SupplyEventSystem.active_event(faction_state,world_day)
+    if not supply_event.is_empty() and SupplyEventSystem.active_coord(faction_state,world_day) == coord:
+        return "%s • сектор %d:%d
+%s" % [SupplyEventSystem.marker_label(faction_state,world_day),coord.x,coord.y,SupplyEventSystem.detail_text(faction_state,world_day)]
     var discovered = discovered_chunks.has(_zone_chunk_key(coord))
     if not discovered:
         return "Сектор %d:%d — не исследован" % [coord.x,coord.y]
@@ -10434,6 +10445,8 @@ func _region_map_cell_tooltip(coord:Vector2i) -> String:
     return "%s • сектор %d:%d" % [_district_display_name(str(_chunk_profile(coord).get("district_id",""))),coord.x,coord.y]
 
 func _expedition_name_for_chunk(coord:Vector2i) -> String:
+    if SupplyEventSystem.active_coord(faction_state,world_day) == coord:
+        return SupplyEventSystem.marker_label(faction_state,world_day)
     var key = _zone_chunk_key(coord)
     if discovered_chunks.has(key):
         var poi = RegionCatalog.poi_for_chunk(coord)
@@ -10676,6 +10689,9 @@ func _region_map_snapshot():
         var marker = map_markers[key].duplicate(true)
         marker["coord"] = Vector2i(int(parts[0]),int(parts[1]))
         marks.append(marker)
+    var supply_event = SupplyEventSystem.active_event(faction_state,world_day)
+    if not supply_event.is_empty():
+        marks.append({"coord":SupplyEventSystem.active_coord(faction_state,world_day),"kind":"danger","label":SupplyEventSystem.marker_label(faction_state,world_day),"system":true})
     var snapshot = {"center":region_map_center,"cells":cells,"pois":pois,"markers":marks,"player":current_chunk}
     if region_map_selected_chunk.x < 900000:
         snapshot["selected"] = region_map_selected_chunk
@@ -10762,6 +10778,9 @@ func _refresh_region_map_ui():
     var dist = _expedition_sector_distance(current_chunk,selected)
     var eta = _expedition_time_text(_expedition_estimated_minutes(current_chunk,selected))
     var detail_lines = ["Сектор %d:%d  •  %d сект.  •  путь %s" % [selected.x,selected.y,dist,eta]]
+    if SupplyEventSystem.active_coord(faction_state,world_day) == selected:
+        detail_lines.append("РАДИОСИГНАЛ: " + SupplyEventSystem.marker_label(faction_state,world_day))
+        detail_lines.append(SupplyEventSystem.detail_text(faction_state,world_day))
     if discovered:
         detail_lines.append("Район: %s" % _district_display_name(str(profile.get("district_id","old_center"))))
         var map_risk = int(poi.get("risk",profile.get("risk",2))) if poi_known else int(profile.get("risk",2))
@@ -16147,6 +16166,8 @@ func _update_interaction_prompt():
         interaction_label.text = "ТОРГОВАТЬ  •  %s" % name.to_upper()
     elif type == "contract_board":
         interaction_label.text = "КОНТРАКТЫ  •  %s" % name.to_upper()
+    elif type == "supply_event_cargo":
+        interaction_label.text = "ОБЕЗОПАСИТЬ ГРУЗ  •  %s" % name.to_upper()
     elif type == "faction_npc":
         interaction_label.text = "ГОВОРИТЬ  •  %s" % name.to_upper()
     elif type == "base_heater":
@@ -16217,6 +16238,9 @@ func _nearest_interactable():
         elif type == "contract_board":
             limit = max(limit,78.0)
             priority = 15.0
+        elif type == "supply_event_cargo":
+            limit = max(limit,86.0)
+            priority = 18.0
         elif type == "faction_npc":
             limit = max(limit,76.0)
             priority = 9.0
@@ -16279,6 +16303,8 @@ func _interact():
         _open_trader(str(target.get_meta("trader_id","")))
     elif type == "contract_board":
         _open_contract_board(str(target.get_meta("faction_id","")),str(target.get_meta("display_name","")))
+    elif type == "supply_event_cargo":
+        _resolve_supply_event(target)
     elif type == "faction_npc":
         _talk_faction_npc(target)
     elif type == "base_heater":
@@ -19107,6 +19133,14 @@ func _spawn_faction_npcs(chunk,poi_id:String,cell_offset:Vector2i):
 func _talk_faction_npc(node):
     if not is_instance_valid(node):
         return
+    if node.has_meta("supply_event_id"):
+        var stage = str(node.get_meta("supply_event_stage","distress"))
+        var line = "Нас зажали на дороге. Сначала убери заражённых, потом проверь груз."
+        if stage == "overrun":
+            line = "Еле держусь. Груз ещё в машине — если очистишь дорогу, его можно спасти."
+        _set_survival_feedback("%s • %s
+%s" % [str(node.get_meta("display_name","Охранник")),str(node.get_meta("npc_role","уцелевший")),line],3.8)
+        return
     var npc_id = str(node.get_meta("npc_id",""))
     var name = str(node.get_meta("display_name",""))
     var role = str(node.get_meta("npc_role",""))
@@ -19171,6 +19205,13 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
         var sign_text = str(spec.get("sign",archetype_data.get("sign","ДОМ")))
         var wall_color = archetype_data.get("color",Color("4c4942"))
         var building_id = str(spec.get("id","poi_building"))
+        # First approved 3D master: Clinical Complex №4 reception block. Keep the
+        # gameplay building/container ids, but replace generated art and internal
+        # collision plan with the accepted v03 model-derived skin.
+        if poi_id == "regional_clinical_complex_4" and cell_offset == Vector2i(0,0) and building_id == "building_0":
+            archetype_data = archetype_data.duplicate(true)
+            archetype_data["high_risk_skin"] = HIGH_RISK_SKIN_MEDICAL_ENTRY_V03
+            archetype_data["door_x"] = 0.0
         var loot_table = str(spec.get("loot",archetype_data.get("loot",profile.get("loot_theme","residential"))))
         var building_node = _create_building(chunk,coord,building_id,pos,size,sign_text,wall_color,true,archetype_id,archetype_data)
         _apply_authored_building_metadata(building_node,profile,archetype_id,archetype_data,loot_table,role,cell_offset)
@@ -20267,6 +20308,169 @@ func _chunk_has_player_base(coord:Vector2i) -> bool:
             return true
     return false
 
+func _supply_event_blocked_chunks() -> Array:
+    var blocked = []
+    for rec in base_objects:
+        if typeof(rec) != TYPE_DICTIONARY:
+            continue
+        var pos = Vector2(float(rec.get("x",0.0)),float(rec.get("y",0.0)))
+        var coord = _world_to_chunk(pos)
+        if coord not in blocked:
+            blocked.append(coord)
+    return blocked
+
+func _loaded_supply_event_root(event_id:String):
+    for node in get_tree().get_nodes_in_group("world_events"):
+        if is_instance_valid(node) and bool(node.get_meta("supply_event",false)) and str(node.get_meta("supply_event_id","")) == event_id:
+            return node
+    return null
+
+func _sync_loaded_supply_event_stage(event:Dictionary):
+    var event_id = str(event.get("id",""))
+    var root_node = _loaded_supply_event_root(event_id)
+    if not is_instance_valid(root_node):
+        return
+    var stage = str(event.get("stage","distress"))
+    root_node.set_meta("supply_event_stage",stage)
+    root_node.set_meta("world_event_label",SupplyEventSystem.stage_label(stage))
+    var survivors = []
+    for child in root_node.get_children():
+        if is_instance_valid(child) and str(child.get_meta("supply_event_id","")) == event_id and str(child.get_meta("interaction_type","")) == "faction_npc":
+            survivors.append(child)
+    var keep = {"distress":2,"overrun":1,"looted":0}.get(stage,0)
+    for i in range(survivors.size()):
+        if i >= keep:
+            survivors[i].queue_free()
+        else:
+            survivors[i].set_meta("supply_event_stage",stage)
+
+func _apply_supply_event_day_result(result:Dictionary):
+    if result.is_empty():
+        return
+    if bool(result.get("created",false)):
+        var event = result.get("event",{})
+        var faction_id = str(event.get("faction",""))
+        var faction_name = str(FactionCatalog.faction(faction_id).get("short_name",faction_id))
+        _set_survival_feedback("РАДИО • %s
+%s
+Отметка добавлена на полевую карту." % [faction_name,str(result.get("message","Пропал рейс снабжения."))],5.0)
+    elif bool(result.get("expired",false)):
+        var expired_event = result.get("event",{})
+        var expired_root = _loaded_supply_event_root(str(expired_event.get("id","")))
+        if is_instance_valid(expired_root):
+            expired_root.queue_free()
+        _set_survival_feedback("СНАБЖЕНИЕ • %s" % str(result.get("message","Рейс потерян.")),4.0)
+    elif bool(result.get("stage_changed",false)):
+        var event = result.get("event",{})
+        _sync_loaded_supply_event_stage(event)
+        var stage = str(event.get("stage",""))
+        if stage == "overrun":
+            _set_survival_feedback("РАДИО • связь с пропавшим рейсом оборвалась.",3.5)
+        elif stage == "looted":
+            _set_survival_feedback("РАДИО • к месту пропажи уже стягиваются мародёры и заражённые.",3.5)
+    if region_map_open:
+        _refresh_region_map_ui()
+
+func _supply_event_survivor(root,event:Dictionary,index:int,pos:Vector2):
+    var faction_id = str(event.get("faction",""))
+    var short = str(FactionCatalog.faction(faction_id).get("short_name",faction_id))
+    var record = {
+        "npc_id":"supply_%s_%d" % [str(event.get("dynamic_event_id","event")),index],
+        "faction_id":faction_id,
+        "name":"Охранник %s" % short,
+        "role":"уцелевший из рейса",
+        "pos":pos
+    }
+    var npc = _create_faction_npc(root,record)
+    if is_instance_valid(npc):
+        npc.set_meta("supply_event_id",str(event.get("dynamic_event_id","")))
+        npc.set_meta("supply_event_stage",str(event.get("stage","distress")))
+    return npc
+
+func _supply_event_cargo_node(root,event:Dictionary):
+    var node = Node2D.new()
+    node.name = "SupplyEventCargo"
+    node.position = Vector2(0,34)
+    node.z_index = 8
+    node.z_as_relative = false
+    node.set_meta("interaction_type","supply_event_cargo")
+    node.set_meta("interaction_radius",86.0)
+    node.set_meta("display_name","ГРУЗ РЕЙСА")
+    node.set_meta("supply_event_id",str(event.get("dynamic_event_id","")))
+    node.set_meta("faction_id",str(event.get("faction","")))
+    node.add_to_group("interactable")
+    root.add_child(node)
+    return node
+
+func _supply_event_alive_count(event_id:String) -> int:
+    var count = 0
+    for enemy in get_tree().get_nodes_in_group("infected"):
+        if is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and str(enemy.get_meta("supply_event_id","")) == event_id:
+            count += 1
+    return count
+
+func _resolve_supply_event(target):
+    if not is_instance_valid(target):
+        return
+    var event_id = str(target.get_meta("supply_event_id",""))
+    var alive = _supply_event_alive_count(event_id)
+    if alive > 0:
+        _set_survival_feedback("Заражённые ещё рядом: %d. Сначала обезопасьте место." % alive,2.8)
+        return
+    var result = SupplyEventSystem.resolve_success(faction_state,event_id,world_day)
+    if not bool(result.get("ok",false)):
+        _set_survival_feedback(str(result.get("reason","Рейс уже завершён.")),2.5)
+        return
+    var faction_id = str(result.get("faction",""))
+    for trader_id in TraderCatalog.traders_for_faction(faction_id):
+        TradingMarket.restock(faction_state,str(trader_id),world_day,true)
+    var faction_name = str(FactionCatalog.faction(faction_id).get("short_name",faction_id))
+    var resource_gain = float(result.get("resource_gain",0.0))
+    var tickets = int(result.get("tickets",0))
+    var reputation = int(result.get("reputation",0))
+    _set_survival_feedback("РЕЙС %s СПАСЁН
+Снабжение +%.0f • репутация +%d • талоны +%d" % [faction_name,resource_gain,reputation,tickets],5.0)
+    var root_node = target.get_parent()
+    if is_instance_valid(root_node) and bool(root_node.get_meta("world_event_root",false)):
+        root_node.queue_free()
+    _save_state()
+    if region_map_open:
+        _refresh_region_map_ui()
+
+func _build_supply_convoy_scene(root,coord:Vector2i,event:Dictionary):
+    var stage = str(event.get("stage","distress"))
+    var faction_id = str(event.get("faction",""))
+    var flip = EncounterCatalog._hash(coord,83) % 2 == 0
+    var truck = _poi_set_piece(root,"army_truck",Vector2(20,-12),Vector2(104,26),5,flip)
+    if is_instance_valid(truck):
+        truck.set_meta("event_piece",true)
+    _event_prop(root,"road_barrier",Vector2(-78,-36),0.58,4)
+    _event_prop(root,"supply_crate",Vector2(54,22),0.54,4)
+    match faction_id:
+        "perron":
+            _event_prop(root,"cardboard_boxes",Vector2(76,10),0.48,4)
+            _event_prop(root,"rain_collector",Vector2(-58,30),0.46,3)
+        "rubezh":
+            _event_prop(root,"ammo_crate",Vector2(72,10),0.54,4)
+            _event_prop(root,"sandbags",Vector2(-52,26),0.58,4)
+        "mechanics":
+            _event_prop(root,"tool_case",Vector2(72,10),0.52,4)
+            _event_prop(root,"gas_can",Vector2(-52,26),0.48,4)
+        "lazaret":
+            _event_prop(root,"med_supply_stack",Vector2(70,8),0.52,4)
+            _event_prop(root,"stretcher",Vector2(-52,28),0.50,4)
+    if stage == "overrun" or stage == "looted":
+        _event_prop(root,"blood_pool_large",Vector2(-16,28),0.56,1)
+        _event_prop(root,"scattered_bottles",Vector2(82,34),0.44,2)
+    if stage == "looted":
+        _event_prop(root,"wooden_debris",Vector2(-74,22),0.46,3)
+        _event_prop(root,"cardboard_boxes",Vector2(88,-20),0.40,3)
+    var survivor_count = {"distress":2,"overrun":1,"looted":0}.get(stage,0)
+    var survivor_positions = [Vector2(-34,-46),Vector2(66,-42)]
+    for i in range(survivor_count):
+        _supply_event_survivor(root,event,i,survivor_positions[i])
+    _supply_event_cargo_node(root,event)
+
 func _world_event_rect(root) -> Rect2:
     if not is_instance_valid(root) or not bool(root.get_meta("world_event_root",false)):
         return Rect2()
@@ -20359,12 +20563,19 @@ func _build_world_event(chunk,coord:Vector2i,profile:Dictionary,event:Dictionary
     root.set_meta("world_event_id",event_id)
     root.set_meta("world_event_label",str(event.get("label",event_id)))
     root.set_meta("world_event_footprint",size)
+    if bool(event.get("supply_event",false)):
+        root.set_meta("supply_event",true)
+        root.set_meta("supply_event_id",str(event.get("dynamic_event_id","")))
+        root.set_meta("faction_id",str(event.get("faction","")))
+        root.set_meta("supply_event_stage",str(event.get("stage","distress")))
     root.add_to_group("world_events")
     chunk.add_child(root)
     chunk.set_meta("world_event_id",event_id)
     chunk.set_meta("world_event_label",str(event.get("label",event_id)))
 
     match event_id:
+        "supply_convoy":
+            _build_supply_convoy_scene(root,coord,event)
         "abandoned_camp":
             _event_prop(root,"campfire",Vector2(-18,4),0.72,4)
             _event_prop(root,"old_mattress",Vector2(30,18),0.52,3)
@@ -20402,14 +20613,22 @@ func _build_world_event(chunk,coord:Vector2i,profile:Dictionary,event:Dictionary
         _create_container(chunk,coord,center + Vector2(0,28),"event_%s_cache" % event_id,loot_profile,str(event.get("label","Запасы")))
 
     var enemy_count = int(event.get("enemy_count",0))
-    var enemy_offsets = [Vector2(-82,-52),Vector2(86,-42),Vector2(-74,62),Vector2(78,62),Vector2(0,-76)]
+    var enemy_offsets = [Vector2(-82,-52),Vector2(86,-42),Vector2(-74,62),Vector2(78,62),Vector2(0,-76),Vector2(-104,8)]
+    var dynamic_id = str(event.get("dynamic_event_id",""))
+    var spawn_base = 1100 + (EncounterCatalog._hash(coord,101) % 200) * 10
+    if bool(event.get("supply_event",false)):
+        spawn_base = 4000 + (absi(dynamic_id.hash()) % 50000) * 10
     for i in range(enemy_count):
         var kind = "normal"
-        # Only high-risk road events borrow one existing pressure archetype; ordinary
-        # districts remain normal-infected territory.
-        if risk >= 4 and i == enemy_count - 1 and event_id in ["looted_convoy","feeding_site"]:
+        if bool(event.get("supply_event",false)):
+            var severity = int(event.get("severity",1))
+            if severity >= 2 and i == enemy_count - 1:
+                kind = "runner"
+        elif risk >= 4 and i == enemy_count - 1 and event_id in ["looted_convoy","feeding_site"]:
             kind = "runner"
-        _spawn_world_event_enemy(chunk,coord,1100 + (EncounterCatalog._hash(coord,101) % 200) * 10 + i,center + enemy_offsets[i % enemy_offsets.size()],kind)
+        var enemy = _spawn_world_event_enemy(chunk,coord,spawn_base + i,center + enemy_offsets[i % enemy_offsets.size()],kind)
+        if is_instance_valid(enemy) and bool(event.get("supply_event",false)):
+            enemy.set_meta("supply_event_id",dynamic_id)
     return true
 
 func _build_procedural_chunk(chunk,coord):
@@ -20609,7 +20828,9 @@ func _build_procedural_chunk(chunk,coord):
 
     var world_event = {}
     if not authored_poi and not is_legacy and not preserve_082_layout and not _chunk_has_player_base(coord):
-        world_event = EncounterCatalog.event_for(coord,zone,int(profile.get("risk",2)),poi_id)
+        world_event = SupplyEventSystem.runtime_event_for_chunk(faction_state,coord,world_day)
+        if world_event.is_empty():
+            world_event = EncounterCatalog.event_for(coord,zone,int(profile.get("risk",2)),poi_id)
         if not world_event.is_empty():
             if not _build_world_event(chunk,coord,profile,world_event):
                 world_event = {}
@@ -21033,6 +21254,114 @@ func _add_segmented_south_wall(building,size,door_x,window_xs):
         var length = wall_right - cursor
         _add_static_rect(building,Vector2(cursor + length*0.5,float(size.y)*0.5),Vector2(length,12))
 
+
+# -----------------------------------------------------------------------------
+# 1.23-dev1: approved High Risk visual skins rendered from authored 3D masters.
+# Gameplay stays 2D: the GLB remains the source model, while roof/facade/interior
+# layers are rendered from that exact model and mapped to the existing collision
+# / persistence system. This lets us upgrade art without rewriting the game into 3D.
+const HIGH_RISK_SKIN_MEDICAL_ENTRY_V03 = "medical_entry_v03"
+const HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT = "res://art/high_risk/medical_entry_v03/"
+
+func _high_risk_skin_sprite(parent:Node,path:String,pos:Vector2,scale_value:Vector2):
+    var tex = load(path)
+    if tex == null:
+        return null
+    var sprite = Sprite2D.new()
+    sprite.texture = tex
+    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+    sprite.centered = true
+    sprite.position = pos
+    sprite.scale = scale_value
+    sprite.set_meta("high_risk_model_layer",true)
+    parent.add_child(sprite)
+    return sprite
+
+func _build_high_risk_skin_floor(building:Node2D,skin_id:String,size:Vector2) -> void:
+    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
+        return
+    # Top-down approval render maps directly to the gameplay footprint. The alpha
+    # bounds are 624x419 px in the 960x720 render, so scale each axis to the exact
+    # authored footprint rather than stretching the whole transparent canvas.
+    var floor_scale = Vector2(size.x / 624.0,size.y / 419.0)
+    var floor_sprite = _high_risk_skin_sprite(
+        building,
+        HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT + "interior_floor1_topdown.png",
+        Vector2(0,0.5),
+        floor_scale
+    )
+    if floor_sprite != null:
+        floor_sprite.z_index = -1
+        floor_sprite.set_meta("high_risk_skin",skin_id)
+
+func _build_high_risk_skin_facade(facade:Node2D,skin_id:String,size:Vector2) -> void:
+    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
+        return
+    # Exterior approval render visible width = 576 px. Preserve the model's
+    # orthographic projection and shift it down so the entrance meets the south wall.
+    var model_scale = size.x / 576.0
+    var world_center_offset_y = 26.0
+    var local_y = world_center_offset_y - (size.y * 0.5 + 8.0)
+    var sprite = _high_risk_skin_sprite(
+        facade,
+        HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT + "exterior_facade_lower.png",
+        Vector2(0,local_y),
+        Vector2(model_scale,model_scale)
+    )
+    if sprite != null:
+        sprite.set_meta("high_risk_skin",skin_id)
+    facade.set_meta("facade_dressed",true)
+
+func _build_high_risk_skin_roof(roof:Node2D,skin_id:String,size:Vector2,facade_height:float) -> void:
+    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
+        return
+    var model_scale = size.x / 576.0
+    var world_center_offset_y = 26.0
+    # roof node origin = building centre + (0, 8 - facade_height)
+    var local_y = world_center_offset_y - (8.0 - facade_height)
+    var sprite = _high_risk_skin_sprite(
+        roof,
+        HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT + "exterior_roof_upper.png",
+        Vector2(0,local_y),
+        Vector2(model_scale,model_scale)
+    )
+    if sprite != null:
+        sprite.set_meta("high_risk_skin",skin_id)
+
+func _build_high_risk_skin_interior_collision(building:Node2D,skin_id:String,size:Vector2) -> void:
+    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
+        return
+    # Collision follows the accepted 24x16 m GLB floor plan. Openings are kept as
+    # gaps, so rendered doors/corridors and actual navigation agree.
+    var sx = size.x / 24.0
+    var sy = size.y / 16.0
+    var thick = 8.0
+    var wall_x = func(x1:float,x2:float,z:float):
+        _add_static_rect(building,Vector2((x1+x2)*0.5*sx,z*sy),Vector2(abs(x2-x1)*sx,thick))
+    var wall_z = func(x:float,z1:float,z2:float):
+        _add_static_rect(building,Vector2(x*sx,(z1+z2)*0.5*sy),Vector2(thick,abs(z2-z1)*sy))
+
+    # Main divider with three door gaps.
+    wall_x.call(-11.7,-8.7,1.5)
+    wall_x.call(-7.3,-1.5,1.5)
+    wall_x.call(1.5,7.3,1.5)
+    wall_x.call(8.7,11.7,1.5)
+    # Lobby partitions.
+    wall_z.call(-4.6,1.5,3.35)
+    wall_z.call(-4.6,4.65,7.7)
+    wall_z.call(4.6,1.5,3.35)
+    wall_z.call(4.6,4.65,7.7)
+    # Rear corridor boundaries.
+    wall_z.call(-1.55,-7.7,-5.7)
+    wall_z.call(-1.55,-4.3,-1.8)
+    wall_z.call(1.55,-7.7,-5.7)
+    wall_z.call(1.55,-4.3,-1.8)
+    # Treatment/storage and ward/procedure splits.
+    wall_x.call(-11.7,-8.0,-3.2)
+    wall_x.call(-6.6,-1.7,-3.2)
+    wall_x.call(1.7,6.9,-3.6)
+    wall_x.call(8.3,11.7,-3.6)
+
 func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,open_interior,archetype_id = "",archetype_data = {}):
     var building = Node2D.new()
     building.position = center
@@ -21044,6 +21373,10 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     building.set_meta("building_size",size)
     building.set_meta("door_local_x",0.0)
     chunk.add_child(building)
+
+    var high_risk_skin = str(archetype_data.get("high_risk_skin",""))
+    if high_risk_skin != "":
+        building.set_meta("high_risk_skin",high_risk_skin)
 
     # 1.22-dev4: faction settlement buildings carry an authored exterior model.
     var settlement_model = {}
@@ -21072,10 +21405,13 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     chunk.add_child(cast_shadow)
 
     _ellipse(Vector2(0,size.y*0.52),size.x*0.42,8,Color(0.02,0.02,0.02,0.14),building)
-    _interior_floor_sprite(building,sign_text,size)
-    _decorate_interior_depth_shading(building,size,sign_text,building_id)
-    _decorate_interior_floor_details(building,size,building_id)
-    _decorate_building_wall_texture(building,sign_text,size)
+    if high_risk_skin != "":
+        _build_high_risk_skin_floor(building,high_risk_skin,size)
+    else:
+        _interior_floor_sprite(building,sign_text,size)
+        _decorate_interior_depth_shading(building,size,sign_text,building_id)
+        _decorate_interior_floor_details(building,size,building_id)
+        _decorate_building_wall_texture(building,sign_text,size)
 
     # 0.83 keeps the outer footprint stable, but authored archetypes can shift the
     # entrance along the facade. Persistent door/building ids remain unchanged.
@@ -21090,21 +21426,24 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     if not settlement_model.is_empty():
         door_x = float(settlement_model.get("door_x",0.0))
     building.set_meta("door_local_x",door_x)
-    var breach_window_xs = _breachable_window_xs(sign_text,size,building_id,door_x) if open_interior and settlement_model.is_empty() else []
+    var breach_window_xs = _breachable_window_xs(sign_text,size,building_id,door_x) if open_interior and settlement_model.is_empty() and high_risk_skin == "" else []
     _add_segmented_south_wall(building,size,door_x,breach_window_xs)
 
-    # Thick dark-outline walls, worn plaster and lower grime band.
-    _rect(Vector2(0,-size.y*0.48),Vector2(size.x,16),Color("1b1f1e"),building)
-    _rect(Vector2(0,-size.y*0.48+2),Vector2(size.x-6,12),wall_color.lightened(0.12),building)
-    _rect(Vector2(-size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
-    _rect(Vector2(-size.x*0.5+2,0),Vector2(10,size.y-5),wall_color,building)
-    _rect(Vector2(size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
-    _rect(Vector2(size.x*0.5-2,0),Vector2(10,size.y-5),wall_color,building)
-    _rect(Vector2(0,size.y*0.5),Vector2(size.x,13),Color("1b1f1e"),building)
-    _rect(Vector2(0,size.y*0.5-2),Vector2(size.x-6,8),wall_color.darkened(0.10),building)
+    # Thick dark-outline walls are already present in approved model skins.
+    if high_risk_skin == "":
+        _rect(Vector2(0,-size.y*0.48),Vector2(size.x,16),Color("1b1f1e"),building)
+        _rect(Vector2(0,-size.y*0.48+2),Vector2(size.x-6,12),wall_color.lightened(0.12),building)
+        _rect(Vector2(-size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
+        _rect(Vector2(-size.x*0.5+2,0),Vector2(10,size.y-5),wall_color,building)
+        _rect(Vector2(size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
+        _rect(Vector2(size.x*0.5-2,0),Vector2(10,size.y-5),wall_color,building)
+        _rect(Vector2(0,size.y*0.5),Vector2(size.x,13),Color("1b1f1e"),building)
+        _rect(Vector2(0,size.y*0.5-2),Vector2(size.x-6,8),wall_color.darkened(0.10),building)
 
     if open_interior:
-        if archetype_id != "":
+        if high_risk_skin != "":
+            _build_high_risk_skin_interior_collision(building,high_risk_skin,size)
+        elif archetype_id != "":
             _decorate_archetype_interior(building,archetype_id,archetype_data,size,building_id)
         else:
             _decorate_interior_architecture(building,sign_text,size)
@@ -21118,7 +21457,9 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     facade.add_to_group("tall_facades")
     chunk.add_child(facade)
     var facade_profile = str(archetype_data.get("facade","")) if archetype_id != "" else ""
-    if settlement_model.is_empty():
+    if high_risk_skin != "":
+        _build_high_risk_skin_facade(facade,high_risk_skin,size)
+    elif settlement_model.is_empty():
         _build_tall_facade(facade,sign_text,size,building_id,door_x,facade_height,facade_profile)
     else:
         _build_settlement_model_facade(facade,settlement_model,size,door_x,sign_text)
@@ -21130,7 +21471,7 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
 
     var door_node = _create_door(chunk,coord,center + Vector2(door_x,size.y*0.5),building_id)
     _link_front_door(door_node,facade)
-    if archetype_id != "" and settlement_model.is_empty():
+    if archetype_id != "" and settlement_model.is_empty() and high_risk_skin == "":
         _decorate_archetype_yard(chunk,center,size,archetype_id,archetype_data)
 
     var roof = Node2D.new()
@@ -21139,7 +21480,9 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     roof.z_index = 60
     roof.z_as_relative = false
     chunk.add_child(roof)
-    if not settlement_model.is_empty():
+    if high_risk_skin != "":
+        _build_high_risk_skin_roof(roof,high_risk_skin,size,facade_height)
+    elif not settlement_model.is_empty():
         _build_settlement_model_roof(roof,settlement_model,facade_height)
     else:
         _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data)
@@ -25637,6 +25980,9 @@ func _update_day_night(delta):
     if world_day > previous_day:
         for _day_step in range(world_day - previous_day):
             FactionEconomy.daily_tick(faction_state)
+            var tick_day = previous_day + _day_step + 1
+            var supply_result = SupplyEventSystem.daily_tick(faction_state,tick_day,_supply_event_blocked_chunks())
+            _apply_supply_event_day_result(supply_result)
         TradingMarket.restock_all(faction_state,world_day)
         ContractSystem.refresh_offers(faction_state,world_day,false)
     var hour = world_minutes / 60.0
@@ -25826,9 +26172,11 @@ func _refresh_trader_ui():
     var condition = FactionEconomy.settlement_condition(faction_state,faction_id)
     var reserve = TradingMarket.reserve(faction_state,active_trader_id)
     trader_title.text = "%s  •  %s" % [str(data.get("name","ТОРГОВЕЦ")).to_upper(),str(data.get("role","рынок")).to_upper()]
-    trader_subtitle.text = "%s  |  Репутация: %s (%d)  |  Талоны: %d  |  Резерв торговца: %d  |  Снабжение: %d%%" % [
+    trader_subtitle.text = "%s  |  Репутация: %s (%d)  |  Талоны: %d  |  Резерв торговца: %d  |  Снабжение: %d%%  |  %s  |  %s" % [
         str(faction_data.get("name",faction_id)),str(tier.get("name","ЧУЖОЙ")),rep,
-        int(faction_state.get("currency_tickets",0)),reserve,int(round(condition))
+        int(faction_state.get("currency_tickets",0)),reserve,int(round(condition)),
+        SettlementCrisis.summary(faction_state,faction_id,world_day),
+        FactionEndgame.summary(faction_state,faction_id)
     ]
 
     trader_stock_list.clear()
@@ -26183,10 +26531,12 @@ func _refresh_contract_ui():
     var tier = FactionEconomy.reputation_tier(faction_state,active_contract_faction)
     var resources = faction_state.get("factions",{}).get(active_contract_faction,{}).get("resources",{})
     contract_title.text = "%s  •  КОНТРАКТЫ" % str(faction_data.get("short_name",active_contract_faction)).to_upper()
-    contract_subtitle.text = "%s  |  %s (%d)  |  еда %d  медицина %d  техника %d  безопасность %d" % [
+    contract_subtitle.text = "%s  |  %s (%d)  |  еда %d  медицина %d  техника %d  безопасность %d  |  %s  |  %s" % [
         active_contract_npc_name,str(tier.get("name","ЧУЖОЙ")),rep,
         int(round(float(resources.get("food",0.0)))),int(round(float(resources.get("medicine",0.0)))),
-        int(round(float(resources.get("technical",0.0)))),int(round(float(resources.get("security",0.0))))
+        int(round(float(resources.get("technical",0.0)))),int(round(float(resources.get("security",0.0)))),
+        SettlementCrisis.summary(faction_state,active_contract_faction,world_day),
+        FactionEndgame.summary(faction_state,active_contract_faction)
     ]
     contract_list.clear()
     var selected_index = -1
@@ -26232,6 +26582,9 @@ func _refresh_contract_selection_status():
         str(contract.get("description","")),str(contract.get("hint","")),requirement,progress,
         int(reward.get("tickets",0)),int(reward.get("reputation",0))
     ]
+    var consequence = ContractSystem.consequence_text(faction_state,contract)
+    if consequence != "":
+        contract_status.text += "\n\n" + consequence
 
 func _contract_selected(index:int):
     if index < 0 or index >= contract_list.item_count:
@@ -26300,15 +26653,32 @@ func _contract_complete_selected():
         contract_status.text = str(result.get("reason","Не удалось закрыть контракт."))
         return false
     var faction_id = str(result.get("faction",""))
-    for trader_id in TraderCatalog.traders_for_faction(faction_id):
-        TradingMarket.restock(faction_state,str(trader_id),world_day,true)
+    var affected_factions = result.get("affected_factions",[faction_id])
+    if typeof(affected_factions) != TYPE_ARRAY:
+        affected_factions = [faction_id]
+    for affected_faction in affected_factions:
+        for trader_id in TraderCatalog.traders_for_faction(str(affected_faction)):
+            TradingMarket.restock(faction_state,str(trader_id),world_day,true)
     ContractSystem.refresh_offers(faction_state,world_day,false)
     var route_text = ""
     if str(result.get("opened_route","")) != "":
         route_text = " • маршрут снабжения открыт"
-    _set_survival_feedback("Контракт закрыт: %s • +%d тал. • +%d реп.%s" % [
-        str(result.get("title","КОНТРАКТ")),int(result.get("tickets",0)),int(result.get("reputation",0)),route_text
-    ],3.2)
+    var relation_text = ""
+    var conflict_outcome = result.get("conflict_outcome",{})
+    if typeof(conflict_outcome) == TYPE_DICTIONARY and not conflict_outcome.is_empty():
+        var loser_id = str(conflict_outcome.get("loser",""))
+        var loser_name = str(FactionCatalog.faction(loser_id).get("short_name",loser_id))
+        relation_text = " • выбор закреплён • %s %d реп." % [loser_name,int(conflict_outcome.get("loser_reputation_delta",0))]
+    var endgame_text = ""
+    var endgame_outcome = result.get("endgame_outcome",{})
+    if typeof(endgame_outcome) == TYPE_DICTIONARY and not endgame_outcome.is_empty():
+        if bool(endgame_outcome.get("final",false)):
+            endgame_text = " • ФРАКЦИОННАЯ ЦЕПОЧКА ЗАВЕРШЕНА"
+        else:
+            endgame_text = " • этап цепочки %d завершён" % int(endgame_outcome.get("step",0))
+    _set_survival_feedback("Контракт закрыт: %s • +%d тал. • +%d реп.%s%s%s" % [
+        str(result.get("title","КОНТРАКТ")),int(result.get("tickets",0)),int(result.get("reputation",0)),route_text,relation_text,endgame_text
+    ],3.8)
     selected_contract_id = ""
     selected_contract_source = ""
     _refresh_contract_ui()
@@ -26624,7 +26994,13 @@ func _load_state():
     next_base_id = int(parsed.get("next_base_id",1))
     discovered_chunks = parsed.get("discovered_chunks",{})
     discovered_pois = parsed.get("discovered_pois",{})
-    faction_state = FactionEconomy.sanitize_state(parsed.get("faction_state",{}))
+    var raw_faction_state = parsed.get("faction_state",{})
+    var had_supply_event_state = typeof(raw_faction_state) == TYPE_DICTIONARY and raw_faction_state.has("supply_events")
+    faction_state = FactionEconomy.sanitize_state(raw_faction_state)
+    if not had_supply_event_state:
+        faction_state["supply_events"] = SupplyEventSystem.default_state(world_day)
+    else:
+        SupplyEventSystem.ensure_state(faction_state,world_day)
     expedition_active = bool(parsed.get("expedition_active",false))
     expedition_target_name = str(parsed.get("expedition_target_name",""))
     expedition_target_reached = bool(parsed.get("expedition_target_reached",false))

@@ -33,7 +33,7 @@ func run():
     root.add_child(game)
     await process_frame
 
-    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.22.0-dev3", "current build version mismatch")
+    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.22.0", "current build version mismatch")
 
     print("BALANCE HARNESS READY")
     # Ordinary world remains readable: qualitative specials stay authored high-risk content.
