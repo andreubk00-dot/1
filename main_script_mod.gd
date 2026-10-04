@@ -19208,23 +19208,16 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
         var sign_text = str(spec.get("sign",archetype_data.get("sign","ДОМ")))
         var wall_color = archetype_data.get("color",Color("4c4942"))
         var building_id = str(spec.get("id","poi_building"))
-        # First approved 3D master: Clinical Complex №4 reception block. Keep the
-        # gameplay building/container ids, but replace generated art and internal
-        # collision plan with the accepted v03 model-derived skin.
-        if poi_id == "regional_clinical_complex_4" and cell_offset == Vector2i(0,0) and building_id == "building_0":
-            archetype_data = archetype_data.duplicate(true)
-            archetype_data["high_risk_skin"] = HIGH_RISK_SKIN_MEDICAL_ENTRY_V03
-            archetype_data["door_x"] = 0.0
-        else:
-            # 1.23-dev2: every other High Risk building wears an authored exterior
-            # model fitted to its gameplay footprint (tools/wa_hr_buildings.py).
-            var hr_model_id = HighRiskBuildingModels.model_id(poi_id,cell_offset,building_id)
-            if hr_model_id != "":
-                var hr_model = HighRiskBuildingModels.model(hr_model_id)
-                if hr_model.get("size",Vector2.ZERO) == size:
-                    archetype_data = archetype_data.duplicate(true)
-                    archetype_data["settlement_model"] = hr_model_id
-                    archetype_data["door_x"] = float(hr_model.get("door_x",0.0)) / max(1.0,size.x)
+        # 1.23-dev2: every High Risk building, the clinical complex reception block
+        # included, wears an authored exterior model fitted to its gameplay
+        # footprint (tools/wa_hr_buildings.py, rendered in Blender).
+        var hr_model_id = HighRiskBuildingModels.model_id(poi_id,cell_offset,building_id)
+        if hr_model_id != "":
+            var hr_model = HighRiskBuildingModels.model(hr_model_id)
+            if hr_model.get("size",Vector2.ZERO) == size:
+                archetype_data = archetype_data.duplicate(true)
+                archetype_data["settlement_model"] = hr_model_id
+                archetype_data["door_x"] = float(hr_model.get("door_x",0.0)) / max(1.0,size.x)
         var loot_table = str(spec.get("loot",archetype_data.get("loot",profile.get("loot_theme","residential"))))
         var building_node = _create_building(chunk,coord,building_id,pos,size,sign_text,wall_color,true,archetype_id,archetype_data)
         _apply_authored_building_metadata(building_node,profile,archetype_id,archetype_data,loot_table,role,cell_offset)
@@ -21666,108 +21659,6 @@ func _add_segmented_south_wall(building,size,door_x,window_xs):
 # Gameplay stays 2D: the GLB remains the source model, while roof/facade/interior
 # layers are rendered from that exact model and mapped to the existing collision
 # / persistence system. This lets us upgrade art without rewriting the game into 3D.
-const HIGH_RISK_SKIN_MEDICAL_ENTRY_V03 = "medical_entry_v03"
-const HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT = "res://art/high_risk/medical_entry_v03/"
-
-func _high_risk_skin_sprite(parent:Node,path:String,pos:Vector2,scale_value:Vector2):
-    var tex = load(path)
-    if tex == null:
-        return null
-    var sprite = Sprite2D.new()
-    sprite.texture = tex
-    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-    sprite.centered = true
-    sprite.position = pos
-    sprite.scale = scale_value
-    sprite.set_meta("high_risk_model_layer",true)
-    parent.add_child(sprite)
-    return sprite
-
-func _build_high_risk_skin_floor(building:Node2D,skin_id:String,size:Vector2) -> void:
-    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
-        return
-    # Top-down approval render maps directly to the gameplay footprint. The alpha
-    # bounds are 624x419 px in the 960x720 render, so scale each axis to the exact
-    # authored footprint rather than stretching the whole transparent canvas.
-    var floor_scale = Vector2(size.x / 624.0,size.y / 419.0)
-    var floor_sprite = _high_risk_skin_sprite(
-        building,
-        HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT + "interior_floor1_topdown.png",
-        Vector2(0,0.5),
-        floor_scale
-    )
-    if floor_sprite != null:
-        floor_sprite.z_index = -1
-        floor_sprite.set_meta("high_risk_skin",skin_id)
-
-func _build_high_risk_skin_facade(facade:Node2D,skin_id:String,size:Vector2) -> void:
-    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
-        return
-    # Exterior approval render visible width = 576 px. Preserve the model's
-    # orthographic projection and shift it down so the entrance meets the south wall.
-    var model_scale = size.x / 576.0
-    var world_center_offset_y = 26.0
-    var local_y = world_center_offset_y - (size.y * 0.5 + 8.0)
-    var sprite = _high_risk_skin_sprite(
-        facade,
-        HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT + "exterior_facade_lower.png",
-        Vector2(0,local_y),
-        Vector2(model_scale,model_scale)
-    )
-    if sprite != null:
-        sprite.set_meta("high_risk_skin",skin_id)
-    facade.set_meta("facade_dressed",true)
-
-func _build_high_risk_skin_roof(roof:Node2D,skin_id:String,size:Vector2,facade_height:float) -> void:
-    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
-        return
-    var model_scale = size.x / 576.0
-    var world_center_offset_y = 26.0
-    # roof node origin = building centre + (0, 8 - facade_height)
-    var local_y = world_center_offset_y - (8.0 - facade_height)
-    var sprite = _high_risk_skin_sprite(
-        roof,
-        HIGH_RISK_SKIN_MEDICAL_ENTRY_ROOT + "exterior_roof_upper.png",
-        Vector2(0,local_y),
-        Vector2(model_scale,model_scale)
-    )
-    if sprite != null:
-        sprite.set_meta("high_risk_skin",skin_id)
-
-func _build_high_risk_skin_interior_collision(building:Node2D,skin_id:String,size:Vector2) -> void:
-    if skin_id != HIGH_RISK_SKIN_MEDICAL_ENTRY_V03:
-        return
-    # Collision follows the accepted 24x16 m GLB floor plan. Openings are kept as
-    # gaps, so rendered doors/corridors and actual navigation agree.
-    var sx = size.x / 24.0
-    var sy = size.y / 16.0
-    var thick = 8.0
-    var wall_x = func(x1:float,x2:float,z:float):
-        _add_static_rect(building,Vector2((x1+x2)*0.5*sx,z*sy),Vector2(abs(x2-x1)*sx,thick))
-    var wall_z = func(x:float,z1:float,z2:float):
-        _add_static_rect(building,Vector2(x*sx,(z1+z2)*0.5*sy),Vector2(thick,abs(z2-z1)*sy))
-
-    # Main divider with three door gaps.
-    wall_x.call(-11.7,-8.7,1.5)
-    wall_x.call(-7.3,-1.5,1.5)
-    wall_x.call(1.5,7.3,1.5)
-    wall_x.call(8.7,11.7,1.5)
-    # Lobby partitions.
-    wall_z.call(-4.6,1.5,3.35)
-    wall_z.call(-4.6,4.65,7.7)
-    wall_z.call(4.6,1.5,3.35)
-    wall_z.call(4.6,4.65,7.7)
-    # Rear corridor boundaries.
-    wall_z.call(-1.55,-7.7,-5.7)
-    wall_z.call(-1.55,-4.3,-1.8)
-    wall_z.call(1.55,-7.7,-5.7)
-    wall_z.call(1.55,-4.3,-1.8)
-    # Treatment/storage and ward/procedure splits.
-    wall_x.call(-11.7,-8.0,-3.2)
-    wall_x.call(-6.6,-1.7,-3.2)
-    wall_x.call(1.7,6.9,-3.6)
-    wall_x.call(8.3,11.7,-3.6)
-
 func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,open_interior,archetype_id = "",archetype_data = {}):
     var building = Node2D.new()
     building.position = center
@@ -21779,10 +21670,6 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     building.set_meta("building_size",size)
     building.set_meta("door_local_x",0.0)
     chunk.add_child(building)
-
-    var high_risk_skin = str(archetype_data.get("high_risk_skin",""))
-    if high_risk_skin != "":
-        building.set_meta("high_risk_skin",high_risk_skin)
 
     # 1.22-dev4: faction settlement buildings carry an authored exterior model.
     var settlement_model = {}
@@ -21811,13 +21698,10 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     chunk.add_child(cast_shadow)
 
     _ellipse(Vector2(0,size.y*0.52),size.x*0.42,8,Color(0.02,0.02,0.02,0.14),building)
-    if high_risk_skin != "":
-        _build_high_risk_skin_floor(building,high_risk_skin,size)
-    else:
-        _interior_floor_sprite(building,sign_text,size)
-        _decorate_interior_depth_shading(building,size,sign_text,building_id)
-        _decorate_interior_floor_details(building,size,building_id)
-        _decorate_building_wall_texture(building,sign_text,size)
+    _interior_floor_sprite(building,sign_text,size)
+    _decorate_interior_depth_shading(building,size,sign_text,building_id)
+    _decorate_interior_floor_details(building,size,building_id)
+    _decorate_building_wall_texture(building,sign_text,size)
 
     # 0.83 keeps the outer footprint stable, but authored archetypes can shift the
     # entrance along the facade. Persistent door/building ids remain unchanged.
@@ -21832,24 +21716,20 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     if not settlement_model.is_empty():
         door_x = float(settlement_model.get("door_x",0.0))
     building.set_meta("door_local_x",door_x)
-    var breach_window_xs = _breachable_window_xs(sign_text,size,building_id,door_x) if open_interior and settlement_model.is_empty() and high_risk_skin == "" else []
+    var breach_window_xs = _breachable_window_xs(sign_text,size,building_id,door_x) if open_interior and settlement_model.is_empty() else []
     _add_segmented_south_wall(building,size,door_x,breach_window_xs)
 
-    # Thick dark-outline walls are already present in approved model skins.
-    if high_risk_skin == "":
-        _rect(Vector2(0,-size.y*0.48),Vector2(size.x,16),Color("1b1f1e"),building)
-        _rect(Vector2(0,-size.y*0.48+2),Vector2(size.x-6,12),wall_color.lightened(0.12),building)
-        _rect(Vector2(-size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
-        _rect(Vector2(-size.x*0.5+2,0),Vector2(10,size.y-5),wall_color,building)
-        _rect(Vector2(size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
-        _rect(Vector2(size.x*0.5-2,0),Vector2(10,size.y-5),wall_color,building)
-        _rect(Vector2(0,size.y*0.5),Vector2(size.x,13),Color("1b1f1e"),building)
-        _rect(Vector2(0,size.y*0.5-2),Vector2(size.x-6,8),wall_color.darkened(0.10),building)
+    _rect(Vector2(0,-size.y*0.48),Vector2(size.x,16),Color("1b1f1e"),building)
+    _rect(Vector2(0,-size.y*0.48+2),Vector2(size.x-6,12),wall_color.lightened(0.12),building)
+    _rect(Vector2(-size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
+    _rect(Vector2(-size.x*0.5+2,0),Vector2(10,size.y-5),wall_color,building)
+    _rect(Vector2(size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
+    _rect(Vector2(size.x*0.5-2,0),Vector2(10,size.y-5),wall_color,building)
+    _rect(Vector2(0,size.y*0.5),Vector2(size.x,13),Color("1b1f1e"),building)
+    _rect(Vector2(0,size.y*0.5-2),Vector2(size.x-6,8),wall_color.darkened(0.10),building)
 
     if open_interior:
-        if high_risk_skin != "":
-            _build_high_risk_skin_interior_collision(building,high_risk_skin,size)
-        elif archetype_id != "":
+        if archetype_id != "":
             _decorate_archetype_interior(building,archetype_id,archetype_data,size,building_id)
         else:
             _decorate_interior_architecture(building,sign_text,size)
@@ -21863,9 +21743,7 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     facade.add_to_group("tall_facades")
     chunk.add_child(facade)
     var facade_profile = str(archetype_data.get("facade","")) if archetype_id != "" else ""
-    if high_risk_skin != "":
-        _build_high_risk_skin_facade(facade,high_risk_skin,size)
-    elif settlement_model.is_empty():
+    if settlement_model.is_empty():
         _build_tall_facade(facade,sign_text,size,building_id,door_x,facade_height,facade_profile)
     else:
         _build_settlement_model_facade(facade,settlement_model,size,door_x,sign_text)
@@ -21877,7 +21755,7 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
 
     var door_node = _create_door(chunk,coord,center + Vector2(door_x,size.y*0.5),building_id)
     _link_front_door(door_node,facade)
-    if archetype_id != "" and settlement_model.is_empty() and high_risk_skin == "":
+    if archetype_id != "" and settlement_model.is_empty():
         _decorate_archetype_yard(chunk,center,size,archetype_id,archetype_data)
 
     var roof = Node2D.new()
@@ -21886,9 +21764,7 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     roof.z_index = 60
     roof.z_as_relative = false
     chunk.add_child(roof)
-    if high_risk_skin != "":
-        _build_high_risk_skin_roof(roof,high_risk_skin,size,facade_height)
-    elif not settlement_model.is_empty():
+    if not settlement_model.is_empty():
         _build_settlement_model_roof(roof,settlement_model,facade_height)
     else:
         _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data)

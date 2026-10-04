@@ -38,7 +38,7 @@ ARCH_DOOR = {
 # (site, cell, index) -> (sign, archetype, (W, D)); mirrors _high_risk_visual_specs
 SPECS = {
     'clinic': {
-        '0,0': [None, ('НЕОТЛОЖНАЯ ПОМОЩЬ', 'pharmacy', (150, 108)), ('ОХРАНА', 'utility_house', (118, 72))],
+        '0,0': [('ПРИЁМНЫЙ КОРПУС', 'clinic', (610, 390)), ('НЕОТЛОЖНАЯ ПОМОЩЬ', 'pharmacy', (150, 108)), ('ОХРАНА', 'utility_house', (118, 72))],
         '1,0': [('ДИАГНОСТИЧЕСКИЙ КОРПУС', 'clinic', (432, 330)), ('ЛУЧЕВОЙ ЦЕНТР', 'clinic', (210, 244)), ('МЕДИЦИНСКИЙ АРХИВ', 'utility_house', (152, 96))],
         '2,0': [('ГАРАЖ САНТРАНСПОРТА', 'service_shop', (300, 220)), ('КИСЛОРОДНАЯ СТАНЦИЯ', 'warehouse', (270, 202)), ('ЭВАКУАЦИОННАЯ ДИСПЕТЧЕРСКАЯ', 'utility_house', (168, 104))],
         '0,1': [('ПАЛАТНЫЙ КОРПУС А', 'clinic', (500, 365)), ('ПАЛАТНЫЙ КОРПУС Б', 'clinic', (180, 265)), ('ПОСТ МЕДСЕСТРЫ', 'pharmacy', (148, 96))],
@@ -382,6 +382,63 @@ class HB(B):
 def clinic_tile(b):
     b.band(0, 14, TILE_BAND)
     b.m.rect(b.front, 0, 13.4, b.W, 1.2, dark(TILE_BAND, 0.7))
+
+
+def c_reception():
+    """Admission block, the face of the complex: two four-storey wings, a glazed
+    lobby between two stair towers and an ambulance porte-cochere on columns.
+    The entrance stays on the axis (the floor plan and stairs are built around it)."""
+    b = HB('clinic', '0,0', 0, 118, 'plaster', plinth=(110, 116, 110), plinth_h=10)
+    b.dx = 0.0
+    clinic_tile(b)
+    # wings: four storeys of paired windows with tiled spandrel bands
+    for (xa, xb) in ((b.x0 + 14, -112), (112, b.x1 - 14)):
+        b.storeys(4, 26, 18, 15, 30, first=16, frame=(222, 222, 214), band=(176, 182, 172), lit=0.03, x_from=xa, x_to=xb)
+    # stair towers: projecting bays, a tall slot window per landing
+    tower = ((206, 208, 198), 'plaster')
+    for tx in (-96, 96):
+        f = b.m.box(tx - 15, tx + 15, b.y1, b.y1 + 5, 0, b.H + 12, tower, top=((92, 94, 90), 'tar'), bias=48)['front']
+        b.blockers.append((b.fu(tx) - 17, 0, 34, b.H + 12))
+        for k in range(4):
+            b.m.window(f, 11, 20 + k * 26, 8, 18, style="tall", frame_col=(210, 210, 202), glass=(54, 70, 78))
+        b.m.rect(f, 0, b.H + 6, 30, 2, (160, 164, 156))
+    # lobby: a curtain wall of strip glazing over the entrance, three floors up
+    for k, z in enumerate((62, 82, 100)):
+        b.m.window(b.front, b.fu(-74), z, 148, 13, style="strip", frame_col=(176, 180, 176), glass=(60, 80, 90), sill=False)
+        b.win_rects.append((b.fu(-74), z, 148, 13))
+        if k == 1:
+            b.front.decals.append(('broken', dict(u=b.fu(-74) + 98, v=z, w=30, h=13)))
+    b.door(0, frame=(70, 74, 72), canopy=None, lamp=False)
+    # glazed doors either side of the main leaf
+    for dxx in (-34, 22):
+        b.m.window(b.front, b.fu(dxx), 4, 12, 22, style="tall", frame_col=(150, 156, 152), glass=(70, 92, 100), sill=False)
+    # cantilevered entrance canopy on tie rods, high enough to keep the doorway clear
+    zc, depth = 44, 12
+    slab = ((168, 170, 162), 'concrete_s')
+    b.m.box(-80, 80, b.y1, b.y1 + depth, zc, zc + 3, slab, top=((96, 98, 94), 'tar'), bias=70)
+    b.m.box(-80, 80, b.y1 + depth - 0.8, b.y1 + depth, zc - 2, zc + 3, ((176, 46, 40), 'none'), bias=71)   # red fascia
+    for cx in (-70, 70):
+        b.m.line3([V(cx, b.y1, zc + 26), V(cx, b.y1 + depth - 1, zc + 3)], (70, 72, 70), 1, bias=72)
+    b.blockers.append((b.fu(-82), zc - depth - 4, 164, depth + 10))
+    b.signboard(0, zc + 6, 150, 8, col=(36, 52, 48), border=(200, 196, 170))
+    b.win_rects.append((b.fu(-80), 0, 160, 62))          # keep the lobby front free of random wear
+    # attic: red cross on a white disc and the name band
+    b.front.decals.append(('cross', dict(u=b.fu(0), v=b.H - 6, s=4, col=(176, 46, 40), disc=(230, 230, 222))))
+    b.stripes(-250, 0, 60, 4, (176, 46, 40), (226, 224, 214))
+    for x in (-210, 210):
+        b.drainpipe(x)
+    b.flat('tar', 'plaster', 6)
+    # roof: lift machine rooms over the towers, ventilation, antennas
+    b.penthouse(-96, 120, 44, 34, 18)
+    b.penthouse(96, 120, 44, 34, 18, door=False)
+    for x in (-220, -160, 160, 220):
+        b.hvac(x, 40, 22, 14, 9)
+    b.antenna(250, -120, 34)
+    b.roof_cross(0, 60, 16)
+    b.scorch(2)
+    b.breach(1, (24, 18))
+    b.rubble_front(6)
+    return b
 
 
 def c_emergency():
@@ -1317,7 +1374,7 @@ def v_systems():
 
 
 MODELS = {
-    'clinic': [c_emergency, c_guard, c_diagnostics, c_radiology, c_archive, c_garage, c_oxygen, c_dispatch,
+    'clinic': [c_reception, c_emergency, c_guard, c_diagnostics, c_radiology, c_archive, c_garage, c_oxygen, c_dispatch,
                c_ward_a, c_ward_b, c_nurse, c_isolation, c_postop, c_sluice, c_surgical, c_sterile, c_icu],
     'quarantine': [q_gate, q_triage, q_desk, q_isolator_a, q_watch, q_sanpass, q_lab, q_cold, q_tech,
                    q_transport, q_store, q_guard, q_redzone, q_isolator_b, q_airlock, q_sterile, q_clean, q_inner_post],

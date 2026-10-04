@@ -1,5 +1,9 @@
 # OSTATOK 1.23.0-dev1 — High Risk Visual Rework
 
+> **Заменено.** Скин `medical_entry_v03` (рендер GLB-модели) удалён из игры вместе с ассетами.
+> Приёмный корпус теперь собран так же, как все High Risk здания: модель `hr_clinic_00_b0`
+> (`tools/wa_hr_buildings.py`, `c_reception`), рендер через Blender. См. `README_1230_DEV1_HR_VISUAL.md`.
+
 База: `OSTATOK 1.22.0 Stable`.
 
 Это первый проход нового визуального пайплайна для High Risk зон. Вместо очередного процедурного здания в игру внедрена утверждённая пользователем 3D-мастер-модель `OSTATOK_HR_medical_entry_v03.glb`.
