@@ -910,7 +910,120 @@ def build_all(P, only=None, tmpdir=None, cached=None):
         f.write('\n'.join(gd) + '\n')
 
 
+# ----------------------------------------------------------- world cars --
+def niva(colour=(170, 172, 168), seed=31):
+    """VAZ-2121 Niva: short boxy 3-door, high stance, spare wheel under the bonnet."""
+    paint = mat(colour, rough=0.5, grime=0.10, dust=0.6)
+    for x in (-20, 22):
+        for y in (-14, 14):
+            wheel(x, y, 0, 8.4, 5.0, side=1 if y > 0 else -1)
+    z0 = 6.0
+    prism([(-38, z0 + 2), (-39, z0 + 16), (36, z0 + 16), (39, z0 + 12), (39, z0 + 3), (36, z0 + 1), (-36, z0 + 1)], -15, 15, paint, bevel=1.6)
+    for x in (-20, 22):
+        for ys in (15.05, -15.05):
+            cyl((x, ys, z0 + 1), 9.4, 0.4, mat((20, 20, 20), rough=1), axis='y', bevel=0)
+    prism([(-37, z0 + 16), (-36, z0 + 31), (8, z0 + 31), (17, z0 + 16)], -13.6, 13.6, paint, bevel=1.4)
+    g = glass()
+    for ys in (13.7, -13.7):
+        prism([(-34, z0 + 17.5), (-34, z0 + 29.5), (-14, z0 + 29.5), (-14, z0 + 17.5)], ys - 0.25, ys + 0.25, g, bevel=0.2)
+        prism([(-12, z0 + 17.5), (-12, z0 + 29.5), (7, z0 + 29.5), (15, z0 + 17.5)], ys - 0.25, ys + 0.25, g, bevel=0.2)
+    mesh([(9, -12, z0 + 30.2), (9, 12, z0 + 30.2), (16.4, 12, z0 + 16.4), (16.4, -12, z0 + 16.4)], [(0, 1, 2, 3)], g)
+    mesh([(-37.2, -11, z0 + 30), (-37.2, 11, z0 + 30), (-38.2, 11, z0 + 18), (-38.2, -11, z0 + 18)], [(0, 1, 2, 3)], g)
+    seam = mat((34, 36, 38), rough=0.9)
+    for ys in (15.1, -15.1):
+        box((-12.5, ys, z0 + 15), (0.25, 0.15, 14), seam, bevel=0)
+        box((-8, ys + 0.2 * (1 if ys > 0 else -1), z0 + 13), (1.6, 0.25, 0.4), chrome(), bevel=0.1)
+        box((0, ys, z0 + 6), (36, 0.3, 1.0), blackplastic(), bevel=0.2)             # rubbing strip
+    box((39.3, 0, z0 + 9), (0.4, 9, 2.6), mat((30, 30, 30), rough=0.8), bevel=0.1)
+    for ys in (-11, 11):
+        cyl((39.5, ys, z0 + 10), 2.6, 0.8, lamp(), axis='x', bevel=0.3)
+    for xs in (40.2, -39.6):
+        box((xs, 0, z0 + 3.5), (1.0, 15.2, 1.4), mat((60, 62, 60), rough=0.6, metal=0.3), bevel=0.5)
+    for ys in (-11, 11):
+        box((-39.4, ys, z0 + 11), (0.5, 2.4, 2.4), mat((150, 40, 32), rough=0.3), bevel=0.3)
+    rack = mat((44, 44, 42), rough=0.6, metal=0.4)
+    for ys in (-11, 11):
+        box((-14, ys, z0 + 32), (20, 0.6, 0.6), rack, bevel=0.2)
+    box((-16, 0, z0 + 34), (8, 7, 2.4), mat((80, 90, 60), rough=0.9, grime=0.3), bevel=1.0)   # jerrycans under a tarp
+    for ys in (-1, 1):
+        box((12, ys * 15.4, z0 + 17), (1.0, 1.4, 1.0), blackplastic(), bevel=0.3)
+
+
+def moskvich(colour=(170, 172, 168), seed=32):
+    """AZLK-2141 hatchback: wedge nose, long sloping tailgate."""
+    paint = mat(colour, rough=0.48, grime=0.10, dust=0.5)
+    for x in (-27, 26):
+        for y in (-14, 14):
+            wheel(x, y, 0, 7.2, 4.4, side=1 if y > 0 else -1)
+    z0 = 4.0
+    prism([(-44, z0 + 3), (-45, z0 + 15), (40, z0 + 14), (46, z0 + 9), (46, z0 + 2), (42, z0 + 1), (-42, z0 + 1)], -15, 15, paint, bevel=1.8)
+    for x in (-27, 26):
+        for ys in (15.05, -15.05):
+            cyl((x, ys, z0 + 1), 8.3, 0.4, mat((20, 20, 20), rough=1), axis='y', bevel=0)
+    prism([(-44, z0 + 15), (-24, z0 + 27), (6, z0 + 27), (20, z0 + 14.5)], -13.4, 13.4, paint, bevel=1.4)
+    g = glass()
+    for ys in (13.5, -13.5):
+        prism([(-37, z0 + 16.5), (-24, z0 + 25.6), (-8, z0 + 25.6), (-8, z0 + 16.3)], ys - 0.25, ys + 0.25, g, bevel=0.2)
+        prism([(-6, z0 + 16.3), (-6, z0 + 25.6), (5, z0 + 25.6), (17, z0 + 16)], ys - 0.25, ys + 0.25, g, bevel=0.2)
+    mesh([(7, -12, z0 + 26.2), (7, 12, z0 + 26.2), (18.6, 12, z0 + 15.6), (18.6, -12, z0 + 15.6)], [(0, 1, 2, 3)], g)
+    mesh([(-25, -12, z0 + 26.4), (-25, 12, z0 + 26.4), (-41, 12, z0 + 17), (-41, -12, z0 + 17)], [(0, 1, 2, 3)], g)
+    seam = mat((34, 36, 38), rough=0.9)
+    for ys in (15.1, -15.1):
+        box((-7, ys, z0 + 13), (0.25, 0.15, 12), seam, bevel=0)
+        box((-11, ys + 0.2 * (1 if ys > 0 else -1), z0 + 12.5), (1.6, 0.25, 0.4), blackplastic(), bevel=0.1)
+        box((0, ys, z0 + 8), (40, 0.3, 0.8), blackplastic(), bevel=0.1)
+    box((46.3, 0, z0 + 7), (0.4, 13, 2.0), mat((36, 36, 36), rough=0.7), bevel=0.1)
+    for ys in (-10, 10):
+        box((46.2, ys, z0 + 9.5), (0.5, 4, 1.4), lamp(), bevel=0.2)
+    for xs in (47, -45.6):
+        box((xs, 0, z0 + 3.4), (1.0, 15.2, 1.6), blackplastic(), bevel=0.5)
+    for ys in (-10, 10):
+        box((-45.2, ys, z0 + 11), (0.5, 4, 1.8), mat((150, 40, 32), rough=0.3), bevel=0.2)
+    for ys in (-1, 1):
+        box((14, ys * 15.4, z0 + 16), (1.0, 1.4, 1.0), blackplastic(), bevel=0.3)
+
+
+WORLD_CAR_MODELS = [
+    ('zhiguli', lambda: lada((170, 172, 168), seed=41), 0.74),
+    ('niva', lambda: niva(), 0.82),
+    ('moskvich', lambda: moskvich(), 0.76),
+]
+WORLD_CAR_VIEWS = [('side', 0.0), ('front', math.pi / 2), ('rear', -math.pi / 2)]
+WORLD_CAR_CELL = 128          # world units per cell (256 px)
+
+
+def build_world_cars(P, cached=None, tmpdir=None):
+    """art/vehicles/world_cars_hd_v1.png: rows = Zhiguli / Niva / Moskvich,
+    columns = side / front (toward camera) / rear. Neutral light paint, tinted
+    in game. Ground centre of the car at cell pixel (128, 160)."""
+    import tempfile
+    tmpdir = tmpdir or tempfile.mkdtemp(prefix='ostatok_cars_')
+    W = WORLD_CAR_CELL * bk.HD
+    sheet = Image.new('RGBA', (W * 3, W * 3))
+    for r, (name, fn, k) in enumerate(WORLD_CAR_MODELS):
+        for c, (view, yaw) in enumerate(WORLD_CAR_VIEWS):
+            key = 'car_%s_%s' % (name, view)
+            cp = os.path.join(cached, key + '.png') if cached else None
+            if cp and os.path.exists(cp):
+                spr = Image.open(cp).convert('RGBA')
+            else:
+                bk.reset()
+                bk.camera(WORLD_CAR_CELL, 80, 64)
+                fn()
+                bk.transform_all(k, yaw)
+                raw = bk.render(os.path.join(tmpdir, key + '_raw.png'))
+                spr = bk.to_sprite(raw, WORLD_CAR_CELL)
+                spr.save(os.path.join(tmpdir, key + '.png'))
+                if cached:
+                    spr.save(cp)
+            sheet.alpha_composite(spr, (c * W, r * W))
+            print('car', key, flush=True)
+    sheet.save(os.path.join(P, 'art', 'vehicles', 'world_cars_hd_v1.png'))
+
+
 if __name__ == '__main__':
     P = sys.argv[1] if len(sys.argv) > 1 else '.'
     only = sys.argv[2:] or None
     build_all(P, only)
+    if not only:
+        build_world_cars(P)

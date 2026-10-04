@@ -426,3 +426,12 @@ def panel(corners, m):
     bpy.context.scene.collection.objects.link(o)
     o.data.materials.append(m)
     return o
+
+
+def transform_all(scale=1.0, yaw=0.0):
+    """scale about the origin and yaw (game: +angle turns +x toward +y, the
+    camera) every modelled object in the scene."""
+    R = Matrix.Rotation(-yaw, 4, 'Z') @ Matrix.Scale(scale, 4)
+    for o in bpy.context.scene.objects:
+        if o.type in ('MESH', 'CURVE') and o.name != 'ground':
+            o.matrix_world = R @ o.matrix_world

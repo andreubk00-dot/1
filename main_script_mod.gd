@@ -22145,6 +22145,40 @@ func _create_car(chunk,pos,color,angle):
     _ellipse(Vector2(0,9),28,5,Color(0.01,0.012,0.012,0.30),car)
     var sprite = Sprite2D.new()
     var car_atlas = load("res://car_v4.png")
+    var hd_cars = load("res://art/vehicles/world_cars_hd_v1.png") if ResourceLoader.exists("res://art/vehicles/world_cars_hd_v1.png") else null
+    if hd_cars != null:
+        # Blender-modelled Zhiguli / Niva / Moskvich in three views (side, nose to the
+        # camera, tail to the camera): pick the view nearest to the heading and only
+        # turn the sprite by the small remainder, so a parked car never shows as a
+        # side view rotated on its end.
+        var a = wrapf(angle,-PI,PI)
+        var view = 0
+        var flip = false
+        var rest = a
+        if abs(a) > PI * 0.75:
+            flip = true
+            rest = wrapf(a - PI,-PI,PI)
+        elif a > PI * 0.25:
+            view = 1
+            rest = a - PI * 0.5
+        elif a < -PI * 0.25:
+            view = 2
+            rest = a + PI * 0.5
+        var hd_tex = AtlasTexture.new()
+        hd_tex.atlas = hd_cars
+        hd_tex.region = Rect2(view * 256,_car_model_index(pos) * 256,256,256)
+        sprite.texture = hd_tex
+        sprite.offset = Vector2(0,-32)
+        sprite.flip_h = flip
+        sprite.rotation = rest * 0.6 - angle
+        sprite.scale = Vector2(0.5,0.5)
+        sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        sprite.modulate = Color(1,1,1).lerp(color.lightened(0.25),0.8)
+        car.set_meta("car_model",_car_model_index(pos))
+        car.set_meta("car_view",view)
+        car.add_child(sprite)
+        _add_static_rect(car,Vector2(0,0),Vector2(66,28))
+        return
     if car_atlas != null:
         var car_tex = AtlasTexture.new()
         car_tex.atlas = car_atlas
