@@ -18,6 +18,7 @@ DOOR_W, DOOR_H = 20.0, 32.0
 
 # --------------------------------------------------------------------------- DSL --
 class B:
+    ROOF_JUNK = False           # roofs carry building elements only, never junk
     def __init__(self, mid, W, D, H, wall, seed, archetype, plinth=(96, 94, 88), plinth_h=5.0):
         self.id = mid
         self.W, self.D, self.H = float(W), float(D), float(H)
@@ -343,8 +344,8 @@ class B:
             spot = self._free_wall_spot(16, 18, 2)
             if spot:
                 f.decals.append(('soot', dict(u=spot[0], v=spot[1], w=18, h=20)))
-        # roof: tarps weighed down with tyres, holes, junk
-        if self.roof_rise > 0 or True:
+        # roof: tarps weighed down with tyres, holes, junk (towns only)
+        if self.ROOF_JUNK:
             for _ in range(r.randint(1, 2)):
                 w, d = r.uniform(26, 50), r.uniform(18, 30)
                 x = r.uniform(self.x0 + w / 2 + 6, self.x1 - w / 2 - 6)
@@ -485,13 +486,29 @@ class B:
         mo = self.moss if moss is None else moss
         self.wear()
         self.apply_blockers()
-        c = render(self.m, grime=g + 0.05, rust=r + (0.05 if self.style in ('mech', 'rubezh') else 0.02), moss=mo + 0.03)
+        c = render_any(self, grime=g + 0.05, rust=r + (0.05 if self.style in ('mech', 'rubezh') else 0.02), moss=mo + 0.03)
         # leaves collect on roofs far more than on walls
         split = int(round((self.D / 2 - self.H - c.y0) * DENS))
         from wa_town import sprinkle_leaves
         c.img = sprinkle_leaves(c.img, self.seed, 0.010, rows=(0, max(1, split)))
         c.img = sprinkle_leaves(c.img, self.seed + 1, 0.0015)
         return c
+
+
+def render_any(b, **kw):
+    """Blender backend (tools/blender/town3d.py: real geometry, cast shadows,
+    recessed windows) when bpy is installed, the flat 2D painter otherwise or
+    with OSTATOK_FLAT_BUILDINGS=1."""
+    import os, sys
+    if os.environ.get('OSTATOK_FLAT_BUILDINGS') != '1':
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'blender'))
+            import town3d
+        except ImportError:
+            town3d = None
+        if town3d is not None:
+            return town3d.render_model(b.m, roof_fn=b.roof_fn, **kw)
+    return render(b.m, **kw)
 
 
 def norm3(v):

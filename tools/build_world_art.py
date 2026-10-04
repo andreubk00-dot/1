@@ -26,4 +26,10 @@ wa_buildings.build_all(P, os.path.join(P, 'world', 'settlement_building_models.g
 wa_hr_buildings.build_all(P, os.path.join(P, 'world', 'high_risk_building_models.gd'))
 wa_hr_props.build_all(P)
 wa_interior.build_all(P, prop_regions.load(os.path.join(P, 'main_script_mod.gd')))
+try:                                   # Blender-modelled vehicles / HR set pieces (needs bpy)
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'blender'))
+    import vehicles_hd
+    vehicles_hd.build_all(P)
+except ImportError:
+    print('bpy not installed: art/vehicles/vehicles_hd_v1.png left as is')
 print('world art ok')

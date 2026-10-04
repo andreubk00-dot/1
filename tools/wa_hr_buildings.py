@@ -19,6 +19,7 @@ reads as one world. Run:  python3 tools/wa_hr_buildings.py <project_dir>
 """
 import math
 import os
+import sys
 import random
 import zlib
 import numpy as np
@@ -82,6 +83,7 @@ def door_x(arch, W):
 
 
 class HB(B):
+    ROOF_JUNK = False
     WINDOW_WEAR = dict(B.WINDOW_WEAR)
     # broken, boarded, plywood, sandbags, taped, stovepipe
     WINDOW_WEAR.update({
@@ -125,16 +127,14 @@ class HB(B):
         if self.W > 300:
             for i in range(3):
                 x = self.x0 + self.W * (0.2 + 0.3 * i)
-                self.roof_patch(x, self.D * 0.25, 30, 16, r.choice(['tin_grey', 'steel_rust', 'tarp_green']))
-        for _ in range(int(self.W * self.D / 14000)):
-            x, y = r.uniform(self.x0 + 14, self.x1 - 14), r.uniform(self.y0 + 10, self.y1 - 10)
-            z = self.roof_z(x, y) + 0.4
-            pts = [V(x + math.cos(t) * r.uniform(6, 16), y + math.sin(t) * r.uniform(3, 8), z) for t in np.linspace(0, 2 * math.pi, 9, endpoint=False)]
-            self.m.poly3(pts, r.choice([(72, 86, 48), (90, 96, 56), (40, 40, 38)]), 'none', bias=164, outline=False)
-        if r.random() < 0.6:
-            self.sapling(r.uniform(self.x0 + 30, self.x1 - 30), self.D * 0.2, None, 16)
+                self.roof_patch(x, self.D * 0.25, 30, 16, r.choice(['tin_grey', 'steel_rust']))
 
     # ------------------------------------------------------------- roofscape --
+    def roof_patch(self, x, y, w, d, mat):
+        if mat.startswith('tarp'):
+            mat = {'tarp_blue': 'tin_grey', 'tarp_green': 'tin_olive', 'tarp_grey': 'tin_grey', 'tarp_orange': 'steel_rust'}.get(mat, 'tin_grey')
+        return super().roof_patch(x, y, w, d, mat)
+
     def roof_tier(self, x0, x1, y0, y1, h, mat='concrete_s', top=((74, 76, 74), 'tar')):
         """a raised upper storey set back on the roof (breaks the big flat plate)"""
         z = self.H
@@ -194,7 +194,8 @@ class HB(B):
                        self.rng.uniform(2.5, 4.5), (self.rng.choice(leaves), 'none'), segs=8, bias=241 + i * 0.01)
 
     def roof_life(self, density=1.0):
-        """membrane seams, puddles, moss, junk and saplings over a flat roof"""
+        """membrane seams and standing water over a flat roof (no junk: roofs carry
+        building elements only)"""
         r = self.rng
         area = self.W * self.D
         for _ in range(int(area / 9000 * density)):
@@ -204,15 +205,6 @@ class HB(B):
             if kind < 0.35:    # puddle
                 pts = [V(x + math.cos(a) * r.uniform(6, 16), y + math.sin(a) * r.uniform(4, 9), z) for a in np.linspace(0, 2 * math.pi, 10, endpoint=False)]
                 self.m.poly3(pts, (58, 70, 80), 'none', bias=164, outline=False)
-            elif kind < 0.6:   # moss / dirt drift
-                pts = [V(x + math.cos(a) * r.uniform(8, 22), y + math.sin(a) * r.uniform(5, 12), z) for a in np.linspace(0, 2 * math.pi, 10, endpoint=False)]
-                self.m.poly3(pts, r.choice([(72, 86, 48), (80, 70, 52), (90, 96, 56)]), 'earth', bias=163, outline=False,
-                             frame=(V(x - 20, y + 12, z), V(1, 0, 0), V(0, -1, 0)))
-            elif kind < 0.75:  # sapling
-                self.sapling(x, y, None, r.uniform(12, 22))
-            elif kind < 0.9:   # junk: crates, a mattress, a chair
-                w, d = r.uniform(4, 10), r.uniform(3, 7)
-                self.m.box(x - w, x + w, y - d, y + d, z, z + r.uniform(1.5, 5), (r.choice([(120, 96, 66), (150, 140, 120), (90, 100, 110)]), 'none'), bias=185)
             else:              # membrane seam strip
                 self.m.poly3([V(x - 40, y + 1.5, z), V(x + 40, y + 1.5, z), V(x + 40, y - 1.5, z), V(x - 40, y - 1.5, z)], (44, 46, 46), 'none', bias=162, outline=False)
 
@@ -315,11 +307,6 @@ class HB(B):
         for i in range(4):
             jx = x - w * 0.35 + i * w * 0.24
             self.m.line3([V(jx, y + d * 0.42, z0 + 1), V(jx + self.rng.uniform(-4, 4), y - d * 0.3, z1 - 3)], (96, 74, 52), 2, bias=167)
-        for i in range(10):
-            a = self.rng.uniform(0, 2 * math.pi)
-            px, py = x + math.cos(a) * w * 0.55, y + math.sin(a) * d * 0.55
-            self.m.box(px - 2, px + 2, py - 1.5, py + 1.5, self.roof_z(px, py), self.roof_z(px, py) + 2,
-                       (self.rng.choice([(150, 148, 138), (138, 80, 60), (110, 108, 100)]), 'none'), bias=168)
 
     def scorch(self, n=2):
         for _ in range(n):
@@ -1340,13 +1327,16 @@ MODELS = {
 }
 
 
+_render = WB.render_any
+
+
 def finish_hr(b):
     """HR buildings are more ruined than the towns: heavier grime, fewer leaves on clean roofs."""
     b.wear()
     b.apply_blockers()
-    c = render(b.m, grime=b.grime + 0.08, rust=b.rust + 0.04, moss=b.moss + 0.04)
+    c = _render(b, grime=b.grime + 0.08, rust=b.rust + 0.04, moss=b.moss + 0.04)
     split = int(round((b.D / 2 - b.H - c.y0) * DENS))
-    c.img = sprinkle_leaves(c.img, b.seed, 0.006, rows=(0, max(1, split)))
+    c.img = sprinkle_leaves(c.img, b.seed, 0.0015, rows=(0, max(1, split)))
     return c
 
 
@@ -1363,6 +1353,7 @@ def build_all(P, gd_path):
         for fn in fns:
             b = fn()
             c = finish_hr(b)
+            print("building", b.id, flush=True)
             img = c.img
             split = int(round((b.D / 2 - b.H - c.y0) * DENS))
             meta = {}
