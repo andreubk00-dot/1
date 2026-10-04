@@ -876,7 +876,8 @@ def bake(kind, fn, tmpdir, scale_fit=True):
     return bk.fit_cell(bk.to_sprite(raw, RENDER_CELL), CELL * bk.HD)
 
 
-def build_all(P, only=None, tmpdir=None):
+def build_all(P, only=None, tmpdir=None, cached=None):
+    """cached: directory of already baked <kind>.png sprites to reuse."""
     import tempfile
     tmpdir = tmpdir or tempfile.mkdtemp(prefix='ostatok_hd_')
     os.makedirs(tmpdir, exist_ok=True)
@@ -892,7 +893,8 @@ def build_all(P, only=None, tmpdir=None):
     for i, (kind, fn) in enumerate(KINDS):
         if only and kind not in only:
             continue
-        spr = bake(kind, fn, tmpdir)
+        cp = os.path.join(cached, kind + '.png') if cached else None
+        spr = Image.open(cp).convert('RGBA') if cp and os.path.exists(cp) else bake(kind, fn, tmpdir)
         x, y = (i % cols) * W, (i // cols) * W
         sheet.paste(Image.new('RGBA', (W, W)), (x, y))
         sheet.alpha_composite(spr, (x, y))

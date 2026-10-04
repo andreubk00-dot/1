@@ -218,7 +218,7 @@ class HB(B):
         tw = self.W * r.uniform(0.32, 0.45)
         tx = r.choice([self.x0 + tw / 2 + 14, self.x1 - tw / 2 - 14])
         self.roof_tier(tx - tw / 2, tx + tw / 2, self.y0 + 10, self.y0 + 10 + self.D * 0.34, 26, top=((74, 76, 74), 'tar'))
-        if rich:
+        if rich and getattr(self, 'lantern', True):
             lx = -tx * 0.55
             self.light_well(lx, self.y0 + self.D * 0.52, min(110, self.W * 0.24), 54)
             self.lantern_x = lx
@@ -580,6 +580,7 @@ def c_surgical():
     b.door(b.dx, canopy=('concrete_s', 24))
     b.storeys(3, 30, 40, 16, 50, first=18, style='strip', frame=(206, 206, 196), band=(176, 180, 170))
     b.signboard(b.dx, 94, 160, 9, col=(36, 52, 48), border=(200, 196, 170))
+    b.lantern = False                     # the roof is a helipad, no atrium lantern under it
     b.flat('tar', 'plaster', 6)
     b.helipad(80, -20, 52)
     b.penthouse(-150, -60, 70, 44, 20)

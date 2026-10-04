@@ -412,7 +412,7 @@ def _poly(pts, col, pat, frame, outline, rng, depth, roof_fn=None):
             # flat roof decals (holes, moss, puddles) follow sloped roofs
             for i, p in enumerate(pts):
                 need = roof_fn(p[0], p[1]) + 0.35 - p[2]
-                if 0 < need < 40:
+                if 0 < need < 8:          # follow slopes, never jump onto structures
                     lift[i] = need * math.sqrt(2)
     if frame is None:
         o = pts[0]
