@@ -547,16 +547,19 @@ def hazmat_drums():
 
 
 def body_bags():
+    """a row of zipped body bags laid out on plastic sheeting, tags at the feet."""
     blk = mat((36, 40, 36), rough=0.35, grime=0.1)
     wht = mat((188, 194, 188), rough=0.5, grime=0.15, dust=0.4)
+    box((0, 0, 0.2), (40, 30, 0.2), mat((70, 96, 110), rough=0.4, grime=0.2), bevel=0.1)       # sheeting
     for i in range(5):
-        x = -40 + i * 20
-        o = sphere((x, 0, 3.4), 1, blk if i % 2 else wht, scale=(7, 18, 3.4))
-        o.location = bk.G(x, 0, 3.4)
-        box((x, 0, 6.6), (0.3, 15, 0.2), mat((110, 110, 106), metal=0.5), bevel=0)
-        box((x, -15, 4), (2.4, 1.2, 1.4), mat((210, 200, 150)), bevel=0.3)            # toe tag
-    box((56, 10, 2.2), (6, 4, 2.2), mat((210, 196, 120), rough=0.9), bevel=1.2)       # lime sack
-    box((54, -6, 0.3), (8, 6, 0.3), mat((226, 222, 210), rough=1), bevel=0.2)         # lime spill
+        y = -22 + i * 11
+        x = (i % 2) * 3 - 2
+        o = sphere((x, y, 3.0), 1, blk if i % 2 else wht)
+        o.scale = (17, 4.6, 3.0)
+        box((x - 2, y + 4.6, 3.2), (13, 0.2, 0.25), mat((120, 120, 116), metal=0.5), bevel=0)    # zipper
+        box((x + 17, y, 2.2), (1.2, 2.4, 1.2), mat((210, 200, 150)), bevel=0.3)                  # toe tag
+    box((52, 12, 2.2), (6, 4, 2.2), mat((210, 196, 120), rough=0.9), bevel=1.2)                 # lime sack
+    box((52, -4, 0.3), (8, 6, 0.3), mat((226, 222, 210), rough=1), bevel=0.2)                   # lime spill
 
 
 def decon_tunnel():
@@ -564,10 +567,16 @@ def decon_tunnel():
     skin = mat((206, 208, 198), rough=0.7, grime=0.12, dust=0.5)
     rib = mat((150, 156, 148), rough=0.6)
     t = cyl((0, 0, 0), 18, 2 * L, skin, axis='x', bevel=0.8, verts=40)
-    t.scale = (1, 1, 22 / 18)
+    t.scale = (22 / 18, 1, 1)               # local x is world up after the axis rotation
     for i in range(9):
         r = cyl((-L + i * 2 * L / 8, 0, 0), 18.6, 1.6, rib, axis='x', bevel=0.4, verts=40)
-        r.scale = (1, 1, 22 / 18)
+        r.scale = (22 / 18, 1, 1)
+    # clear PVC windows and a side zip door
+    win = mat((120, 140, 140), rough=0.15, grime=0.1)
+    for x in (-45, -10, 25):
+        bk.panel([(x - 8, 17.2, 10), (x + 8, 17.2, 10), (x + 8, 15.2, 16), (x - 8, 15.2, 16)], win)
+    bk.panel([(48, 17.9, 0.5), (58, 17.9, 0.5), (58, 16.5, 13), (48, 16.5, 13)], mat((40, 70, 110), rough=0.4))
+    tube([(53, 18.2, 0.5), (53, 16.8, 13)], 0.25, mat((200, 200, 190)))
     # entrance frame and flap
     for s_ in (-1, 1):
         box((L + 2, s_ * 14, 12), (1.2, 1.2, 12), mat((206, 164, 44), rough=0.5), bevel=0.3)
