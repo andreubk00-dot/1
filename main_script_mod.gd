@@ -19422,6 +19422,32 @@ const SETTLEMENT_EMITTERS = {
     "field_kitchen":[Vector2(101,98),"smoke"],"furnace":[Vector2(61,69),"smoke"],"incinerator":[Vector2(117,65),"smoke"],
     "fire_barrel":[Vector2(86,147),"fire"],"bonfire":[Vector2(99,165),"fire"],"shanty":[Vector2(125,114),"smoke"]
 }
+# Vehicles and High Risk set pieces modelled in Blender (tools/blender/vehicles_hd.py): 384 px cells at
+# 2 texels per world unit, drawn at half the piece scale like the survivor sprites.
+const VEHICLE_HD_ALIAS = {
+    "btr":"btr80","ambulance":"uaz_ambulance","car_on_blocks":"car_on_blocks","burnt_car":"lada_burnt",
+    "hr:heli_wreck":"mi8_wreck","hr:tank_wreck":"t72_wreck","hr:burnt_ambulance":"uaz_burnt",
+    "hr:fuel_bowser":"kamaz_bowser","hr:generator_trailer":"gen_trailer","hr:cryo_trailer":"cryo_semi",
+    "hr:vent_head":"vent_head","hr:cooling_fans":"cooling_fans","hr:light_mast":"light_mast",
+    "hr:hazmat_drums":"hazmat_drums","hr:body_bags":"body_bags","hr:decon_tunnel":"decon_tunnel",
+    "hr:container_stack":"container_stack","hr:crater":"crater","hr:sandbag_wall":"sandbag_wall",
+    "hr:lattice_mast":"lattice_mast","hr:dragon_teeth":"dragon_teeth","hr:cable_spool_yard":"cable_spool_yard",
+    "hr:rail_cart":"rail_cart","hr:po2_fence":"po2_fence","hr:po2_fence_v":"po2_fence_v",
+    "hr:gate_pillar":"gate_pillar","hr:hospital_sign":"hospital_sign","hr:quarantine_sign":"quarantine_sign"
+}
+var _vehicle_hd_atlas = null
+var _vehicle_hd_checked = false
+
+func _vehicle_hd():
+    # HD atlas index (world/vehicle_hd_atlas.gd); null until the Blender bake exists
+    if not _vehicle_hd_checked:
+        _vehicle_hd_checked = true
+        if ResourceLoader.exists("res://world/vehicle_hd_atlas.gd"):
+            var scr = load("res://world/vehicle_hd_atlas.gd")
+            if scr != null and ResourceLoader.exists(str(scr.ATLAS)):
+                _vehicle_hd_atlas = scr
+    return _vehicle_hd_atlas
+
 const SETTLEMENT_STYLES = ["perron","rubezh","mechanics","lazaret"]
 const SETTLEMENT_WALL_Y_N = 30.0
 const SETTLEMENT_WALL_Y_S = 752.0
@@ -19515,9 +19541,22 @@ func _settlement_piece(chunk,piece:Dictionary):
         return prop
     var atlas_path = "res://settlement_props_v1.png"
     var index = SETTLEMENT_PIECE_KINDS.find(kind)
+    var cell = 192.0
+    var texel = 1.0
     if kind.begins_with("hr:"):
         atlas_path = "res://art/high_risk/hr_props_v1.png"
         index = HR_PIECE_KINDS.find(kind.trim_prefix("hr:"))
+    var hd_kind = str(VEHICLE_HD_ALIAS.get(kind,""))
+    if hd_kind == "burnt_car" or hd_kind == "lada_burnt":
+        # parked wrecks vary: a burnt shell or an abandoned saloon in one of three paints
+        var pick = int(abs(pos.x * 7.0 + pos.y * 13.0)) % 5
+        hd_kind = ["lada_burnt","lada_burnt","lada_blue","lada_red","lada_white"][pick]
+    var hd = _vehicle_hd()
+    if hd_kind != "" and hd != null and hd.KINDS.has(hd_kind):
+        atlas_path = hd.ATLAS
+        index = int(hd.KINDS[hd_kind])
+        cell = float(hd.CELL)
+        texel = 0.5
     if index < 0:
         return null
     var piece_scale = float(piece.get("scale",0.5))
@@ -19534,8 +19573,8 @@ func _settlement_piece(chunk,piece:Dictionary):
     _ellipse(Vector2(5,1),shadow_w,4.0,Color(0.01,0.012,0.012,0.26),node)
     var sprite = _facade_atlas_sprite(
         node,atlas_path,
-        Rect2((index % 6) * 192,int(index / 6) * 192,192,192),
-        Vector2(0,-96.0 * piece_scale),piece_scale
+        Rect2((index % 6) * cell,int(index / 6) * cell,cell,cell),
+        Vector2(0,-96.0 * piece_scale),piece_scale * texel
     )
     if sprite != null and bool(piece.get("flip",false)) and kind in ["market_stall","market_stall_b","chicken_coop","field_kitchen","car_on_blocks","scrap_heap","btr","ambulance","shanty","tarp_shelter","scrap_barricade","burnt_car","junk_pile","rubble_pile","dead_tree"]:
         sprite.flip_h = true
@@ -20637,8 +20676,15 @@ func _hr_perimeter(chunk,poi_id:String,offset:Vector2i,style:String):
                 # PO-2 panels are ~33 px wide in game: spread a whole number of them over the span
                 var n = max(1,int(floor((b - a) / 32.0)))
                 var step = (b - a) / float(n)
+                var hd = _vehicle_hd()
+                var po_idx = int(hd.KINDS.get("po2_fence",-1)) if hd != null else -1
+                var hc = float(hd.CELL) if hd != null else 192.0
                 for i in range(n):
-                    _facade_atlas_sprite(root,"res://art/high_risk/hr_props_v1.png",Rect2(0,3 * 192 + 96,192,96),Vector2(a + step * (float(i) + 0.5),c - 24.0),0.5)
+                    if po_idx >= 0:
+                        # bottom half of the HD PO-2 cell: 192 world-px cell art at 2 texels/unit, drawn at 0.5
+                        _facade_atlas_sprite(root,hd.ATLAS,Rect2((po_idx % 6) * hc,int(po_idx / 6) * hc + hc * 0.5,hc,hc * 0.5),Vector2(a + step * (float(i) + 0.5),c - 24.0),0.25)
+                    else:
+                        _facade_atlas_sprite(root,"res://art/high_risk/hr_props_v1.png",Rect2(0,3 * 192 + 96,192,96),Vector2(a + step * (float(i) + 0.5),c - 24.0),0.5)
                 _rect(Vector2((a + b) * 0.5,c + 3.0),Vector2(b - a,3.0),Color(0.01,0.012,0.012,0.22),root)
                 _add_static_rect(root,Vector2((a + b) * 0.5,c - 2.0),Vector2(b - a,8.0))
             else:
