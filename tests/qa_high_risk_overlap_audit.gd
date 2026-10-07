@@ -143,7 +143,9 @@ func run():
                 if ab.get_area() <= 0:
                     continue
                 var ak = str(a.get_meta("settlement_piece_kind",a.get_meta("poi_piece_kind",a.name)))
-                var ground = Rect2(ab.position.x,ab.end.y - min(ab.size.y,30.0),ab.size.x,min(ab.size.y,30.0))
+                # same footing as the game's placement check (lowest 45 % of the art, 16..46 px)
+                var gh = clamp(ab.size.y * 0.45,16.0,46.0)
+                var ground = Rect2(ab.position.x,ab.end.y - gh,ab.size.x,gh)
                 for b in buildings:
                     if ground.intersects(b["foot"].grow(-4)):
                         report("%s: piece %s stands inside building %s" % [tag,ak,b["id"]])

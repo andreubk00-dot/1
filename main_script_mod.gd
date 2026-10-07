@@ -18,6 +18,7 @@ var navigation_plan_frame = -1
 var pending_spawn_chunks:Array = []
 
 const RegionCatalog = preload("res://world/region_catalog.gd")
+const SpriteUsedRects = preload("res://world/sprite_used_rects.gd")
 const BuildingCatalog = preload("res://world/building_catalog.gd")
 const WorldContentVariety = preload("res://world/world_content_variety.gd")
 const ChunkLayoutCatalog = preload("res://world/chunk_layout_catalog.gd")
@@ -14635,12 +14636,24 @@ const WORLD_HD_TWINS = {
     "res://facade_details_v1.png":"res://art/world_hd/facade_details_hd.png"
 }
 var _world_hd_ok = {}
+var _hd_exists_cache = {}
+
+var world_hd_enabled = true
+
+func _hd_exists(path:String) -> bool:
+    if not world_hd_enabled:
+        return false
+    # ResourceLoader.exists hits the file system; chunk building asks the same
+    # handful of HD paths thousands of times per session.
+    if not _hd_exists_cache.has(path):
+        _hd_exists_cache[path] = ResourceLoader.exists(path)
+    return bool(_hd_exists_cache[path])
 
 func _world_hd_twin(path:String) -> String:
     if not WORLD_HD_TWINS.has(path):
         return ""
     if not _world_hd_ok.has(path):
-        _world_hd_ok[path] = ResourceLoader.exists(WORLD_HD_TWINS[path])
+        _world_hd_ok[path] = _hd_exists(WORLD_HD_TWINS[path])
     return WORLD_HD_TWINS[path] if _world_hd_ok[path] else ""
 
 func _facade_atlas_sprite(parent,path,region,pos,scale_value = 1.0):
@@ -15497,7 +15510,7 @@ func _roof_surface_sprite(parent,sign_text,size):
     # repeated at native density, framed by parapet or eave strips.
     var style = _roof_style_index(sign_text)
     var hd_path = "res://art/world_hd/roof_tile_s%d_hd.png" % style
-    var hd = ResourceLoader.exists(hd_path)
+    var hd = _hd_exists(hd_path)
     var tex = load(hd_path) if hd else load("res://roof_tile_s%d_v3.png" % style)
     if tex == null:
         hd = false
@@ -15526,7 +15539,7 @@ func _roof_surface_sprite(parent,sign_text,size):
     return sprite
 
 func _roof_edge_strips(parent,style,center,area):
-    var hd = ResourceLoader.exists("res://art/world_hd/roof_edge_h_s%d_hd.png" % style) and ResourceLoader.exists("res://art/world_hd/roof_edge_v_s%d_hd.png" % style)
+    var hd = _hd_exists("res://art/world_hd/roof_edge_h_s%d_hd.png" % style) and _hd_exists("res://art/world_hd/roof_edge_v_s%d_hd.png" % style)
     var h_tex = load(("res://art/world_hd/roof_edge_h_s%d_hd.png" if hd else "res://roof_edge_h_s%d_v1.png") % style)
     var v_tex = load(("res://art/world_hd/roof_edge_v_s%d_hd.png" if hd else "res://roof_edge_v_s%d_v1.png") % style)
     if h_tex == null or v_tex == null:
@@ -15560,7 +15573,7 @@ func _roof_edge_strips(parent,style,center,area):
         parent.add_child(strip)
 
 func _roof_prop_texture(index):
-    var hd = ResourceLoader.exists("res://art/world_hd/roof_props_hd.png")
+    var hd = _hd_exists("res://art/world_hd/roof_props_hd.png")
     var atlas = load("res://art/world_hd/roof_props_hd.png" if hd else "res://roof_props_v4.png")
     if atlas == null:
         return null
@@ -19724,9 +19737,34 @@ func _district_ground_path(coord) -> String:
     if family == "":
         return ""
     var path = "res://art/world_hd/ground_%s_hd.png" % family
-    return path if ResourceLoader.exists(path) else ""
+    return path if _hd_exists(path) else ""
+
+var _world_hd_keep = []
+
+func _ensure_world_hd_preloaded():
+    # Load every HD twin once, when the first chunk is built, instead of in the
+    # middle of a chunk transition (keeps chunk refresh spikes flat).
+    if not _world_hd_keep.is_empty():
+        return
+    var paths = WORLD_HD_TWINS.values()
+    for st in range(6):
+        paths.append("res://art/world_hd/roof_tile_s%d_hd.png" % st)
+        paths.append("res://art/world_hd/roof_edge_h_s%d_hd.png" % st)
+        paths.append("res://art/world_hd/roof_edge_v_s%d_hd.png" % st)
+    paths.append("res://art/world_hd/roof_props_hd.png")
+    paths.append("res://art/vehicles/world_cars_hd_v1.png")
+    paths.append("res://art/vehicles/vehicles_hd_v1.png")
+    paths.append("res://art/high_risk/hr_props_v1.png")
+    paths.append("res://settlement_props_v1.png")
+    for family in ["rural","woodland","military","industrial"]:
+        paths.append("res://art/world_hd/ground_%s_hd.png" % family)
+    for path in paths:
+        if _hd_exists(str(path)):
+            _world_hd_keep.append(load(str(path)))
+    _world_hd_keep.append(true)
 
 func _build_ground(chunk,coord):
+    _ensure_world_hd_preloaded()
     var ground_sprite = Sprite2D.new()
     var district_ground = _district_ground_path(coord) if coord != Vector2i(0,0) else ""
     if district_ground != "":
@@ -20790,6 +20828,7 @@ func _vehicle_hd():
                 _vehicle_hd_atlas = scr
     return _vehicle_hd_atlas
 
+const SETTLEMENT_FLIP_KINDS = ["market_stall","market_stall_b","chicken_coop","field_kitchen","car_on_blocks","scrap_heap","btr","ambulance","shanty","tarp_shelter","scrap_barricade","burnt_car","junk_pile","rubble_pile","dead_tree"]
 const SETTLEMENT_STYLES = ["perron","rubezh","mechanics","lazaret"]
 const SETTLEMENT_WALL_Y_N = 30.0
 const SETTLEMENT_WALL_Y_S = 752.0
@@ -20918,7 +20957,7 @@ func _settlement_piece(chunk,piece:Dictionary):
         Rect2((index % 6) * cell,int(index / 6) * cell,cell,cell),
         Vector2(0,-96.0 * piece_scale),piece_scale * texel
     )
-    if sprite != null and bool(piece.get("flip",false)) and kind in ["market_stall","market_stall_b","chicken_coop","field_kitchen","car_on_blocks","scrap_heap","btr","ambulance","shanty","tarp_shelter","scrap_barricade","burnt_car","junk_pile","rubble_pile","dead_tree"]:
+    if sprite != null and bool(piece.get("flip",false)) and kind in SETTLEMENT_FLIP_KINDS:
         sprite.flip_h = true
     if solid != Vector2.ZERO:
         _add_static_rect(node,Vector2(0,-solid.y * 0.5 + 2.0),solid)
@@ -21779,27 +21818,43 @@ func _hr_place(chunk,piece:Dictionary,search:float = 165.0):
     var solid = piece.get("solid",Vector2.ZERO)
     var radius = max(14.0,solid.x * 0.5)
     var origin = piece.get("pos",Vector2.ZERO)
+    # the collision radius is far smaller than the art: the real sprite is
+    # measured once (opaque bounds relative to the piece origin) and every
+    # candidate spot is checked against fences, buildings, doors and other
+    # pieces before a node is built there
+    var rel = _hr_piece_rel_box(chunk,piece)
     var ring = 0.0
     while ring <= search:
         var steps = 1 if ring == 0.0 else 12
         for k in range(steps):
-            var cand = origin + Vector2(cos(TAU * float(k) / float(steps)),sin(TAU * float(k) / float(steps)) * 0.7) * ring
+            var cand = (origin + Vector2(cos(TAU * float(k) / float(steps)),sin(TAU * float(k) / float(steps)) * 0.7) * ring).round()
             if not _hr_spot_clear(chunk,cand,radius):
                 continue
-            piece["pos"] = cand.round()
+            if rel.size.x > 0.0 and _hr_box_conflict(chunk,Rect2(rel.position + cand,rel.size),null):
+                continue
+            piece["pos"] = cand
             var node = _settlement_piece(chunk,piece)
             if node == null:
                 continue
-            # the collision radius is far smaller than the art: measure the real
-            # sprite and refuse spots where its footing lands on a fence, a
-            # building, a door or another set piece
-            if _hr_visual_conflict(chunk,node):
-                node.free()
+            if rel.size.x > 0.0:
+                node.set_meta("hr_visual_box",Rect2(rel.position + cand,rel.size))
+            elif _hr_visual_conflict(chunk,node):
+                node.free()                  # no precomputed bounds: measure the placed node
                 continue
             node.set_meta("high_risk_piece",str(piece.get("kind","")))
             return node
         ring += 15.0
     return null
+
+var _hr_rel_box_cache = {}
+
+func _hr_piece_rel_box(chunk,piece:Dictionary) -> Rect2:
+    var key = "%s|%s|%s" % [str(piece.get("kind","")),str(piece.get("scale",0.5)),str(piece.get("flip",false))]
+    if _hr_rel_box_cache.has(key):
+        return _hr_rel_box_cache[key]
+    var rel = _hr_measure_piece(piece)
+    _hr_rel_box_cache[key] = rel
+    return rel
 
 var _hr_used_cache = {}
 
@@ -21808,6 +21863,12 @@ func _hr_used_rect(tex:Texture2D) -> Rect2:
     var region = tex.region if tex is AtlasTexture else Rect2(Vector2.ZERO,tex.get_size())
     var key = str(atlas.resource_path) + str(region)
     if _hr_used_cache.has(key):
+        return _hr_used_cache[key]
+    # offline table first (tools/sprite_used_rects.py): never decompress a whole
+    # atlas during a chunk transition
+    var tkey = "%s|%d,%d,%d,%d" % [str(atlas.resource_path),int(region.position.x),int(region.position.y),int(region.size.x),int(region.size.y)]
+    if SpriteUsedRects.RECTS.has(tkey):
+        _hr_used_cache[key] = SpriteUsedRects.RECTS[tkey]
         return _hr_used_cache[key]
     var akey = "img:" + str(atlas.resource_path)
     if not _hr_used_cache.has(akey):
@@ -21853,6 +21914,46 @@ func _hr_visual_conflict(chunk,node) -> bool:
     if box.size.x <= 0.0:
         return false
     node.set_meta("hr_visual_box",box)
+    return _hr_box_conflict(chunk,box,node)
+
+func _hr_measure_piece(piece:Dictionary) -> Rect2:
+    # opaque bounds of a piece's sprite relative to its origin, from the same
+    # atlas cell, scale and anchor _settlement_piece uses (no node needed)
+    var kind = str(piece.get("kind",""))
+    if kind.begins_with("poi:") or kind.begins_with("street:") or kind.begins_with("prop:"):
+        return Rect2()
+    var atlas_path = "res://settlement_props_v1.png"
+    var index = SETTLEMENT_PIECE_KINDS.find(kind)
+    var cell = 192.0
+    var texel = 1.0
+    if kind.begins_with("hr:"):
+        atlas_path = "res://art/high_risk/hr_props_v1.png"
+        index = HR_PIECE_KINDS.find(kind.trim_prefix("hr:"))
+    var hd_kind = str(VEHICLE_HD_ALIAS.get(kind,""))
+    var hd = _vehicle_hd()
+    if hd_kind != "" and hd_kind != "lada_burnt" and hd != null and hd.KINDS.has(hd_kind):
+        atlas_path = hd.ATLAS
+        index = int(hd.KINDS[hd_kind])
+        cell = float(hd.CELL)
+        texel = 0.5
+    elif hd_kind == "lada_burnt":
+        return Rect2()                       # varies per position; measured after placement
+    if index < 0:
+        return Rect2()
+    var piece_scale = float(piece.get("scale",0.5))
+    var region = Rect2((index % 6) * cell,int(index / 6) * cell,cell,cell)
+    var tkey = "%s|%d,%d,%d,%d" % [atlas_path,int(region.position.x),int(region.position.y),int(region.size.x),int(region.size.y)]
+    if not SpriteUsedRects.RECTS.has(tkey):
+        return Rect2()
+    var used:Rect2 = SpriteUsedRects.RECTS[tkey]
+    if bool(piece.get("flip",false)) and kind in SETTLEMENT_FLIP_KINDS:
+        used.position.x = cell - used.end.x
+    var k = piece_scale * texel
+    # sprite centred at (0, -96 * piece_scale) with the cell scaled by k
+    var top_left = Vector2(-cell * 0.5 * k,-96.0 * piece_scale - cell * 0.5 * k)
+    return Rect2(top_left + used.position * k,used.size * k)
+
+func _hr_box_conflict(chunk,box:Rect2,node) -> bool:
     var foot = _hr_footing(box)
     for child in chunk.get_children():
         if child == node:
@@ -23657,7 +23758,7 @@ func _create_car(chunk,pos,color,angle):
     _ellipse(Vector2(0,9),28,5,Color(0.01,0.012,0.012,0.30),car)
     var sprite = Sprite2D.new()
     var car_atlas = load("res://car_v4.png")
-    var hd_cars = load("res://art/vehicles/world_cars_hd_v1.png") if ResourceLoader.exists("res://art/vehicles/world_cars_hd_v1.png") else null
+    var hd_cars = load("res://art/vehicles/world_cars_hd_v1.png") if _hd_exists("res://art/vehicles/world_cars_hd_v1.png") else null
     if hd_cars != null:
         # Blender-modelled Zhiguli / Niva / Moskvich in three views (side, nose to the
         # camera, tail to the camera): pick the view nearest to the heading and only
