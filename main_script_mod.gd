@@ -14624,7 +14624,15 @@ func _facade_height_for(sign_text,size,building_id = ""):
 # (tools/blender/world_hd.py). Same cell layout at 2 texels per world unit,
 # drawn at half scale like every other 3D-rendered asset in the game.
 const WORLD_HD_TWINS = {
-    "res://roof_details_v1.png":"res://art/world_hd/roof_details_hd.png"
+    "res://roof_details_v1.png":"res://art/world_hd/roof_details_hd.png",
+    "res://facade_wall_tiles_v4.png":"res://art/world_hd/facade_wall_tiles_hd.png",
+    "res://facade_bands_v1.png":"res://art/world_hd/facade_bands_hd.png",
+    "res://facade_windows_v1.png":"res://art/world_hd/facade_windows_hd.png",
+    "res://facade_features_v1.png":"res://art/world_hd/facade_features_hd.png",
+    "res://entrance_v2.png":"res://art/world_hd/entrance_hd.png",
+    "res://door_leaf_v1.png":"res://art/world_hd/door_leaf_hd.png",
+    "res://facade_extras_v1.png":"res://art/world_hd/facade_extras_hd.png",
+    "res://facade_details_v1.png":"res://art/world_hd/facade_details_hd.png"
 }
 var _world_hd_ok = {}
 
@@ -14797,7 +14805,9 @@ func _build_tall_facade(facade,sign_text,size,building_id,door_x,fh,profile = ""
     var leaf = _facade_atlas_sprite(facade,"res://door_leaf_v1.png",Rect2(style * 24,0,24,32),Vector2(door_x - leaf_w * 0.5,0.0))
     if leaf != null:
         leaf.centered = false
-        leaf.offset = Vector2(0,-32)
+        # offset is in texture pixels: the HD twin has twice as many
+        leaf.offset = Vector2(0,-32) if leaf.scale.x > 0.75 else Vector2(0,-64)
+        leaf.set_meta("leaf_base_scale",leaf.scale.y)
         leaf.add_to_group("front_door_leaves")
         leaf.set_meta("leaf_width",leaf_w)
         facade.set_meta("door_leaf",leaf)
@@ -18004,12 +18014,18 @@ func _find_breach_window_visual(facade,x):
 func _set_tall_window_state(sprite,style,state):
     if not is_instance_valid(sprite):
         return
-    var atlas = load("res://facade_windows_v1.png")
+    var path = "res://facade_windows_v1.png"
+    var k = 1.0
+    var twin = _world_hd_twin(path)
+    if twin != "" and sprite.scale.x < 0.75:
+        path = twin
+        k = 2.0
+    var atlas = load(path)
     if atlas == null:
         return
     var tex = AtlasTexture.new()
     tex.atlas = atlas
-    tex.region = Rect2(clamp(int(state),0,3) * 48,clamp(int(style),0,6) * 40,48,40)
+    tex.region = Rect2(clamp(int(state),0,3) * 48 * k,clamp(int(style),0,6) * 40 * k,48 * k,40 * k)
     sprite.texture = tex
     sprite.set_meta("window_state",clamp(int(state),0,3))
 
@@ -18253,7 +18269,8 @@ func _update_front_leaf(door):
         angle = abs(visual.rotation)
     var open_t = clamp(angle / (PI * 0.5),0.0,1.0)
     # swinging inward: the leaf narrows toward the hinge and falls into shadow
-    leaf.scale = Vector2(lerpf(1.0,0.14,open_t),1.0)
+    var base_k = float(leaf.get_meta("leaf_base_scale",1.0))
+    leaf.scale = Vector2(lerpf(1.0,0.14,open_t) * base_k,base_k)
     leaf.modulate = Color(1,1,1,1).lerp(Color(0.46,0.44,0.42,1),open_t)
     _align_shelter_damage_visual(door,leaf)
 
