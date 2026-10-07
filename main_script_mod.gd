@@ -20494,7 +20494,10 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
         )
 
     for fence_data in cell_data.get("fences",[]):
-        _create_fence(chunk,fence_data.get("pos",Vector2(384,80)),float(fence_data.get("length",120.0)),float(fence_data.get("rotation",0.0)))
+        if HighRiskSiteCatalog.has(poi_id):
+            _hr_fence(chunk,fence_data,poi_id,cell_offset)
+        else:
+            _create_fence(chunk,fence_data.get("pos",Vector2(384,80)),float(fence_data.get("length",120.0)),float(fence_data.get("rotation",0.0)))
     for lamp_pos in cell_data.get("lamps",[]):
         _create_lamp(chunk,lamp_pos)
     for bench_pos in cell_data.get("workbenches",[]):
@@ -21704,23 +21707,104 @@ func _hr_place(chunk,piece:Dictionary,search:float = 165.0):
     var solid = piece.get("solid",Vector2.ZERO)
     var radius = max(14.0,solid.x * 0.5)
     var origin = piece.get("pos",Vector2.ZERO)
-    var found = false
     var ring = 0.0
-    while ring <= search and not found:
+    while ring <= search:
         var steps = 1 if ring == 0.0 else 12
         for k in range(steps):
             var cand = origin + Vector2(cos(TAU * float(k) / float(steps)),sin(TAU * float(k) / float(steps)) * 0.7) * ring
-            if _hr_spot_clear(chunk,cand,radius):
-                piece["pos"] = cand.round()
-                found = true
-                break
+            if not _hr_spot_clear(chunk,cand,radius):
+                continue
+            piece["pos"] = cand.round()
+            var node = _settlement_piece(chunk,piece)
+            if node == null:
+                continue
+            # the collision radius is far smaller than the art: measure the real
+            # sprite and refuse spots where its footing lands on a fence, a
+            # building, a door or another set piece
+            if _hr_visual_conflict(chunk,node):
+                node.free()
+                continue
+            node.set_meta("high_risk_piece",str(piece.get("kind","")))
+            return node
         ring += 15.0
-    if not found:
-        return null
-    var node = _settlement_piece(chunk,piece)
-    if node != null:
-        node.set_meta("high_risk_piece",str(piece.get("kind","")))
-    return node
+    return null
+
+var _hr_used_cache = {}
+
+func _hr_used_rect(tex:Texture2D) -> Rect2:
+    var atlas = tex.atlas if tex is AtlasTexture else tex
+    var region = tex.region if tex is AtlasTexture else Rect2(Vector2.ZERO,tex.get_size())
+    var key = str(atlas.resource_path) + str(region)
+    if _hr_used_cache.has(key):
+        return _hr_used_cache[key]
+    var akey = "img:" + str(atlas.resource_path)
+    if not _hr_used_cache.has(akey):
+        var img = atlas.get_image()
+        if img != null and img.is_compressed():
+            img.decompress()
+        _hr_used_cache[akey] = img
+    var full = _hr_used_cache[akey]
+    var r = Rect2(Vector2.ZERO,region.size)
+    if full != null:
+        r = Rect2(full.get_region(Rect2i(region)).get_used_rect())
+    _hr_used_cache[key] = r
+    return r
+
+func _hr_visual_box(node:Node) -> Rect2:
+    # chunk-local bounds of the opaque art of a piece (all its sprites)
+    var box = Rect2()
+    var first = true
+    for s in node.find_children("*","Sprite2D",true,false):
+        if s.texture == null:
+            continue
+        var full:Rect2 = s.get_rect()
+        var used = _hr_used_rect(s.texture)
+        if used.size.x <= 0.0 or used.size.y <= 0.0:
+            continue
+        var ux = full.size.x - used.end.x if s.flip_h else used.position.x
+        var r = Rect2(full.position + Vector2(ux,used.position.y),used.size)
+        var xf:Transform2D = node.get_parent().global_transform.affine_inverse() * s.global_transform
+        for p in [xf * r.position,xf * Vector2(r.end.x,r.position.y),xf * r.end,xf * Vector2(r.position.x,r.end.y)]:
+            if first:
+                box = Rect2(p,Vector2.ZERO)
+                first = false
+            else:
+                box = box.expand(p)
+    return box
+
+func _hr_footing(box:Rect2) -> Rect2:
+    var gh = clamp(box.size.y * 0.45,16.0,46.0)
+    return Rect2(box.position.x,box.end.y - gh,box.size.x,gh)
+
+func _hr_visual_conflict(chunk,node) -> bool:
+    var box = _hr_visual_box(node)
+    if box.size.x <= 0.0:
+        return false
+    node.set_meta("hr_visual_box",box)
+    var foot = _hr_footing(box)
+    for child in chunk.get_children():
+        if child == node:
+            continue
+        if bool(child.get_meta("world_fence",false)):
+            var l = float(child.get_meta("fence_length",0.0))
+            var vertical = abs(sin(child.rotation)) > 0.7
+            var fr = Rect2(child.position - Vector2(4,l * 0.5),Vector2(8,l)) if vertical else Rect2(child.position - Vector2(l * 0.5,4),Vector2(l,8))
+            # flat pieces (craters, bags, drums) must not be crossed anywhere
+            if fr.intersects(foot) or (box.size.y < 70.0 and fr.intersects(box)):
+                return true
+        elif child.has_meta("world_building"):
+            var sz:Vector2 = child.get_meta("building_size",Vector2.ZERO)
+            if foot.intersects(Rect2(child.position - sz * 0.5,sz).grow(4.0)):
+                return true
+            var door = child.position + Vector2(float(child.get_meta("door_local_x",0.0)),sz.y * 0.5)
+            if foot.grow(16.0).has_point(door):
+                return true
+        elif child.has_meta("hr_visual_box"):
+            var other = _hr_footing(child.get_meta("hr_visual_box"))
+            var ov = foot.intersection(other).get_area() if foot.intersects(other) else 0.0
+            if ov > min(foot.get_area(),other.get_area()) * 0.15:
+                return true
+    return false
 
 func _dress_high_risk_site(chunk,coord,poi_id:String,cell_offset:Vector2i,cell_data:Dictionary) -> void:
     var site = HighRiskSiteCatalog.site(poi_id)
@@ -21910,6 +21994,69 @@ func _hr_paint(layer,kind:String,offset:Vector2i,rng):
             _hr_dash(layer,Vector2(20,466),Vector2(748,466),Color(0.80,0.80,0.74,0.35),18,16,2,rng)
 
 # ---------------------------------------------------------------- perimeter --
+# ------------------------------------------------------- High Risk fences --
+# The authored chain-link chokepoints of a High Risk sector were laid out for the
+# old building footprints. Cut each fence into 31 px sections and only build the
+# runs that do not cross a building or stand in front of its facade, block a
+# door, or double the PO-2 perimeter wall; stubs shorter than two sections go.
+func _hr_fence_blocked(chunk,rect:Rect2,sides:Dictionary) -> bool:
+    for child in chunk.get_children():
+        if not child.has_meta("world_building"):
+            continue
+        var sz:Vector2 = child.get_meta("building_size",Vector2.ZERO)
+        var foot = Rect2(child.position - sz * 0.5,sz)
+        # footprint plus the strip in front of the south facade (canopies, steps)
+        if rect.intersects(foot.grow_individual(10,10,10,26)):
+            return true
+        var door = child.position + Vector2(float(child.get_meta("door_local_x",0.0)),sz.y * 0.5)
+        if rect.grow(44.0).has_point(door):
+            return true
+    if sides.has("n") and rect.position.y < 52.0:
+        return true
+    if sides.has("s") and rect.end.y > 716.0:
+        return true
+    if sides.has("w") and rect.position.x < 50.0:
+        return true
+    if sides.has("e") and rect.end.x > 718.0:
+        return true
+    return false
+
+func _hr_fence(chunk,fence_data:Dictionary,poi_id:String,cell_offset:Vector2i):
+    var pos:Vector2 = fence_data.get("pos",Vector2(384,80))
+    var length = float(fence_data.get("length",120.0))
+    var rot = float(fence_data.get("rotation",0.0))
+    var vertical = abs(sin(rot)) > 0.7
+    var fp = PoiCatalog.footprint(poi_id)
+    var sides = {}
+    for d in [["n",Vector2i(0,-1)],["s",Vector2i(0,1)],["w",Vector2i(-1,0)],["e",Vector2i(1,0)]]:
+        if not fp.has(cell_offset + d[1]):
+            sides[d[0]] = true
+    var seg = 31.0
+    var n = max(1,int(ceil(length / seg)))
+    var keep = []
+    for i in range(n):
+        var t = -length * 0.5 + seg * (float(i) + 0.5)
+        var c = pos + (Vector2(0,t) if vertical else Vector2(t,0))
+        var r = Rect2(c - Vector2(4,seg * 0.5),Vector2(8,seg)) if vertical else Rect2(c - Vector2(seg * 0.5,4),Vector2(seg,8))
+        keep.append(not _hr_fence_blocked(chunk,r,sides))
+    var kept = 0
+    var i = 0
+    while i < n:
+        if not keep[i]:
+            i += 1
+            continue
+        var j = i
+        while j < n and keep[j]:
+            j += 1
+        if j - i >= 2:
+            var a = -length * 0.5 + seg * float(i)
+            var b = min(length * 0.5,-length * 0.5 + seg * float(j))
+            var mid = (a + b) * 0.5
+            _create_fence(chunk,pos + (Vector2(0,mid) if vertical else Vector2(mid,0)),b - a,rot)
+            kept += 1
+        i = j
+    chunk.set_meta("hr_fence_runs",int(chunk.get_meta("hr_fence_runs",0)) + kept)
+
 func _hr_perimeter(chunk,poi_id:String,offset:Vector2i,style:String):
     var fp = PoiCatalog.footprint(poi_id)
     var sides = {}
@@ -21970,6 +22117,7 @@ func _hr_perimeter(chunk,poi_id:String,offset:Vector2i,style:String):
             var pos = Vector2(g,c + 2.0) if horizontal else Vector2(c,g + 6.0)
             var pillar = _settlement_piece(chunk,{"kind":"hr:gate_pillar","pos":pos,"scale":0.5,"solid":Vector2(12,8),"flip":false})
             if pillar != null:
+                pillar.set_meta("hr_visual_box",_hr_visual_box(pillar))
                 _add_detail_light(pillar,Vector2(0,-38),Color(1.0,0.88,0.62),0.45,0.9,true)
 
 func _chunk_has_player_base(coord:Vector2i) -> bool:
@@ -23594,6 +23742,7 @@ func _create_fence(chunk,pos,length,rotation_value = 0.0):
             _rect(Vector2(x,-3),Vector2(3,28),Color("4a4f4b"),fence)
             _rect(Vector2(x-4,-10),Vector2(8,2),Color("80857d"),fence)
     _add_static_rect(fence,Vector2(0,0),Vector2(length,6))
+    return fence
 
 
 

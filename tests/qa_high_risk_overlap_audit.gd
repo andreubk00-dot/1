@@ -134,7 +134,8 @@ func run():
                         report("%s: %s doubles the PO-2 perimeter" % [tag,fl])
                 for p in pieces:
                     var pb = _sprite_box(p)
-                    if pb.get_area() > 0 and _inter_area(fb.grow_individual(0,24,0,0),pb) > 40.0:
+                    var pfoot = Rect2(pb.position.x,pb.end.y - clamp(pb.size.y * 0.45,16.0,46.0),pb.size.x,clamp(pb.size.y * 0.45,16.0,46.0))
+                    if pb.get_area() > 0 and (fb.intersects(pfoot) or (pb.size.y < 70.0 and fb.intersects(pb))):
                         report("%s: %s cuts through piece %s" % [tag,fl,str(p.get_meta("settlement_piece_kind",p.name))])
             for i in range(pieces.size()):
                 var a = pieces[i]
@@ -153,10 +154,12 @@ func run():
                     var cb = _sprite_box(c)
                     if cb.get_area() <= 0:
                         continue
-                    var ov = _inter_area(ab,cb)
-                    if ov > min(ab.get_area(),cb.get_area()) * 0.30:
+                    var af = Rect2(ab.position.x,ab.end.y - clamp(ab.size.y * 0.45,16.0,46.0),ab.size.x,clamp(ab.size.y * 0.45,16.0,46.0))
+                    var cf = Rect2(cb.position.x,cb.end.y - clamp(cb.size.y * 0.45,16.0,46.0),cb.size.x,clamp(cb.size.y * 0.45,16.0,46.0))
+                    var ov = _inter_area(af,cf)
+                    if ov > min(af.get_area(),cf.get_area()) * 0.15:
                         var ck = str(c.get_meta("settlement_piece_kind",c.get_meta("poi_piece_kind",c.name)))
-                        report("%s: piece %s overlaps piece %s (%d%%)" % [tag,ak,ck,int(100.0 * ov / min(ab.get_area(),cb.get_area()))])
-            print("AUDIT ",tag," buildings=",buildings.size()," fences=",fences.size()," pieces=",pieces.size())
+                        report("%s: piece %s overlaps piece %s (%d%%)" % [tag,ak,ck,int(100.0 * ov / min(af.get_area(),cf.get_area()))])
+            print("AUDIT ",tag," buildings=",buildings.size()," fences=",fences.size()," pieces=",pieces.size()," skipped=",chunk.get_meta("high_risk_pieces_skipped",[]))
     print("HIGH RISK OVERLAP AUDIT: ",issues," issues")
     quit(0)
