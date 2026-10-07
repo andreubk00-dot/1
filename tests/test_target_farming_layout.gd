@@ -42,8 +42,10 @@ func run():
     await process_frame
 
     var farm_specs = {
+        "dacha_coop_zarya":{"profile":"rural_secure","days":4},
         "district_hospital":{"profile":"medical_secure","days":5},
         "district_police":{"profile":"police_secure","days":6},
+        "rail_depot":{"profile":"industrial_secure","days":7},
         "hunting_cordon":{"profile":"hunting_secure","days":6},
         "factory_7":{"profile":"industrial_secure","days":7},
         "military_checkpoint":{"profile":"military_secure","days":8},
@@ -70,7 +72,7 @@ func run():
             check(parts.size() >= 4 and parts[2] == "container", poi_id + " malformed target cache key " + str(key))
         check(unique.size() == keys.size(), poi_id + " target cache keys are not unique")
 
-    for ordinary_id in ["central_clinic","garage_coop_sever","rail_depot","dacha_coop_zarya"]:
+    for ordinary_id in ["central_clinic","garage_coop_sever"]:
         var ordinary = RegionCatalog.poi_by_id(ordinary_id)
         check(game._target_farm_profile(ordinary) == "", ordinary_id + " accidentally became renewable target farm")
         check(game._target_farm_refresh_days(ordinary) == 0, ordinary_id + " ordinary POI has a cooldown")

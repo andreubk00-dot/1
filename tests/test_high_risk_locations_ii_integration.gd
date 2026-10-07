@@ -180,7 +180,8 @@ func run():
     check(int(clinical_mix.get("runner",0)) > int(vector_mix.get("runner",0)), "clinical core needs stronger runner pressure than Vector core")
 
     # Independent site-level cooldowns. A full core clear schedules refresh; partial
-    # looting does not. Refresh restores all threats in that POI but not the other site.
+    # looting does not. Reoccupation always restores deep/core pressure, while the
+    # outer perimeter may stay partly cleared; another POI must remain untouched.
     game.container_states = {}
     game.loot_refresh_sites = {}
     game.defeated = {}
@@ -199,8 +200,10 @@ func run():
 
     var clinical_anchor:Vector2i = clinical.get("coord",Vector2i.ZERO)
     var vector_anchor:Vector2i = vector.get("coord",Vector2i.ZERO)
-    var clinical_dead = "%d:%d:%d" % [clinical_anchor.x,clinical_anchor.y,0]
-    var vector_dead = "%d:%d:%d" % [vector_anchor.x,vector_anchor.y,0]
+    var clinical_core_coord = clinical_anchor + PoiCatalog.compound(clinical_id).get("core_offset",Vector2i.ZERO)
+    var vector_core_coord = vector_anchor + PoiCatalog.compound(vector_id).get("core_offset",Vector2i.ZERO)
+    var clinical_dead = "%d:%d:%d" % [clinical_core_coord.x,clinical_core_coord.y,0]
+    var vector_dead = "%d:%d:%d" % [vector_core_coord.x,vector_core_coord.y,0]
     var unrelated_dead = "99:99:0"
     game.defeated[clinical_dead] = true
     game.defeated[vector_dead] = true

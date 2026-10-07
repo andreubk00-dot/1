@@ -217,6 +217,8 @@ const POIS = [
         "district":"rail_corridor",
         "risk":4,
         "loot":"industrial",
+        "farm_profile":"industrial_secure",
+        "refresh_days":7,
         "status":"active",
         "description":"Трёхсекционное депо: локомотивный цех, управление и грузовой двор."
     },
@@ -230,6 +232,8 @@ const POIS = [
         "district":"dacha_west",
         "risk":2,
         "loot":"rural",
+        "farm_profile":"rural_secure",
+        "refresh_days":4,
         "status":"active",
         "description":"Дачный кооператив с разными участками, домами, сараями и садовыми зонами."
     },

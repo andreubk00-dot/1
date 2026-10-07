@@ -7,6 +7,7 @@ var save_calls = 0
 # Keep headless tests silent so immediate suite shutdown cannot leave AudioServer
 # playback objects alive. test_weapon_audio explicitly enables the real layer.
 var test_audio_enabled := false
+var test_world_audio_enabled := false
 
 func _play_weapon_shot_audio(weapon_id,weapon = {},instance_id = ""):
     if test_audio_enabled:
@@ -23,6 +24,11 @@ func _play_weapon_cycle_audio(profile):
 func _play_dry_fire_audio():
     if test_audio_enabled:
         super._play_dry_fire_audio()
+
+func _play_world_sfx(kind, volume_db = -12.0, pitch_variation = 0.018):
+    if test_world_audio_enabled:
+        return super._play_world_sfx(kind,volume_db,pitch_variation)
+    return false
 
 func _ready():
     set_process(false)

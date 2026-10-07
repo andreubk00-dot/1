@@ -6,7 +6,14 @@ const BOARDS = {
     "perron_steward":{"faction":"perron","name":"Вера Андреевна","label":"ХОЗЯЙСТВЕННЫЕ ПОРУЧЕНИЯ"},
     "rubezh_dispatch":{"faction":"rubezh","name":"Ирина","label":"ДИСПЕТЧЕРСКАЯ РУБЕЖА"},
     "mechanics_electrician":{"faction":"mechanics","name":"Гена","label":"ЗАКАЗЫ АРТЕЛИ"},
-    "lazaret_doctor":{"faction":"lazaret","name":"Доктор Миронова","label":"СНАБЖЕНИЕ ЛАЗАРЕТА"}
+    "lazaret_doctor":{"faction":"lazaret","name":"Доктор Миронова","label":"СНАБЖЕНИЕ ЛАЗАРЕТА"},
+
+    # 1.23-dev4: authored personal boards live on non-trader named residents so the
+    # settlement gains new reasons to revisit without stealing an existing shop interaction.
+    "perron_radio":{"faction":"perron","name":"Лёнька","label":"ЛИЧНЫЙ ЭФИР","personal":true},
+    "rubezh_commander":{"faction":"rubezh","name":"Капитан Орлов","label":"ПОРУЧЕНИЯ ОРЛОВА","personal":true},
+    "mechanics_storekeeper":{"faction":"mechanics","name":"Клык","label":"ПОРУЧЕНИЯ КЛЫКА","personal":true},
+    "lazaret_researcher":{"faction":"lazaret","name":"Аркадий","label":"ПОРУЧЕНИЯ АРКАДИЯ","personal":true}
 }
 
 # requirements for delivery contracts are alternatives: satisfying any inner array is valid.
@@ -27,9 +34,9 @@ const TEMPLATES = {
         "reward":{"tickets":78,"reputation":10,"resources":{"technical":12.0,"food":5.0}}
     },
     "perron_zarya_route":{
-        "faction":"perron","title":"ДОРОГА К «ЗАРЕ»","kind":"discover_poi","need_key":"security","min_rep":25,
-        "description":"Перрон хочет понять, можно ли снова использовать дорогу через дачные массивы.",
-        "hint":"Проверь СНТ «Заря» западнее города и вернись с наблюдениями. Точная точка не отмечается.",
+        "faction":"perron","title":"ДОРОГА К «ЗАРЕ»","kind":"discover_poi","need_key":"security","min_rep":8,"starter_recon":true,
+        "description":"Перрон хочет вернуть гражданский путь через дачные массивы: продукты, воду и безопасные ночёвки вне города.",
+        "hint":"Проверь СНТ «Заря» западнее города и вернись с наблюдениями. Это сравнительно тихий район, но территория большая. Точная точка не отмечается.",
         "poi_id":"dacha_coop_zarya",
         "reward":{"tickets":86,"reputation":11,"resources":{"security":10.0,"food":5.0},"route":{"id":"route_perron_zarya","beneficiaries":["perron"],"daily_resources":{"food":0.35,"security":0.25}}}
     },
@@ -42,9 +49,9 @@ const TEMPLATES = {
         "reward":{"tickets":74,"reputation":9,"resources":{"security":13.0}}
     },
     "rubezh_police_route":{
-        "faction":"rubezh","title":"СТАРЫЙ ПОЛИЦЕЙСКИЙ МАРШРУТ","kind":"discover_poi","need_key":"security","min_rep":25,
-        "description":"Диспетчерская хочет восстановить безопасный коридор через старый районный отдел.",
-        "hint":"Найди районный отдел полиции в западной панельной застройке и осмотри подходы.",
+        "faction":"rubezh","title":"СТАРЫЙ ПОЛИЦЕЙСКИЙ МАРШРУТ","kind":"discover_poi","need_key":"security","min_rep":9,"starter_recon":true,
+        "description":"Диспетчерская хочет восстановить безопасный коридор через старый районный отдел и проверить, остались ли там служебные резервы.",
+        "hint":"Найди районный отдел полиции в западной панельной застройке и осмотри подходы. Риск выше дач: двор тесный и подходы хуже просматриваются.",
         "poi_id":"district_police",
         "reward":{"tickets":94,"reputation":12,"resources":{"security":14.0,"technical":3.0},"route":{"id":"route_rubezh_police","beneficiaries":["rubezh","perron"],"daily_resources":{"security":0.45}}}
     },
@@ -64,9 +71,9 @@ const TEMPLATES = {
         "reward":{"tickets":82,"reputation":9,"resources":{"technical":16.0}}
     },
     "mechanics_rail_depot":{
-        "faction":"mechanics","title":"ДЕПО: ПРОВЕРКА ПОДХОДОВ","kind":"discover_poi","need_key":"security","min_rep":25,
-        "description":"Артель хочет снова вывозить тяжёлые детали из железнодорожного депо.",
-        "hint":"Осмотри железнодорожное депо у промышленной ветки и оцени, можно ли провести грузовую группу.",
+        "faction":"mechanics","title":"ДЕПО: ПРОВЕРКА ПОДХОДОВ","kind":"discover_poi","need_key":"security","min_rep":9,"starter_recon":true,
+        "description":"Артель хочет снова вывозить тяжёлые детали и ремонтные узлы из железнодорожного депо.",
+        "hint":"Осмотри железнодорожное депо у промышленной ветки и оцени, можно ли провести грузовую группу. Это самый опасный из первых самостоятельных маршрутов.",
         "poi_id":"rail_depot",
         "reward":{"tickets":98,"reputation":12,"resources":{"technical":12.0,"security":7.0},"route":{"id":"route_mechanics_depot","beneficiaries":["mechanics","perron"],"daily_resources":{"technical":0.50,"security":0.20}}}
     },
@@ -86,9 +93,12 @@ const TEMPLATES = {
         "reward":{"tickets":68,"reputation":9,"resources":{"medicine":15.0}}
     },
     "lazaret_hospital_route":{
-        "faction":"lazaret","title":"РАЙОННАЯ БОЛЬНИЦА","kind":"discover_poi","need_key":"medicine","min_rep":25,
-        "description":"Медики хотят восстановить вылазки к районной больнице за расходниками.",
-        "hint":"Найди районную больницу на восточной стороне города и проверь пути к хозяйственному двору.",
+        # dev12: this is the first natural sandbox reconnaissance after a successful
+        # Lazaret vertical slice. The recovered first convoy + emergency delivery
+        # reaches this threshold without granting any free reputation.
+        "faction":"lazaret","title":"РАЙОННАЯ БОЛЬНИЦА","kind":"discover_poi","need_key":"medicine","min_rep":10,"starter_recon":true,
+        "description":"Медики хотят восстановить вылазки к районной больнице за расходниками и резервами для тяжёлых случаев.",
+        "hint":"Найди районную больницу на восточной стороне города и проверь пути к хозяйственному двору. Ожидай средний риск и тесные лечебные корпуса.",
         "poi_id":"district_hospital",
         "reward":{"tickets":96,"reputation":12,"resources":{"medicine":14.0,"security":5.0},"route":{"id":"route_lazaret_hospital","beneficiaries":["lazaret"],"daily_resources":{"medicine":0.55,"security":0.15}}}
     },
@@ -98,6 +108,105 @@ const TEMPLATES = {
         "hint":"Найди внешний сектор карантинного центра. Это дальняя и опасная задача; проникать глубже ради отчёта не требуется.",
         "poi_id":"quarantine_center_12",
         "reward":{"tickets":142,"reputation":15,"resources":{"medicine":16.0,"security":9.0},"route":{"id":"route_lazaret_quarantine","beneficiaries":["lazaret","rubezh"],"daily_resources":{"medicine":0.45,"security":0.35}}}
+    },
+
+    # 1.23-dev4 — personal, authored 2-step chains. These are deliberately separate
+    # from the rotating faction board: one named resident owns the story, offers expire
+    # quickly, accepted work has a real deadline, and abandoning/failing has consequences.
+    "perron_radio_backup_power":{
+        "faction":"perron","owner_npc_id":"perron_radio","chain_id":"perron_radio_net","chain_step":1,
+        "title":"ЭФИР: РЕЗЕРВНОЕ ПИТАНИЕ","kind":"delivery","need_key":"technical","min_rep":25,
+        "description":"Лёнька пытается держать приёмник включённым ночью, когда общая сеть проседает. Ему нужен отдельный резерв для радиорубки.",
+        "hint":"Это личное поручение: оно не висит на общем хозяйственном стенде. После ремонта Лёнька хочет проверить старую ведомственную частоту.",
+        "requirements":[[{"id":"repair_kit","qty":1},{"id":"scrap","qty":5}],[{"id":"scrap","qty":9},{"id":"tape","qty":3},{"id":"flashlight","qty":1}]],
+        "offer_lifetime_days":2,"active_lifetime_days":4,"npc_attitude_reward":7,
+        "abandon_penalty":{"reputation":-1,"attitude":-4},
+        "failure_penalty":{"reputation":-3,"attitude":-7,"resources":{"technical":-2.0}},
+        "reward":{"tickets":54,"reputation":6,"resources":{"technical":5.0,"security":2.0}}
+    },
+    "perron_radio_dead_frequency":{
+        "faction":"perron","owner_npc_id":"perron_radio","chain_id":"perron_radio_net","chain_step":2,
+        "requires_completed":["perron_radio_backup_power"],"once_completed":true,
+        "title":"ЭФИР: МЁРТВАЯ ЧАСТОТА","kind":"discover_poi","need_key":"security","min_rep":25,
+        "description":"После ремонта Лёнька поймал обрывки ведомственного сигнала. Источник похож на старую полицейскую сеть — нужно понять, осталось ли там что-то рабочее.",
+        "hint":"Проверь районный отдел полиции в западной панельной застройке и вернись. Точной метки Лёнька дать не может.",
+        "poi_id":"district_police","offer_lifetime_days":2,"active_lifetime_days":5,"npc_attitude_reward":9,
+        "abandon_penalty":{"reputation":-1,"attitude":-4},
+        "failure_penalty":{"reputation":-4,"attitude":-8,"resources":{"security":-2.0}},
+        "reward":{"tickets":82,"reputation":8,"resources":{"security":7.0,"technical":4.0},
+            "route":{"id":"route_perron_warning_net","kind":"comms","beneficiaries":["perron","rubezh"],"daily_resources":{"security":0.16,"food":0.06}}}
+    },
+
+    "rubezh_commander_missing_post":{
+        "faction":"rubezh","owner_npc_id":"rubezh_commander","chain_id":"rubezh_forward_watch","chain_step":1,
+        "title":"ОРЛОВ: ПРОПАВШИЙ ПОСТ","kind":"discover_poi","need_key":"security","min_rep":25,
+        "description":"Один из дальних постов Рубежа перестал выходить на связь. Орлов не просит геройствовать — ему нужна подтверждённая обстановка на старом охотничьем кордоне.",
+        "hint":"Найди охотничий кордон и осмотри район. Если место уже известно, достаточно вернуться с актуальным докладом.",
+        "poi_id":"hunting_cordon","offer_lifetime_days":2,"active_lifetime_days":4,"npc_attitude_reward":7,
+        "abandon_penalty":{"reputation":-1,"attitude":-4},
+        "failure_penalty":{"reputation":-4,"attitude":-7,"resources":{"security":-3.0}},
+        "reward":{"tickets":66,"reputation":7,"resources":{"security":6.0}}
+    },
+    "rubezh_commander_forward_cache":{
+        "faction":"rubezh","owner_npc_id":"rubezh_commander","chain_id":"rubezh_forward_watch","chain_step":2,
+        "requires_completed":["rubezh_commander_missing_post"],"once_completed":true,
+        "title":"ОРЛОВ: ПЕРЕДОВОЙ ЗАПАС","kind":"delivery","need_key":"security","min_rep":25,
+        "description":"Кордоном снова можно пользоваться, но без отдельного запаса патруль будет каждый раз возвращаться за мелочами. Орлов просит собрать комплект для скрытого поста.",
+        "hint":"Подойдёт лёгкий боезапас с перевязкой либо дробовые патроны с ремонтным комплектом.",
+        "requirements":[[{"id":"ammo_9x18","qty":24},{"id":"bandage","qty":3}],[{"id":"ammo_12g","qty":10},{"id":"repair_kit","qty":1}]],
+        "offer_lifetime_days":2,"active_lifetime_days":4,"npc_attitude_reward":9,
+        "abandon_penalty":{"reputation":-2,"attitude":-5},
+        "failure_penalty":{"reputation":-5,"attitude":-9,"resources":{"security":-3.0}},
+        "reward":{"tickets":92,"reputation":9,"resources":{"security":9.0},
+            "route":{"id":"route_rubezh_cordon_watch","kind":"patrol","beneficiaries":["rubezh"],"daily_resources":{"security":0.22}}}
+    },
+
+    "mechanics_storekeeper_haul_gear":{
+        "faction":"mechanics","owner_npc_id":"mechanics_storekeeper","chain_id":"mechanics_heavy_haul","chain_step":1,
+        "title":"КЛЫК: ТЯЖЁЛАЯ ТЕЛЕЖКА","kind":"delivery","need_key":"technical","min_rep":25,
+        "description":"Клык собрал раму для грузовой тележки, но без нормальных креплений она развалится на первом же разбитом переезде.",
+        "hint":"Нужен один хороший ремкомплект и металл — либо больше сырья и ленты, если готового комплекта нет.",
+        "requirements":[[{"id":"repair_kit","qty":1},{"id":"scrap","qty":7}],[{"id":"scrap","qty":13},{"id":"tape","qty":4}]],
+        "offer_lifetime_days":2,"active_lifetime_days":4,"npc_attitude_reward":7,
+        "abandon_penalty":{"reputation":-1,"attitude":-4},
+        "failure_penalty":{"reputation":-3,"attitude":-7,"resources":{"technical":-3.0}},
+        "reward":{"tickets":62,"reputation":6,"resources":{"technical":7.0}}
+    },
+    "mechanics_storekeeper_depot_run":{
+        "faction":"mechanics","owner_npc_id":"mechanics_storekeeper","chain_id":"mechanics_heavy_haul","chain_step":2,
+        "requires_completed":["mechanics_storekeeper_haul_gear"],"once_completed":true,
+        "title":"КЛЫК: ПРОБНЫЙ ВЫВОЗ","kind":"discover_poi","need_key":"technical","min_rep":25,
+        "description":"Тележка готова. Клык хочет проверить, можно ли протащить её к железнодорожному депо и обратно без потери колёс и груза.",
+        "hint":"Осмотри железнодорожное депо и подходы. Если ты уже бывал там раньше, достаточно нового прохода и доклада Клыку.",
+        "poi_id":"rail_depot","offer_lifetime_days":2,"active_lifetime_days":5,"npc_attitude_reward":9,
+        "abandon_penalty":{"reputation":-1,"attitude":-4},
+        "failure_penalty":{"reputation":-4,"attitude":-8,"resources":{"technical":-3.0}},
+        "reward":{"tickets":88,"reputation":8,"resources":{"technical":10.0,"security":3.0},
+            "route":{"id":"route_mechanics_handcart","kind":"salvage","beneficiaries":["mechanics"],"daily_resources":{"technical":0.20}}}
+    },
+
+    "lazaret_researcher_old_archive":{
+        "faction":"lazaret","owner_npc_id":"lazaret_researcher","chain_id":"lazaret_field_archive","chain_step":1,
+        "title":"АРКАДИЙ: СТАРЫЙ АРХИВ","kind":"discover_poi","need_key":"medicine","min_rep":25,
+        "description":"Аркадий ищет старые журналы приёмного отделения. Не сами бумаги, а подтверждение, что центральная клиника ещё доступна для коротких вылазок.",
+        "hint":"Проверь центральную клинику и вернись. Глубокая зачистка не требуется — важен сам доступ к объекту.",
+        "poi_id":"central_clinic","offer_lifetime_days":2,"active_lifetime_days":4,"npc_attitude_reward":7,
+        "abandon_penalty":{"reputation":-1,"attitude":-4},
+        "failure_penalty":{"reputation":-3,"attitude":-7,"resources":{"medicine":-2.0}},
+        "reward":{"tickets":68,"reputation":7,"resources":{"medicine":6.0,"security":2.0}}
+    },
+    "lazaret_researcher_field_series":{
+        "faction":"lazaret","owner_npc_id":"lazaret_researcher","chain_id":"lazaret_field_archive","chain_step":2,
+        "requires_completed":["lazaret_researcher_old_archive"],"once_completed":true,
+        "title":"АРКАДИЙ: ПОЛЕВАЯ СЕРИЯ","kind":"delivery","need_key":"medicine","min_rep":25,
+        "description":"По старым записям Аркадий собрал упрощённый протокол обработки ран. Для пробной серии нужны расходники, которые Лазарет не может бездумно снять с дежурного резерва.",
+        "hint":"Стерильные материалы предпочтительнее; обычная перевязка тоже подойдёт, но потребует больше антисептика.",
+        "requirements":[[{"id":"sterile_bandage","qty":4},{"id":"antiseptic","qty":3}],[{"id":"bandage","qty":8},{"id":"antiseptic","qty":4},{"id":"painkillers","qty":2}]],
+        "offer_lifetime_days":2,"active_lifetime_days":4,"npc_attitude_reward":9,
+        "abandon_penalty":{"reputation":-2,"attitude":-5},
+        "failure_penalty":{"reputation":-5,"attitude":-9,"resources":{"medicine":-3.0}},
+        "reward":{"tickets":94,"reputation":9,"resources":{"medicine":11.0},
+            "route":{"id":"route_lazaret_field_protocol","kind":"medical_protocol","beneficiaries":["lazaret","perron"],"daily_resources":{"medicine":0.18}}}
     },
 
     # 1.22-dev5: these pairs are mutually exclusive world decisions. The player sees both
@@ -250,6 +359,18 @@ static func board_for_npc(npc_id:String) -> Dictionary:
 static func board_faction(npc_id:String) -> String:
     return str(BOARDS.get(npc_id,{}).get("faction",""))
 
+static func is_personal_board(npc_id:String) -> bool:
+    return bool(BOARDS.get(npc_id,{}).get("personal",false))
+
+static func personal_board_npcs() -> Array:
+    var out = []
+    for raw_npc_id in BOARDS.keys():
+        var npc_id = str(raw_npc_id)
+        if is_personal_board(npc_id):
+            out.append(npc_id)
+    out.sort()
+    return out
+
 static func _crisis_template(faction_id:String,resource_id:String) -> Dictionary:
     var requirements = {
         "food":[[{"id":"canned_meat","qty":5},{"id":"water","qty":4}],[{"id":"grain","qty":10},{"id":"water","qty":4}]],
@@ -292,10 +413,30 @@ static func template(template_id:String) -> Dictionary:
 static func templates_for_faction(faction_id:String) -> Array:
     var out = []
     for template_id in TEMPLATES.keys():
-        if str(TEMPLATES[template_id].get("faction","")) == faction_id:
-            var entry = TEMPLATES[template_id].duplicate(true)
-            entry["template_id"] = str(template_id)
-            out.append(entry)
+        var raw = TEMPLATES[template_id]
+        if str(raw.get("faction","")) != faction_id or str(raw.get("owner_npc_id","")) != "":
+            continue
+        var entry = raw.duplicate(true)
+        entry["template_id"] = str(template_id)
+        out.append(entry)
     for resource_id in ["food","medicine","technical","security"]:
         out.append(_crisis_template(faction_id,resource_id))
+    return out
+
+static func personal_templates_for_npc(npc_id:String) -> Array:
+    var out = []
+    for template_id in TEMPLATES.keys():
+        var raw = TEMPLATES[template_id]
+        if str(raw.get("owner_npc_id","")) != npc_id:
+            continue
+        var entry = raw.duplicate(true)
+        entry["template_id"] = str(template_id)
+        out.append(entry)
+    out.sort_custom(func(a,b):
+        var sa = int(a.get("chain_step",0))
+        var sb = int(b.get("chain_step",0))
+        if sa != sb:
+            return sa < sb
+        return str(a.get("template_id","")) < str(b.get("template_id",""))
+    )
     return out

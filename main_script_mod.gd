@@ -19,10 +19,20 @@ var pending_spawn_chunks:Array = []
 
 const RegionCatalog = preload("res://world/region_catalog.gd")
 const BuildingCatalog = preload("res://world/building_catalog.gd")
+const WorldContentVariety = preload("res://world/world_content_variety.gd")
 const ChunkLayoutCatalog = preload("res://world/chunk_layout_catalog.gd")
 const PoiCatalog = preload("res://world/poi_catalog.gd")
 const HighRiskFloorCatalog = preload("res://world/high_risk_floor_catalog.gd")
+const HighRiskMechanics = preload("res://world/high_risk_mechanics.gd")
 const EncounterCatalog = preload("res://world/encounter_catalog.gd")
+const EncounterSceneVariety = preload("res://world/encounter_scene_variety.gd")
+const MinorPoiDressing = preload("res://world/minor_poi_dressing.gd")
+const EnvironmentalStoryCatalog = preload("res://world/environmental_story_catalog.gd")
+const PoiStoryCatalog = preload("res://world/poi_story_catalog.gd")
+const HighRiskStoryCatalog = preload("res://world/high_risk_story_catalog.gd")
+const StoryThreadCatalog = preload("res://world/story_thread_catalog.gd")
+const RegionalStability = preload("res://world/regional_stability.gd")
+const RegionalEndgame = preload("res://world/regional_endgame.gd")
 const ExpeditionJournal = preload("res://world/expedition_journal.gd")
 const SupplyPlan = preload("res://world/supply_plan.gd")
 const FactionCatalog = preload("res://world/faction_catalog.gd")
@@ -30,7 +40,14 @@ const FactionEconomy = preload("res://world/faction_economy.gd")
 const FactionRelations = preload("res://world/faction_relations.gd")
 const SupplyEventSystem = preload("res://world/supply_event_system.gd")
 const SettlementCrisis = preload("res://world/settlement_crisis.gd")
+const WorldChronicle = preload("res://world/world_chronicle.gd")
+const FactionNpcState = preload("res://world/faction_npc_state.gd")
 const FactionEndgame = preload("res://world/faction_endgame.gd")
+const SettlementProjects = preload("res://world/settlement_projects.gd")
+const VerticalSlice = preload("res://world/vertical_slice.gd")
+const SandboxRouteConsequences = preload("res://world/sandbox_route_consequences.gd")
+const SandboxRouteMap = preload("res://world/sandbox_route_map.gd")
+const RegionSurveyContext = preload("res://world/region_survey_context.gd")
 const FactionSettlementCatalog = preload("res://world/faction_settlement_catalog.gd")
 const SettlementBuildingModels = preload("res://world/settlement_building_models.gd")
 const HighRiskBuildingModels = preload("res://world/high_risk_building_models.gd")
@@ -146,7 +163,7 @@ const CONTAINER_H = 8
 # QA-only showcase crate is intentionally larger than gameplay containers so the
 # complete catalogue can coexist in one physical grid without changing normal loot balance.
 const QA_ALL_ITEMS_CONTAINER_W = 20
-const QA_ALL_ITEMS_CONTAINER_H = 8
+const QA_ALL_ITEMS_CONTAINER_H = 10
 const CELL = 28
 
 # 1.19-dev3 reusable water vessels. Legacy clean/dirty water entries represent
@@ -190,7 +207,9 @@ const ITEM_RARITY = {
     "hiking_backpack":"scarce","expedition_pack":"specialized","trauma_kit":"rare","emergency_ration":"scarce",
     "makarov_extmag":"scarce","shotgun_exttube":"rare","akm_extmag":"specialized",
     "muzzle_brake":"rare","suppressor":"rare",
-    "sterile_bandage":"scarce","antiseptic":"scarce","painkillers":"scarce","antibiotics":"rare"
+    "sterile_bandage":"scarce","antiseptic":"scarce","painkillers":"scarce","antibiotics":"rare",
+    "old_checkpoint_documents":"unique","military_radio_station":"unique",
+    "generator_control_unit":"unique","laboratory_analyzer":"unique"
 }
 
 # Minimum world-risk tier for loot acquisition. Crafting remains an intentional
@@ -202,7 +221,9 @@ const ITEM_MIN_LOOT_RISK = {
     "field_rig":2,"assault_rig":3,
     "hiking_backpack":2,"expedition_pack":5,"trauma_kit":3,
     "shotgun_exttube":3,"akm_extmag":4,"muzzle_brake":3,"suppressor":3,
-    "antibiotics":3
+    "antibiotics":3,
+    "old_checkpoint_documents":5,"military_radio_station":5,
+    "generator_control_unit":5,"laboratory_analyzer":5
 }
 
 # Source locations are intentionally not exposed to the player.
@@ -214,6 +235,7 @@ const LOOT_PROFILE_RISK = {
     "garage":2,
     "pharmacy":2,
     "rural":2,
+    "rural_secure":2,
     "forest_cache":3,
     "police":3,
     "police_secure":3,
@@ -232,6 +254,7 @@ const LOOT_PROFILE_RISK = {
 # 1.13 target-farming refresh policy. Only deliberately authored target caches
 # replenish; ordinary houses/shops remain finite so survival scarcity still matters.
 const TARGET_FARM_REFRESH_DAYS = {
+    "rural_secure":4,
     "medical_secure":5,
     "police_secure":6,
     "hunting_secure":6,
@@ -318,6 +341,15 @@ var weapon_audio_cursor = 0
 var reload_audio_player = null
 var cycle_audio_player = null
 var weapon_audio_cache = {}
+# 1.29-dev1: audible world-interaction layer. Gameplay hearing stays in _emit_ai_sound();
+# these voices only mirror already-committed player actions for presentation.
+var world_audio_players:Array = []
+var world_audio_cursor = 0
+var world_audio_cache = {}
+# 1.29-dev3: presentation-only atmosphere. These loop players read existing time,
+# weather and shelter state but never write back into survival/AI simulation.
+var ambience_audio_players = {}
+var ambience_audio_cache = {}
 # 1.18-dev5: pump/bolt weapons have a real post-shot mechanical action.
 # 1.18-dev6: fix selftest inventory-art contract and expose failure reasons in HUD.
 # The action is transient (not saved) and uses Attack2 baked animation.
@@ -389,6 +421,7 @@ var weapon_instance_states = {}
 var inventory_entries = []
 var container_states = {}
 var loot_refresh_sites = {}
+var high_risk_state = HighRiskMechanics.default_state()
 var door_states = {}
 var shelter_breach_states = {}
 # Runtime shelter-alert state. Persistent damage remains only in the existing
@@ -659,7 +692,17 @@ var region_map_readiness_label = null
 var region_map_active_label = null
 var region_map_plan_button = null
 var region_map_cancel_button = null
+var world_chronicle_button = null
 var region_map_selected_chunk = Vector2i(999999,999999)
+
+# 1.23-dev2 world chronicle. It is a read-only view over consequences already
+# produced by the simulation; no quests, rewards or parallel world state live here.
+var world_chronicle_open = false
+var world_chronicle_panel = null
+var world_chronicle_title = null
+var world_chronicle_status = null
+var world_chronicle_text = null
+var regional_endgame_button = null
 
 # 1.16 home preparation: reuse the existing journal/supply flow. Quick unload only
 # moves safe resources; expedition presets are chosen by the player and are never inferred from a destination.
@@ -858,6 +901,7 @@ var trader_inventory_meta = []
 var contract_open = false
 var active_contract_faction = ""
 var active_contract_npc_name = ""
+var active_contract_npc_id = ""
 var selected_contract_id = ""
 var selected_contract_source = ""
 var contract_canvas = null
@@ -866,6 +910,15 @@ var contract_title = null
 var contract_subtitle = null
 var contract_list = null
 var contract_status = null
+var contract_project_mode = false
+var contract_accept_button = null
+var contract_complete_button = null
+var contract_abandon_button = null
+var contract_project_button = null
+var contract_project_install_button = null
+var contract_project_commit_button = null
+var contract_project_back_button = null
+var contract_close_button = null
 
 # 1.20.0-dev4 developer tools. Runtime-only, never serialized. The whole layer is
 # gated by application/config/version containing "-dev", so stable builds do not
@@ -897,6 +950,8 @@ var hud_world_root = null
 var hud_interaction_panel = null
 var hud_interaction_key_badge = null
 var hud_interaction_key_label = null
+var hud_feedback_panel = null
+var hud_feedback_label = null
 var hud_vital_bars = {}
 var hud_vital_values = {}
 var hud_status_label = null
@@ -988,6 +1043,8 @@ var pv_modern_survivor_cache = {}
 var hand_weapon_texture_cache = {}
 var modern_survivor_hit_time = 0.0
 var modern_survivor_hit_duration = 0.24
+# 1.27-dev1 visual-only idle timer. It is never saved and never affects movement/collision.
+var modern_survivor_idle_time = 0.0
 
 
 
@@ -1156,8 +1213,10 @@ func _run_static_self_tests():
     # cooldown belongs to the whole site rather than to an individual shelf.
     _record_test(loot_tables.has("industrial_secure"),"Нет защищённого технического loot-пула 1.13")
     var qa_farm_specs = {
+        "dacha_coop_zarya":["rural_secure",4],
         "district_hospital":["medical_secure",5],
         "district_police":["police_secure",6],
+        "rail_depot":["industrial_secure",7],
         "hunting_cordon":["hunting_secure",6],
         "factory_7":["industrial_secure",7],
         "military_checkpoint":["military_secure",8],
@@ -1238,10 +1297,15 @@ func _run_static_self_tests():
     _record_test(_make_item_icon("antiseptic") != null,"Нет иконки антисептика")
     _record_test(_make_world_loot_texture("antibiotics") != null,"Нет world-loot антибиотиков")
     for inventory_art_id in item_defs.keys():
+        var inventory_art_def = item_defs.get(str(inventory_art_id),{})
+        var uses_procedural_strategic_icon = str(inventory_art_def.get("category","")) == "strategic"
         _record_test(
-            inventory_icon_regions.has(str(inventory_art_id)) or melee_icon_regions.has(str(inventory_art_id)),
-            "Предмет без точной inventory-модели: %s" % inventory_art_id
+            inventory_icon_regions.has(str(inventory_art_id)) or melee_icon_regions.has(str(inventory_art_id)) or uses_procedural_strategic_icon,
+            "Предмет без точной inventory-модели или разрешённой procedural-модели: %s" % inventory_art_id
         )
+        if uses_procedural_strategic_icon:
+            _record_test(_make_item_icon(str(inventory_art_id)) != null,"Не создаётся procedural inventory-модель стратегического предмета: %s" % inventory_art_id)
+            _record_test(_make_world_loot_texture(str(inventory_art_id)) != null,"Не создаётся procedural world-loot модель стратегического предмета: %s" % inventory_art_id)
 
 
     var grip_test_rotation = 0.37
@@ -1272,7 +1336,7 @@ func _run_static_self_tests():
     _record_test(abs(float(melee_defs["fire_axe"].get("swing_anim",0.0)) - 0.65) < 0.001,"Axe reference timing должен быть 0.65 сек")
 
     _record_test(CONTAINER_W == 8 and CONTAINER_H == 8,"Обычные игровые контейнеры должны оставаться 8×8")
-    _record_test(QA_ALL_ITEMS_CONTAINER_W == 20 and QA_ALL_ITEMS_CONTAINER_H == 8,"Тестовый ящик должен иметь расширенную сетку 20×8")
+    _record_test(QA_ALL_ITEMS_CONTAINER_W == 20 and QA_ALL_ITEMS_CONTAINER_H == 10,"Тестовый ящик должен иметь расширенную сетку 20×10")
     _record_test(_home_unloadable_item("scrap") and _home_unloadable_item("grain"),"1.16 безопасная разгрузка ресурсов не распознаёт домашнее сырьё")
     _record_test(not _home_unloadable_item("makarov") and not _home_unloadable_item("bandage"),"1.16 разгрузка не должна забирать оружие или лечение")
     _record_test(int(melee_defs["combat_knife"].get("stamina",0)) == 2,"Нож должен тратить 2 выносливости")
@@ -1596,6 +1660,30 @@ func _run_static_self_tests():
     _record_test(layout_slots_test.size() == 4,"0.84 chunk layout catalog должен сохранять четыре persistent building slots")
     _record_test(layout_slots_test[0].get("pos",Vector2.ZERO) != _legacy_building_anchors()[0],"0.84 layout всё ещё использует жёсткую сетку 0.83")
     _record_test(float(BuildingCatalog.by_id("panel_block").get("size_min",Vector2.ZERO).x) > float(BuildingCatalog.by_id("shed").get("size_max",Vector2.ZERO).x),"0.84 размеры жилого блока и сарая недостаточно различаются")
+    var content_variant_test = WorldContentVariety.variant_for(Vector2i(3,3),"warehouse",1)
+    _record_test(content_variant_test >= 0 and content_variant_test < WorldContentVariety.VARIANT_COUNT,"1.24 procedural content variant out of range")
+    _record_test(not WorldContentVariety.profile_for("warehouse",content_variant_test).is_empty(),"1.24 warehouse dressing profile missing")
+    var encounter_variant_test = EncounterSceneVariety.variant_for(Vector2i(-6,-20),"failed_evacuation")
+    _record_test(encounter_variant_test >= 0 and encounter_variant_test < EncounterSceneVariety.VARIANT_COUNT,"1.24 encounter scene variant out of range")
+    _record_test(EncounterSceneVariety.accents_for(Vector2i(-6,-20),"failed_evacuation").size() == 2,"1.24 encounter scene accents missing")
+    _record_test(EncounterSceneVariety.variant_for(Vector2i(5,5),"supply_convoy") == -1,"1.24 supply convoy must bypass encounter scene variety")
+    _record_test(MinorPoiDressing.target_cell_count() == 6,"1.24 minor POI dressing target count drifted")
+    _record_test(MinorPoiDressing.accents_for("dacha_coop_zarya",Vector2i(-1,1)).size() == 2,"1.24 minor POI dressing missing sparse dacha cell accents")
+    _record_test(MinorPoiDressing.accents_for("regional_clinical_complex_4",Vector2i.ZERO).is_empty(),"1.24 minor POI dressing leaked into High Risk site")
+    var story_test = EnvironmentalStoryCatalog.clue_for(Vector2i(1,-2),"abandoned_camp")
+    _record_test(str(story_test.get("id","")) == "north_camp_rain_log","1.25 environmental story anchor missing")
+    _record_test(EnvironmentalStoryCatalog.clue_for(Vector2i(1,-2),"feeding_site").is_empty(),"1.25 environmental story leaked onto wrong encounter type")
+    var story_state_test = FactionEconomy.default_state()
+    _record_test(not WorldChronicle.story_seen(story_state_test,"qa_story"),"1.25 story seen state starts dirty")
+    _record_test(bool(WorldChronicle.append_story(story_state_test,1,60,"qa_story","QA","След").get("new",false)),"1.25 story append failed")
+    _record_test(WorldChronicle.story_seen(story_state_test,"qa_story"),"1.25 story seen state did not persist in chronicle state")
+    var poi_story_test = PoiStoryCatalog.clue_for("district_hospital",Vector2i.ZERO)
+    _record_test(str(poi_story_test.get("id","")) == "district_hospital_triage_sheet","1.25 authored POI story trace missing")
+    var high_risk_story_test = HighRiskStoryCatalog.floor_clue("reserve_arsenal_bastion",3)
+    _record_test(str(high_risk_story_test.get("id","")) == "bastion_command_signal_log","1.25 High Risk story trace missing")
+    _record_test(StoryThreadCatalog.THREADS.size() == 5,"1.25 story thread synthesis missing")
+    _record_test(PoiStoryCatalog.clue_for("regional_clinical_complex_4",Vector2i.ZERO).is_empty(),"1.25 dev2 POI story leaked into High Risk")
+    _record_test(WorldContentVariety.visual_seed_key(Vector2i(3,3),"warehouse",1) != WorldContentVariety.visual_seed_key(Vector2i(4,3),"warehouse",1),"1.24 procedural visual seed does not include chunk identity")
     _record_test(_point_on_road_or_sidewalk(Vector2(384,384)),"0.84 центр перекрёстка должен запрещать деревья")
     _record_test(not _point_on_road_or_sidewalk(Vector2(100,100)),"0.84 зелёный угловой участок ошибочно считается дорогой")
     var topdown_door_test = load("res://door_topdown_v1.png")
@@ -2636,10 +2724,11 @@ func _run_runtime_smoke_tests():
 
     _record_test(pv_ranged_back_outline != null and pv_ranged_front_outline != null,"Runtime firearm arm rig не создан")
 
+    var selftest_build_version = str(ProjectSettings.get_setting("application/config/version","unknown"))
     if self_test_failures.is_empty():
-        print("OSTATOK 1.23.0-dev1 SELFTEST: OK")
+        print("OSTATOK ",selftest_build_version," SELFTEST: OK")
     else:
-        print("OSTATOK 1.23.0-dev1 SELFTEST: FAILURES = ",self_test_failures.size())
+        print("OSTATOK ",selftest_build_version," SELFTEST: FAILURES = ",self_test_failures.size())
         for failure_message in self_test_failures:
             print("  - ",failure_message)
 
@@ -2695,7 +2784,7 @@ func _show_import_not_ready_screen() -> void:
 
 func _ready():
     # Keep application/config/name stable: Godot derives the existing user:// path from it.
-    DisplayServer.window_set_title("OSTATOK 1.23.0-dev1 — High Risk Visual Rework")
+    DisplayServer.window_set_title("OSTATOK %s" % str(ProjectSettings.get_setting("application/config/version","unknown")))
     y_sort_enabled = true
     if not _runtime_import_cache_ready():
         _show_import_not_ready_screen()
@@ -2704,6 +2793,8 @@ func _ready():
         return
     _load_data()
     _create_weapon_audio_layer()
+    _create_world_audio_layer()
+    _create_ambience_audio_layer()
     _ensure_input("move_left", KEY_A)
     _ensure_input("move_right", KEY_D)
     _ensure_input("move_up", KEY_W)
@@ -2725,9 +2816,17 @@ func _ready():
 
     _run_static_self_tests()
     _load_state()
+    var vertical_slice_started = false
+    VerticalSlice.ensure_state(faction_state)
+    if not has_meta("loaded_save"):
+        vertical_slice_started = VerticalSlice.setup_new_game(faction_state,world_day)
     TradingMarket.ensure_state(faction_state,world_day)
     ContractSystem.ensure_state(faction_state,world_day)
     SupplyEventSystem.ensure_state(faction_state,world_day)
+    WorldChronicle.ensure_state(faction_state)
+    FactionNpcState.ensure_state(faction_state,world_day)
+    if vertical_slice_started:
+        _record_world_news("shortage","lazaret","Лазарет вводит экономию медикаментов. Доктор Миронова ищет человека для полевого снабжения.",world_day,int(world_minutes),false)
 
     if inventory_entries.is_empty() and not has_meta("loaded_save"):
         _grid_add(inventory_entries, "makarov", 1, INV_W, INV_H)
@@ -2757,6 +2856,7 @@ func _ready():
     _create_base_build_ui()
     _create_rest_ui()
     _create_region_map_ui()
+    _create_world_chronicle_ui()
     _create_home_journal_ui()
     _create_base_system()
     _refresh_chunks(true)
@@ -4023,6 +4123,11 @@ func _process(delta):
         movement_anim_blend = 1.0
         visual_move_speed = max(visual_move_speed,MOVE_SPEED)
 
+    if _modern_survivor_idle_can_advance(visual_movement_active):
+        modern_survivor_idle_time += delta
+    else:
+        modern_survivor_idle_time = 0.0
+
     _update_survival(delta)
     _update_injuries(delta)
     _update_medical(delta)
@@ -4049,6 +4154,7 @@ func _process(delta):
     _update_roofs(delta)
     _update_day_night(delta)
     _update_weather(delta)
+    _update_ambience_audio(delta)
     _update_exterior_atmosphere(delta)
     _update_base_system(delta)
 
@@ -4423,15 +4529,12 @@ func _unhandled_input(event):
                 KEY_F:
                     _toggle_flashlight()
                 KEY_T:
+                    var debug_previous_day = world_day
                     var debug_advanced_minutes = world_minutes + 60.0
                     if debug_advanced_minutes >= 1440.0:
-                        world_day += 1
-                        FactionEconomy.daily_tick(faction_state)
-                        var supply_result = SupplyEventSystem.daily_tick(faction_state,world_day,_supply_event_blocked_chunks())
-                        _apply_supply_event_day_result(supply_result)
-                        TradingMarket.restock_all(faction_state,world_day)
-                        ContractSystem.refresh_offers(faction_state,world_day,false)
+                        world_day += int(floor(debug_advanced_minutes / 1440.0))
                     world_minutes = fmod(debug_advanced_minutes,1440.0)
+                    _process_world_day_rollovers(debug_previous_day,world_day)
                 KEY_V:
                     if not inventory_open and not trader_open and not contract_open:
                         _perform_shove()
@@ -4543,7 +4646,13 @@ func _fallback_items():
         "grain":{"name":"Крупа","short":"КРУПА","w":1,"h":1,"stack":20,"weight":0.24,"category":"food","use":"cook_grain","color":"#a98555"},
         "herbs":{"name":"Съедобные травы","short":"ТРАВЫ","w":1,"h":1,"stack":20,"weight":0.05,"category":"food","use":"brew_tea","color":"#667b58"},
         "hot_meal":{"name":"Горячая каша","short":"КАША","w":1,"h":1,"stack":10,"weight":0.45,"category":"food","use":"hot_meal","color":"#a57b4c"},
-        "herbal_tea":{"name":"Травяной чай","short":"ЧАЙ","w":1,"h":2,"stack":10,"weight":0.45,"category":"food","use":"herbal_tea","color":"#806044"}
+        "herbal_tea":{"name":"Травяной чай","short":"ЧАЙ","w":1,"h":2,"stack":10,"weight":0.45,"category":"food","use":"herbal_tea","color":"#806044"},
+        # 1.23-dev6 strategic progress items. They have no combat stats, cannot be
+        # sold to ordinary traders and exist to unlock settlement infrastructure.
+        "old_checkpoint_documents":{"name":"Документы старого КПП","short":"ДОК-КПП","w":2,"h":1,"stack":1,"weight":0.35,"category":"strategic","use":"","color":"#8f8060"},
+        "military_radio_station":{"name":"Военная радиостанция","short":"РАДИО","w":2,"h":2,"stack":1,"weight":3.8,"category":"strategic","use":"","color":"#5f6d56"},
+        "generator_control_unit":{"name":"Блок управления генератором","short":"БЛОК","w":2,"h":2,"stack":1,"weight":2.6,"category":"strategic","use":"","color":"#667369"},
+        "laboratory_analyzer":{"name":"Лабораторный анализатор","short":"АНАЛИЗ","w":2,"h":2,"stack":1,"weight":3.2,"category":"strategic","use":"","color":"#70877f"}
     }
 
 func _fallback_melee():
@@ -4809,6 +4918,15 @@ func _fallback_loot():
             {"id":"trauma_kit","min":1,"max":2,"chance":0.75},
             {"id":"emergency_ration","min":1,"max":2,"chance":0.42}
         ],
+        "clinical_slice_reserve":[
+            # dev10: one authored deep-clinic cache closes exactly one real crisis-order
+            # alternative. It is a one-time normal container, not a renewable target-farm
+            # cache, so it makes the first route deterministic without creating an economy loop.
+            {"id":"sterile_bandage","min":4,"max":4,"chance":1.0},
+            {"id":"painkillers","min":3,"max":3,"chance":1.0},
+            {"id":"antiseptic","min":1,"max":2,"chance":1.0},
+            {"id":"bandage","min":2,"max":3,"chance":1.0}
+        ],
         "clinical_core":[
             {"id":"bandage","min":4,"max":8,"chance":1.0},
             {"id":"sterile_bandage","min":3,"max":6,"chance":1.0},
@@ -4944,6 +5062,21 @@ func _fallback_loot():
             {"id":"pps43","min":1,"max":1,"chance":0.03},
             {"id":"aks74u","min":1,"max":1,"chance":0.025},
             {"id":"mosin","min":1,"max":1,"chance":0.012}
+        ],
+        "rural_secure":[
+            {"id":"canned_meat","min":2,"max":5,"chance":1.0},
+            {"id":"water","min":2,"max":4,"chance":0.94},
+            {"id":"grain","min":2,"max":5,"chance":0.84},
+            {"id":"herbs","min":1,"max":3,"chance":0.72},
+            {"id":"firewood","min":3,"max":7,"chance":0.90},
+            {"id":"cloth","min":2,"max":4,"chance":0.76},
+            {"id":"bandage","min":1,"max":3,"chance":0.56},
+            {"id":"tape","min":1,"max":2,"chance":0.42},
+            {"id":"bedroll","min":1,"max":1,"chance":0.18},
+            {"id":"hiking_backpack","min":1,"max":1,"chance":0.16},
+            {"id":"rain_jacket","min":1,"max":1,"chance":0.18},
+            {"id":"storm_poncho","min":1,"max":1,"chance":0.12},
+            {"id":"emergency_ration","min":1,"max":2,"chance":0.24}
         ],
         "forest_cache":[
             {"id":"herbs","min":1,"max":3,"chance":0.62},
@@ -5613,8 +5746,27 @@ func _modern_survivor_row(dir8):
     # E, SE, S, SW, W, NW, N, NE. Do not remap rows.
     return int(dir8) % 8
 
+func _modern_survivor_idle_can_advance(moving:bool) -> bool:
+    return (
+        not moving
+        and reload_time <= 0.0
+        and weapon_cycle_time <= 0.0
+        and melee_swing_time <= 0.0
+        and weapon_recoil_time <= 0.0
+        and modern_survivor_hit_time <= 0.0
+    )
+
 func _modern_survivor_idle_sheet(weapon_id):
-    # Every weapon has its own baked Idle sheet (survivor_<weapon>_Idle.png).
+    # 1.27-dev1: the imported survivor set already contains two authored idle variations
+    # for every firearm/melee prefix. Use them only after genuine uninterrupted idle so
+    # they read as weight shifts rather than random animation noise.
+    if modern_survivor_idle_time < 5.0:
+        return "Idle"
+    var cycle = fposmod(modern_survivor_idle_time - 5.0,12.0)
+    if cycle < 2.25:
+        return "Idle2"
+    if cycle >= 6.25 and cycle < 8.50:
+        return "Idle3"
     return "Idle"
 
 func _modern_survivor_attack_sheet(weapon_id,stationary_attack):
@@ -5622,7 +5774,17 @@ func _modern_survivor_attack_sheet(weapon_id,stationary_attack):
     return "Attack1" if stationary_attack else "RunAttack"
 
 func _modern_survivor_frame(sheet_name,moving,count = 8):
-    if sheet_name.begins_with("Idle"):
+    if sheet_name == "Idle2" or sheet_name == "Idle3":
+        # 1.27-dev2: authored weight shifts begin at neutral frame 0.
+        # The old wall-clock frame could enter mid-pose on any weapon or after
+        # a hit/reload, producing a visible one-frame jump. Keep the full 8-frame
+        # animation within its existing 2.25s window; no gameplay timers change.
+        var cycle = fposmod(modern_survivor_idle_time - 5.0,12.0)
+        var window_start = 0.0 if sheet_name == "Idle2" else 6.25
+        var window_elapsed = clamp(cycle - window_start,0.0,2.25)
+        var frames = max(1,int(count))
+        return clamp(int(floor(window_elapsed / 2.25 * float(frames))),0,frames - 1)
+    if sheet_name == "Idle":
         return int(floor(Time.get_ticks_msec() * 0.0032)) % 8
     if sheet_name == "Taunt":
         var reload_p = _reload_anim_progress()
@@ -5665,7 +5827,9 @@ func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
         var melee_aim = local_aim.normalized() if local_aim.length() > 0.01 else Vector2.RIGHT
         var melee_motion = local_motion.normalized() if local_motion.length() > 0.01 else Vector2.ZERO
         if not moving or melee_motion == Vector2.ZERO:
-            return "Idle"
+            # 1.27-dev2: melee uses the same existing Idle2/Idle3 baked sheets
+            # and visual-only timer as firearms. Attacks still take priority.
+            return _modern_survivor_idle_sheet(weapon_id)
         var melee_side = Vector2(-melee_aim.y,melee_aim.x)
         var melee_forward = melee_motion.dot(melee_aim)
         var melee_lateral = melee_motion.dot(melee_side)
@@ -6733,22 +6897,40 @@ func _update_weapon_visual():
     _update_visible_weapon_mods()
 
 func _respawn_player():
+    # dev9 keeps the game's established non-destructive incapacitation model, but
+    # the first clinical High Risk loop now has an explicit recovery leg instead
+    # of silently teleporting the player to the generic start position.
+    var clinical_slice_rescue = _vertical_slice_in_clinical_complex()
+    var clinical_floor = high_risk_floor_index if _high_risk_floor_active() else 1
+    var rescue_record = {}
+    if clinical_slice_rescue:
+        rescue_record = VerticalSlice.mark_clinical_incapacitation(
+            faction_state,world_day,clinical_floor,_vertical_slice_inventory_counts()
+        )
     if expedition_active:
         _finish_expedition("incapacitated")
     if _high_risk_floor_active():
         _exit_high_risk_floor(false)
-    health = 100.0
-    stamina = 100.0
-    hunger = 88.0
-    thirst = 82.0
+
+    var slice_rescue_active = not rescue_record.is_empty()
+    if slice_rescue_active:
+        _advance_incapacitation_time(6.0)
+        health = 78.0
+        stamina = 72.0
+        hunger = 68.0
+        thirst = 64.0
+        fatigue = 42.0
+        pain = 14.0
+        body_condition = {"head":82.0,"torso":82.0,"arms":82.0,"legs":82.0}
+    else:
+        health = 100.0
+        stamina = 100.0
+        hunger = 88.0
+        thirst = 82.0
+        pain = 0.0
+        body_condition = {"head":100.0,"torso":100.0,"arms":100.0,"legs":100.0}
+
     bleeding = false
-    pain = 0.0
-    body_condition = {
-        "head":100.0,
-        "torso":100.0,
-        "arms":100.0,
-        "legs":100.0
-    }
     last_injury_zone = ""
     wound_contamination = 0.0
     wound_infection = 0.0
@@ -6758,12 +6940,30 @@ func _respawn_player():
     well_fed_time = 0.0
     warm_drink_time = 0.0
     is_sprinting = false
+    modern_survivor_idle_time = 0.0
     _cancel_reload()
     _cancel_weapon_cycle()
     fire_cooldown = 0.0
     weapon_recoil_time = 0.0
     body_temperature = 36.8
     wetness = 0.0
+
+    if slice_rescue_active:
+        var lazaret = RegionCatalog.poi_by_id(VerticalSlice.SETTLEMENT_ID)
+        var laz_coord = lazaret.get("coord",Vector2i(-8,-2))
+        player.global_position = Vector2(
+            float(laz_coord.x * CHUNK_SIZE) + CHUNK_SIZE * 0.5,
+            float(laz_coord.y * CHUNK_SIZE) + CHUNK_SIZE * 0.5
+        )
+        _refresh_chunks(true)
+        var aid = _vertical_slice_issue_recovery_aid()
+        var aid_text = ""
+        if not aid.is_empty():
+            aid_text = " • аварийный минимум выдан"
+        _set_survival_feedback("Лазарет эвакуировал вас • потеряно 6 ч • снаряжение сохранено%s" % aid_text,4.5)
+        _save_state()
+        return
+
     _set_survival_feedback("Вы пришли в себя",2.0)
     player.global_position = Vector2(420,430)
     _refresh_chunks(true)
@@ -6785,6 +6985,7 @@ func _switch_weapon(id,instance_id = ""):
     current_weapon_id = id
     current_weapon_instance_id = iid
     equipped_melee_id = ""
+    modern_survivor_idle_time = 0.0
     melee_swing_time = 0.0
     weapon_recoil_time = 0.0
     _sync_legacy_weapon_projection_for_type(id)
@@ -6889,6 +7090,7 @@ func _perform_melee_attack():
     melee_swing_duration = float(melee.get("swing_anim",0.55))
     melee_cooldown = max(float(melee.get("interval",0.5)),melee_swing_duration)
     melee_swing_time = melee_swing_duration
+    _play_world_sfx("melee_swing",-13.5,0.025)
 
     var range_value = float(melee.get("range",38.0))
     var arc_value = float(melee.get("arc",0.8))
@@ -6912,6 +7114,8 @@ func _perform_melee_attack():
         _apply_enemy_impulse(enemy,push_dir,knockback,stagger_time)
         _damage_enemy(enemy,damage)
         hit_count += 1
+    if hit_count > 0:
+        _play_world_sfx("melee_hit",-9.5,0.025)
     _emit_ai_sound(player.global_position,float(melee.get("noise",65.0)),"melee",1.0)
 
 func _perform_shove():
@@ -6965,6 +7169,7 @@ func _switch_melee(id):
     _cancel_reload()
     _cancel_weapon_cycle()
     equipped_melee_id = id
+    modern_survivor_idle_time = 0.0
     weapon_recoil_time = 0.0
     _update_weapon_visual()
 
@@ -7147,6 +7352,178 @@ func _play_dry_fire_audio():
     reload_audio_player.pitch_scale = randf_range(0.98,1.02)
     reload_audio_player.play()
 
+func _create_world_audio_layer():
+    if not world_audio_players.is_empty():
+        return
+    # A small voice pool allows a swing + impact, footsteps, or a door tail to overlap
+    # without restarting another sound. These are non-positional because every source
+    # here is an interaction performed within the player's immediate reach.
+    for _i in range(6):
+        var player_node = AudioStreamPlayer.new()
+        player_node.volume_db = -12.0
+        add_child(player_node)
+        world_audio_players.append(player_node)
+
+func _world_sfx_path(kind):
+    match str(kind):
+        "door_open": return "res://audio/world/door_open.wav"
+        "door_close": return "res://audio/world/door_close.wav"
+        "footstep_walk": return "res://audio/world/footstep_walk.wav"
+        "footstep_sprint": return "res://audio/world/footstep_sprint.wav"
+        "item_drop": return "res://audio/world/item_drop.wav"
+        "melee_swing": return "res://audio/world/melee_swing.wav"
+        "melee_hit": return "res://audio/world/melee_hit.wav"
+        "workbench": return "res://audio/world/workbench.wav"
+        "ui_open": return "res://audio/ui/ui_open.wav"
+        "ui_close": return "res://audio/ui/ui_close.wav"
+        "ui_confirm": return "res://audio/ui/ui_confirm.wav"
+        "infected_attack": return "res://audio/infected/infected_attack.wav"
+        "infected_hurt": return "res://audio/infected/infected_hurt.wav"
+        "infected_death": return "res://audio/infected/infected_death.wav"
+        "infected_call": return "res://audio/infected/infected_call.wav"
+        "infected_spit": return "res://audio/infected/infected_spit.wav"
+        "player_hit": return "res://audio/infected/player_hit.wav"
+        "spit_hit": return "res://audio/infected/spit_hit.wav"
+    return ""
+
+func _cached_world_audio(kind):
+    var key = str(kind)
+    if world_audio_cache.has(key):
+        return world_audio_cache[key]
+    var path = _world_sfx_path(key)
+    if path == "" or not ResourceLoader.exists(path):
+        world_audio_cache[key] = null
+        return null
+    var stream = load(path)
+    world_audio_cache[key] = stream
+    return stream
+
+func _play_world_sfx(kind, volume_db = -12.0, pitch_variation = 0.018):
+    if world_audio_players.is_empty():
+        _create_world_audio_layer()
+    if world_audio_players.is_empty():
+        return false
+    var stream = _cached_world_audio(kind)
+    if stream == null:
+        return false
+    var voice = world_audio_players[world_audio_cursor % world_audio_players.size()]
+    world_audio_cursor = (world_audio_cursor + 1) % world_audio_players.size()
+    voice.stream = stream
+    voice.volume_db = float(volume_db)
+    var spread = max(0.0,float(pitch_variation))
+    voice.pitch_scale = randf_range(1.0 - spread,1.0 + spread) if spread > 0.0001 else 1.0
+    voice.play()
+    return true
+
+func _play_ui_sfx(kind):
+    var key = str(kind)
+    if key not in ["open","close","confirm"]:
+        return false
+    var volume = -18.0 if key != "confirm" else -16.5
+    return _play_world_sfx("ui_%s" % key,volume,0.0)
+
+func _play_distance_sfx(kind, source_pos, volume_db = -10.0, max_distance = 620.0, pitch_variation = 0.018):
+    # Presentation-only distance attenuation for infected/world events. AI hearing is
+    # still handled exclusively by _emit_ai_sound() and is intentionally unaffected.
+    if player == null or typeof(source_pos) != TYPE_VECTOR2:
+        return false
+    var limit = max(1.0,float(max_distance))
+    var distance = player.global_position.distance_to(source_pos)
+    if distance > limit:
+        return false
+    var t = clamp(distance / limit,0.0,1.0)
+    var attenuation_db = 18.0 * t * t
+    return _play_world_sfx(kind,float(volume_db) - attenuation_db,pitch_variation)
+
+func _ambience_audio_path(kind):
+    match str(kind):
+        "day": return "res://audio/ambience/outdoor_day.wav"
+        "night": return "res://audio/ambience/outdoor_night.wav"
+        "interior": return "res://audio/ambience/interior_roomtone.wav"
+        "rain": return "res://audio/ambience/rain.wav"
+    return ""
+
+func _cached_ambience_audio(kind):
+    var key = str(kind)
+    if ambience_audio_cache.has(key):
+        return ambience_audio_cache[key]
+    var path = _ambience_audio_path(key)
+    if path == "" or not ResourceLoader.exists(path):
+        ambience_audio_cache[key] = null
+        return null
+    var stream = load(path)
+    if stream is AudioStreamWAV:
+        stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+        stream.loop_begin = 0
+        stream.loop_end = max(1,int(round(stream.get_length() * float(stream.mix_rate))))
+    ambience_audio_cache[key] = stream
+    return stream
+
+func _create_ambience_audio_layer():
+    if not ambience_audio_players.is_empty():
+        return
+    for kind in ["day","night","interior","rain"]:
+        var player_node = AudioStreamPlayer.new()
+        player_node.name = "Ambience_%s" % kind.capitalize()
+        player_node.volume_db = -60.0
+        var stream = _cached_ambience_audio(kind)
+        if stream != null:
+            player_node.stream = stream
+        add_child(player_node)
+        ambience_audio_players[kind] = player_node
+        if stream != null:
+            player_node.play()
+
+func _shutdown_ambience_audio_layer():
+    # 1.37.1 maintenance: looped ambience keeps AudioStreamPlaybackWAV references
+    # alive until engine shutdown unless playback/streams are detached explicitly.
+    for kind in ambience_audio_players.keys():
+        var voice = ambience_audio_players.get(kind,null)
+        if voice != null and is_instance_valid(voice):
+            voice.stop()
+            voice.stream = null
+    ambience_audio_players.clear()
+    ambience_audio_cache.clear()
+
+func _exit_tree():
+    _shutdown_ambience_audio_layer()
+
+func _ambience_selection():
+    var base = "interior" if is_sheltered else ("night" if _time_night_factor() >= 0.50 else "day")
+    return {
+        "base":base,
+        "rain":weather_state == "rain" and not is_sheltered
+    }
+
+func _ambience_target_volume(kind,selection = {}):
+    var state = selection if not selection.is_empty() else _ambience_selection()
+    var key = str(kind)
+    if key == str(state.get("base","")):
+        if key == "interior":
+            return -25.0
+        return -24.0 if key == "day" else -25.0
+    if key == "rain" and bool(state.get("rain",false)):
+        return -19.0
+    return -60.0
+
+func _update_ambience_audio(delta):
+    if ambience_audio_players.is_empty():
+        _create_ambience_audio_layer()
+    if ambience_audio_players.is_empty():
+        return
+    var selection = _ambience_selection()
+    var fade_step = max(0.0,float(delta)) * 18.0
+    for kind in ["day","night","interior","rain"]:
+        var voice = ambience_audio_players.get(kind,null)
+        if voice == null or not is_instance_valid(voice):
+            continue
+        if voice.stream == null:
+            voice.stream = _cached_ambience_audio(kind)
+        if voice.stream != null and not voice.playing:
+            voice.play()
+        var target = _ambience_target_volume(kind,selection)
+        voice.volume_db = move_toward(float(voice.volume_db),target,fade_step)
+
 func _weapon_sound_signature(weapon):
     # Gameplay sound signature used by AI hearing. Audible asset finalization lives in 1.29,
     # but every firearm already has its own authored profile/cost here.
@@ -7286,6 +7663,7 @@ func _damage_enemy(enemy, amount):
     var hp = float(enemy.get_meta("hp", 70.0)) - amount
     enemy.set_meta("hp", hp)
     if hp > 0.0:
+        _play_distance_sfx("infected_hurt",enemy.global_position,-11.5,520.0,0.028)
         _infected_interrupt_special(enemy)
         enemy.set_meta("last_known_position",player.global_position)
         enemy.set_meta("suspicion",100.0)
@@ -7293,6 +7671,7 @@ func _damage_enemy(enemy, amount):
         _enemy_set_state(enemy,"chase",4.5)
 
     if hp <= 0.0:
+        _play_distance_sfx("infected_death",enemy.global_position,-8.5,650.0,0.022)
         if str(enemy.get_meta("special_role","")) == "carrier" and not bool(enemy.get_meta("carrier_cloud_spawned",false)):
             enemy.set_meta("carrier_cloud_spawned",true)
             _spawn_carrier_death_cloud(enemy.global_position,enemy)
@@ -7300,6 +7679,7 @@ func _damage_enemy(enemy, amount):
         var sid = int(enemy.get_meta("spawn_id"))
         var key = "%d:%d:%d" % [c.x, c.y, sid]
         defeated[key] = true
+        _high_risk_check_incident_resolution(c,sid)
         enemy.queue_free()
 
 func _ai_state_valid(state):
@@ -7556,6 +7936,7 @@ func _infected_finish_call(enemy) -> void:
     enemy.set_meta("call_interrupted",false)
     var radius = max(0.0,float(enemy.get_meta("call_radius",440.0)))
     _emit_ai_sound(enemy.global_position,radius,"infected_call",1.0,enemy)
+    _play_distance_sfx("infected_call",enemy.global_position,-6.5,max(520.0,radius + 120.0),0.015)
     if player != null and player.global_position.distance_to(enemy.global_position) <= radius:
         _set_survival_feedback("КРИК ЗАРАЖЁННОГО — ОКРУГА НАСТОРОЖЕНА",1.8)
 
@@ -7590,6 +7971,7 @@ func _apply_infected_spit_hit(enemy) -> bool:
     infected_spit_slow_time = max(infected_spit_slow_time,float(enemy.get_meta("spit_slow_time",2.4)))
     infected_spit_slow_mult = min(infected_spit_slow_mult,float(enemy.get_meta("spit_slow_mult",0.78)))
     modern_survivor_hit_time = modern_survivor_hit_duration
+    _play_world_sfx("spit_hit",-8.5,0.018)
     _set_survival_feedback("ПЛЕВОК ЗАРАЖЁННОГО — ДВИЖЕНИЕ ЗАМЕДЛЕНО",1.6)
     return true
 
@@ -7603,6 +7985,7 @@ func _infected_finish_spit(enemy) -> void:
     var target = enemy.get_meta("spit_target",enemy.global_position)
     if typeof(target) != TYPE_VECTOR2:
         target = enemy.global_position
+    _play_distance_sfx("infected_spit",enemy.global_position,-9.0,560.0,0.022)
     _spawn_infected_spit_trace(enemy.global_position,target)
     var hit = false
     if player != null and _infected_spit_path_clear(enemy,target):
@@ -9197,6 +9580,7 @@ func _salvage_selected_item():
 
     inventory_entries = test_entries
     _emit_ai_sound(player.global_position,92.0,"workbench",1.0)
+    _play_world_sfx("workbench",-11.0,0.022)
 
     if salvage_status != null:
         salvage_status.text = "Разобрано: %s" % str(item_defs.get(item_id,{}).get("name",item_id))
@@ -9520,6 +9904,7 @@ func _refresh_crafting_details():
 
 func _open_crafting():
     crafting_open = true
+    _play_ui_sfx("open")
     inventory_open = true
     active_container_key = ""
     selected_recipe_id = ""
@@ -9546,6 +9931,8 @@ func _open_crafting():
     _refresh_workbench_mode()
 
 func _close_crafting():
+    if crafting_open:
+        _play_ui_sfx("close")
     crafting_open = false
     inventory_open = false
     selected_recipe_id = ""
@@ -9598,8 +9985,10 @@ func _craft_selected_recipe():
         return
 
     inventory_entries = test
+    _play_ui_sfx("confirm")
 
     _emit_ai_sound(player.global_position,74.0,"workbench",0.80)
+    _play_world_sfx("workbench",-11.0,0.022)
 
     if craft_status != null:
         craft_status.text = "Создано: %s" % str(recipe.get("name",selected_recipe_id))
@@ -10373,6 +10762,152 @@ func _hud_ammo_display_name(ammo_id):
 func _hud_fire_mode_label(weapon_id,weapon):
     return str(weapon.get("fire_mode","АВТО" if bool(weapon.get("automatic",false)) else "ОДИН."))
 
+func _vertical_slice_at_lazaret() -> bool:
+    var poi = RegionCatalog.poi_for_chunk(current_chunk)
+    return str(poi.get("id","")) == VerticalSlice.SETTLEMENT_ID
+
+func _vertical_slice_inventory_counts() -> Dictionary:
+    var counts = {}
+    for entry in inventory_entries:
+        var item_id = str(entry.get("id",""))
+        if item_id == "":
+            continue
+        counts[item_id] = int(counts.get(item_id,0)) + max(1,int(entry.get("qty",1)))
+    return counts
+
+func _vertical_slice_refresh() -> Dictionary:
+    var before = VerticalSlice.record(faction_state)
+    var was_active = bool(before.get("enabled",false)) and not bool(before.get("completed",false))
+    var rec = VerticalSlice.refresh_progress(
+        faction_state,
+        world_day,
+        _vertical_slice_at_lazaret(),
+        discovered_pois.has(VerticalSlice.HIGH_RISK_POI_ID),
+        _vertical_slice_inventory_counts()
+    )
+    if not bool(before.get("clinical_cargo_secured",false)) and bool(rec.get("clinical_cargo_secured",false)) and not bool(rec.get("crisis_contract_completed",false)):
+        _set_survival_feedback("МЕДРЕЗЕРВ СОБРАН • ВОЗВРАЩАЙТЕСЬ В ЛАЗАРЕТ",3.0)
+        _save_state()
+    var just_completed = was_active and bool(rec.get("completed",false))
+    # dev11: completion consequences are persistent and idempotent. This also lets a
+    # completed dev10 save receive the richer post-run chronicle once after migration
+    # without touching its economy or replaying the contract reward.
+    if VerticalSlice.completion_feedback_ready(faction_state):
+        var recovery = VerticalSlice.settlement_recovery_summary(faction_state)
+        var recovery_stage = str(recovery.get("stage","stable"))
+        var news = "Лазарет снимает аварийный режим после первого полевого цикла. %s Дальнейшие вылазки снова выбирает сам сталкер." % str(recovery.get("note","Аварийный заказ закрыт."))
+        if recovery_stage in ["shortage","crisis"]:
+            # Same-schema migration can surface this feedback long after dev10's
+            # completed run, when the living economy may already have deteriorated.
+            # Never claim that the *current* shortage is gone in that case.
+            news = "Архив Лазарета подтверждает закрытие первого полевого цикла. %s Дальнейшие вылазки снова выбирает сам сталкер." % str(recovery.get("note","Аварийный заказ закрыт."))
+        _record_world_news("recovery","lazaret",news,world_day,int(world_minutes),just_completed)
+        VerticalSlice.mark_completion_feedback_issued(faction_state,world_day)
+        rec = VerticalSlice.record(faction_state)
+        _save_state()
+    if just_completed:
+        _set_survival_feedback("ЛАЗАРЕТ СТАБИЛИЗИРОВАН • ПЕРВЫЙ ЦИКЛ ЗАВЕРШЁН • ДАЛЬШЕ ЦЕЛЬ ВЫБИРАЕТЕ ВЫ",4.2)
+    return rec
+
+func _vertical_slice_objective() -> Dictionary:
+    _vertical_slice_refresh()
+    return VerticalSlice.objective(
+        faction_state,
+        world_day,
+        _vertical_slice_at_lazaret(),
+        discovered_pois.has(VerticalSlice.HIGH_RISK_POI_ID),
+        _vertical_slice_inventory_counts()
+    )
+
+func _vertical_slice_in_clinical_complex() -> bool:
+    if _high_risk_floor_active():
+        return high_risk_floor_poi_id == VerticalSlice.HIGH_RISK_POI_ID
+    if current_poi_id == VerticalSlice.HIGH_RISK_POI_ID:
+        return true
+    return str(RegionCatalog.poi_for_chunk(current_chunk).get("id","")) == VerticalSlice.HIGH_RISK_POI_ID
+
+func _vertical_slice_issue_recovery_aid() -> Dictionary:
+    if not VerticalSlice.clinical_recovery_aid_ready(faction_state):
+        return {}
+    # One deliberately small rescue pack. It makes the first failed clinic run
+    # recoverable without turning incapacitation into a profitable restock loop.
+    var requested = {"ammo_9x18":8,"bandage":1,"water":1}
+    var delivered = {}
+    for item_id in requested.keys():
+        var amount = int(requested[item_id])
+        var remaining = _grid_add(inventory_entries,str(item_id),amount,INV_W,INV_H)
+        delivered[str(item_id)] = max(0,amount - remaining)
+    if not VerticalSlice.mark_clinical_recovery_aid_issued(faction_state,world_day):
+        return {}
+    _record_named_npc_interaction(VerticalSlice.DOCTOR_NPC_ID,"clinical_evacuation","После первой неудачной вылазки Миронова выдала аварийный минимум для повторного захода.",0)
+    return delivered
+
+func _advance_incapacitation_time(hours:float) -> void:
+    var elapsed_hours = max(0.0,hours)
+    if elapsed_hours <= 0.0:
+        return
+    var previous_day = world_day
+    var advanced_minutes = world_minutes + elapsed_hours * 60.0
+    world_day += int(floor(advanced_minutes / 1440.0))
+    world_minutes = fmod(advanced_minutes,1440.0)
+    _process_world_day_rollovers(previous_day,world_day)
+    _advance_base_time_for_rest(elapsed_hours)
+    _advance_weather_for_rest(elapsed_hours)
+
+func _vertical_slice_issue_field_reserve() -> Dictionary:
+    # One small, non-repeatable first-run reserve is tied to actually rescuing the
+    # Lazaret supply incident. It is not a generic quest reward and does not alter
+    # old saves or later supply events. The ammo merges into the starter PM stacks,
+    # while the bandages reinforce the medical identity of the recovered convoy.
+    _vertical_slice_refresh()
+    if not VerticalSlice.field_reserve_ready(faction_state):
+        return {}
+    var ammo_requested = 16
+    var bandage_requested = 2
+    var ammo_remaining = _grid_add(inventory_entries,"ammo_9x18",ammo_requested,INV_W,INV_H)
+    var bandage_remaining = _grid_add(inventory_entries,"bandage",bandage_requested,INV_W,INV_H)
+    var ammo_added = ammo_requested - ammo_remaining
+    var bandage_added = bandage_requested - bandage_remaining
+    if not VerticalSlice.mark_field_reserve_issued(faction_state,world_day):
+        return {}
+    _record_named_npc_interaction(VerticalSlice.DOCTOR_NPC_ID,"field_reserve","Миронова передала уцелевший полевой резерв после спасения рейса.",0)
+    return {"ammo_9x18":max(0,ammo_added),"bandage":max(0,bandage_added)}
+
+
+func _sandbox_active_contract_objective() -> Dictionary:
+    var active = faction_state.get("contracts",{}).get("active",{})
+    if typeof(active) != TYPE_DICTIONARY or active.is_empty():
+        return {}
+    var rows = []
+    for raw in active.values():
+        if typeof(raw) == TYPE_DICTIONARY:
+            rows.append(raw)
+    if rows.is_empty():
+        return {}
+    # Personal deadlines deserve priority; otherwise keep the oldest accepted work
+    # stable so the HUD does not jump between unrelated contracts every frame.
+    rows.sort_custom(func(a,b):
+        var ad = int(a.get("deadline_day",0))
+        var bd = int(b.get("deadline_day",0))
+        if ad > 0 or bd > 0:
+            if ad <= 0: return false
+            if bd <= 0: return true
+            if ad != bd: return ad < bd
+        var aa = int(a.get("accepted_day",0))
+        var ba = int(b.get("accepted_day",0))
+        if aa != ba: return aa < ba
+        return str(a.get("id","")) < str(b.get("id",""))
+    )
+    var contract = rows[0]
+    var title = str(contract.get("title","КОНТРАКТ")).to_upper()
+    var progress = ContractSystem.progress_text(contract,_contract_inventory_counts(),discovered_pois,_contract_item_names())
+    progress = progress.replace("\n"," ")
+    var deadline = int(contract.get("deadline_day",0))
+    if deadline > 0:
+        var left = max(0,deadline - world_day)
+        progress += " • срок: %d дн." % left
+    return {"title":title,"sub":progress}
+
 func _hud_survival_objective():
     if bleeding:
         return {"title":"ОСТАНОВИТЬ КРОВЬ","sub":"Нужна повязка или бинт"}
@@ -10395,6 +10930,19 @@ func _hud_survival_objective():
         return {"title":"ИДТИ: %s" % expedition_target_name,"sub":"До цели: %d сект. • M — карта" % target_distance}
     if home_navigation_active:
         return {"title":"ВЕРНУТЬСЯ ДОМОЙ","sub":_home_navigation_text()}
+    var slice_objective = _vertical_slice_objective()
+    # Before the debrief, preserve the authored completion beat. Once it says that
+    # the route is free, existing sandbox systems take priority again.
+    if not slice_objective.is_empty() and str(slice_objective.get("title","")) != "СВОБОДНЫЙ МАРШРУТ":
+        return slice_objective
+    var contract_objective = _sandbox_active_contract_objective()
+    if not contract_objective.is_empty():
+        return contract_objective
+    var slice_record = VerticalSlice.record(faction_state)
+    if bool(slice_record.get("completed",false)) and not _has_home():
+        return {"title":"ЗАКРЕПИТЬ ДОМ","sub":"Нужен для планирования маршрутов • исследовать мир можно и без него"}
+    if not slice_objective.is_empty():
+        return slice_objective
     if _at_home():
         return {"title":"ВЫ ДОМА","sub":"M → Дом / журнал: восстановление"}
     return {"title":"ПОДГОТОВИТЬ ВЫЛАЗКУ","sub":"M — карта региона и планирование"}
@@ -10443,7 +10991,11 @@ func _region_map_cell_tooltip(coord:Vector2i) -> String:
     var poi = RegionCatalog.poi_for_chunk(coord)
     if not poi.is_empty() and discovered_pois.has(str(poi.get("id",""))):
         var risk = int(poi.get("risk",_chunk_profile(coord).get("risk",1)))
-        return "%s • сектор %d:%d\nОПАСНОСТЬ %d/5" % [str(poi.get("name","ОБЪЕКТ")),coord.x,coord.y,risk]
+        var poi_id = str(poi.get("id",""))
+        var text = "%s • сектор %d:%d\nОПАСНОСТЬ %d/5" % [str(poi.get("name","ОБЪЕКТ")),coord.x,coord.y,risk]
+        if HighRiskMechanics.has(poi_id):
+            text += "\nСОСТОЯНИЕ • %s" % _high_risk_status_label(poi_id)
+        return text
     return "%s • сектор %d:%d" % [_district_display_name(str(_chunk_profile(coord).get("district_id",""))),coord.x,coord.y]
 
 func _expedition_name_for_chunk(coord:Vector2i) -> String:
@@ -10552,10 +11104,12 @@ func _create_region_map_ui():
     region_map_grid.sector_selected.connect(_region_map_select_chunk)
     region_map_grid.map_panned.connect(_pan_region_map)
     region_map_grid.zoom_changed.connect(_refresh_region_map_ui)
-    _hud_make_label(region_map_panel,Vector2(14,290),Vector2(384,14),"● ВЫ   ⌂ ДОМ   ⊕ ЦЕЛЬ   + МЕДИЦИНА   □ ОБЪЕКТ",7,Color("b8ba9c"))
+    _hud_make_label(region_map_panel,Vector2(14,290),Vector2(384,14),"● ВЫ  ⌂ ДОМ  ⊕ ЦЕЛЬ  ··· МАРШРУТ  + МЕД.",7,Color("b8ba9c"))
     var scroll = ScrollContainer.new()
     scroll.position = Vector2(412,39)
-    scroll.size = Vector2(194,250)
+    # 1.28-dev1: keep long survey/marker/plan information scrollable, but reserve
+    # a fixed action strip below it so primary expedition actions never start clipped.
+    scroll.size = Vector2(194,216)
     scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     region_map_panel.add_child(scroll)
     var column = VBoxContainer.new()
@@ -10580,20 +11134,125 @@ func _create_region_map_ui():
     column.add_child(mark_actions)
     _map_column_button(mark_actions,"ЗАПИСАТЬ",_save_selected_map_marker)
     _map_column_button(mark_actions,"УБРАТЬ",_remove_selected_map_marker)
-    region_map_plan_button = _map_column_button(column,"НАЗНАЧИТЬ ЦЕЛЬ",_plan_selected_expedition)
-    region_map_cancel_button = _map_column_button(column,"СБРОСИТЬ ПЛАН",_cancel_expedition)
     region_map_readiness_label = _map_info_label(column,"",7,Color("afb7a8"))
     _map_info_label(column,"ПЛАН ВЫЛАЗКИ",7,Color("c5a65b"))
     region_map_active_label = _map_info_label(column,"",7,Color("afb7a8"))
-    _make_button(region_map_panel,Vector2(14,309),Vector2(110,24),"ДОМ / ЖУРНАЛ",_open_home_journal)
-    _make_button(region_map_panel,Vector2(130,309),Vector2(66,24),"К ДОМУ",_navigate_home)
-    _make_button(region_map_panel,Vector2(202,309),Vector2(56,24),"К СЕБЕ",_center_map_on_player)
-    _make_button(region_map_panel,Vector2(264,309),Vector2(24,24),"−",_zoom_region_map.bind(-1))
-    _make_button(region_map_panel,Vector2(292,309),Vector2(24,24),"+",_zoom_region_map.bind(1))
-    _hud_make_label(region_map_panel,Vector2(324,308),Vector2(176,27),"ЛКМ — выбрать • ПКМ — сдвиг
+    var map_plan_actions = HBoxContainer.new()
+    map_plan_actions.position = Vector2(412,263)
+    map_plan_actions.size = Vector2(194,24)
+    map_plan_actions.add_theme_constant_override("separation",5)
+    region_map_panel.add_child(map_plan_actions)
+    region_map_plan_button = _map_column_button(map_plan_actions,"НАЗНАЧИТЬ ЦЕЛЬ",_plan_selected_expedition)
+    region_map_cancel_button = _map_column_button(map_plan_actions,"СБРОСИТЬ ПЛАН",_cancel_expedition)
+    region_map_plan_button.custom_minimum_size.x = 92
+    region_map_cancel_button.custom_minimum_size.x = 92
+    _make_button(region_map_panel,Vector2(14,309),Vector2(98,24),"ДОМ / ЖУРНАЛ",_open_home_journal)
+    world_chronicle_button = _make_button(region_map_panel,Vector2(118,309),Vector2(64,24),"ЭФИР",_open_world_chronicle)
+    _make_button(region_map_panel,Vector2(188,309),Vector2(64,24),"К ДОМУ",_navigate_home)
+    _make_button(region_map_panel,Vector2(258,309),Vector2(54,24),"К СЕБЕ",_center_map_on_player)
+    _make_button(region_map_panel,Vector2(318,309),Vector2(24,24),"−",_zoom_region_map.bind(-1))
+    _make_button(region_map_panel,Vector2(346,309),Vector2(24,24),"+",_zoom_region_map.bind(1))
+    _hud_make_label(region_map_panel,Vector2(378,308),Vector2(126,27),"ЛКМ — выбор
 Колесо — масштаб",6,Color("8d9588"))
     _make_button(region_map_panel,Vector2(510,309),Vector2(96,24),"ЗАКРЫТЬ / M",_close_region_map)
     region_map_canvas.visible = false
+
+func _create_world_chronicle_ui():
+    world_chronicle_panel = Panel.new()
+    world_chronicle_panel.position = Vector2(20,18)
+    world_chronicle_panel.size = Vector2(600,324)
+    world_chronicle_panel.add_theme_stylebox_override("panel",_visual_panel_style())
+    region_map_canvas.add_child(world_chronicle_panel)
+    _hud_add_panel_detail(world_chronicle_panel,world_chronicle_panel.size,Color(0.56,0.49,0.31))
+    world_chronicle_title = _hud_make_label(world_chronicle_panel,Vector2(16,12),Vector2(430,20),"ЭФИР / ПОЛЕВАЯ ХРОНИКА",11,Color(0.92,0.88,0.72))
+    world_chronicle_status = _hud_make_label(world_chronicle_panel,Vector2(16,38),Vector2(568,16),"",7,Color(0.68,0.70,0.62))
+    world_chronicle_text = RichTextLabel.new()
+    world_chronicle_text.position = Vector2(16,60)
+    world_chronicle_text.size = Vector2(568,218)
+    world_chronicle_text.bbcode_enabled = false
+    world_chronicle_text.scroll_active = true
+    world_chronicle_text.fit_content = false
+    world_chronicle_text.add_theme_font_size_override("normal_font_size",8)
+    world_chronicle_text.add_theme_color_override("default_color",Color(0.78,0.80,0.72))
+    world_chronicle_panel.add_child(world_chronicle_text)
+    _make_button(world_chronicle_panel,Vector2(16,288),Vector2(104,24),"КАРТА",_return_to_region_map)
+    _make_button(world_chronicle_panel,Vector2(128,288),Vector2(132,24),"ДОМ / ЖУРНАЛ",_open_home_journal)
+    regional_endgame_button = _make_button(world_chronicle_panel,Vector2(276,288),Vector2(180,24),"КРИЗИСНЫЙ СЕЗОН",_regional_endgame_start)
+    _make_button(world_chronicle_panel,Vector2(464,288),Vector2(120,24),"ЗАКРЫТЬ / M",_close_region_map)
+    world_chronicle_panel.visible = false
+
+func _return_to_region_map():
+    if not region_map_open:
+        _open_region_map()
+        return
+    world_chronicle_open = false
+    home_journal_open = false
+    if world_chronicle_panel != null:
+        world_chronicle_panel.visible = false
+    if home_journal_panel != null:
+        home_journal_panel.visible = false
+    if region_map_panel != null:
+        region_map_panel.visible = true
+    _refresh_region_map_ui()
+
+func _open_world_chronicle():
+    if not region_map_open:
+        _open_region_map()
+    _play_ui_sfx("open")
+    world_chronicle_open = true
+    home_journal_open = false
+    if region_map_panel != null:
+        region_map_panel.visible = false
+    if home_journal_panel != null:
+        home_journal_panel.visible = false
+    if world_chronicle_panel != null:
+        world_chronicle_panel.visible = true
+    WorldChronicle.mark_read(faction_state)
+    _refresh_world_chronicle_ui()
+    if world_chronicle_button != null:
+        world_chronicle_button.text = "ЭФИР"
+
+func _regional_endgame_start():
+    var result = RegionalEndgame.start(faction_state,world_day)
+    if not bool(result.get("ok",false)):
+        var reason = str(result.get("reason",""))
+        if reason == "active_supply":
+            _set_survival_feedback("Сначала закрой текущий аварийный рейс снабжения.",3.0)
+        elif reason == "not_ready":
+            _set_survival_feedback("Регион ещё не достиг 100% устойчивости.",3.0)
+        elif reason == "already_active":
+            _set_survival_feedback("Кризисный сезон уже идёт.",2.5)
+        else:
+            _set_survival_feedback("Кризисный сезон уже завершён.",2.5)
+        _refresh_world_chronicle_ui()
+        return false
+    _record_world_news("world","","Четыре поселения свели резервы и маршруты в общий кризисный контур. Начался трёхнедельный период предельной нагрузки.",world_day,int(world_minutes),false)
+    _set_survival_feedback("КРИЗИСНЫЙ СЕЗОН НАЧАТ • 21 ДЕНЬ",4.0)
+    _refresh_world_chronicle_ui()
+    return true
+
+func _refresh_world_chronicle_ui():
+    if world_chronicle_panel == null:
+        return
+    if regional_endgame_button != null:
+        var phase = RegionalEndgame.phase(faction_state)
+        regional_endgame_button.visible = true
+        if phase == RegionalEndgame.PHASE_COMPLETE:
+            regional_endgame_button.disabled = true
+            regional_endgame_button.text = "ИТОГ РЕГИОНА"
+        else:
+            regional_endgame_button.disabled = phase == RegionalEndgame.PHASE_ACTIVE or not bool(RegionalEndgame.can_start(faction_state,world_day).get("ok",false))
+            regional_endgame_button.text = "СЕЗОН • %d ДН." % RegionalEndgame.days_left(faction_state,world_day) if phase == RegionalEndgame.PHASE_ACTIVE else "КРИЗИСНЫЙ СЕЗОН"
+    var entries = WorldChronicle.entries(faction_state,40,true)
+    if entries.is_empty():
+        world_chronicle_status.text = "Эфир пока тих. Здесь появятся последствия событий и найденные в мире записи."
+        world_chronicle_text.text = "Нет записей."
+        return
+    world_chronicle_status.text = "Сообщения и найденные записи сохраняются вместе с миром. Новые сверху."
+    var lines = []
+    for entry in entries:
+        lines.append(WorldChronicle.entry_text(entry))
+    world_chronicle_text.text = "\n\n".join(lines)
 
 func _map_info_label(parent,text,font_size,color):
     var label = Label.new()
@@ -10679,8 +11338,10 @@ func _region_map_snapshot():
                 record["tooltip"] += "\nМоя метка: " + str(note.get("label",note.get("kind","")))
             if known:
                 var profile = _chunk_profile(coord)
-                record["zone"] = str(profile.get("zone","residential"))
-                record["district"] = str(profile.get("district_id",""))
+                var visible_district_id = RegionSurveyContext.visible_district_id_for_coord(coord,discovered_pois)
+                var visible_district = RegionCatalog.district_profile(visible_district_id)
+                record["zone"] = str(visible_district.get("zone",profile.get("zone","residential")))
+                record["district"] = visible_district_id
             cells[coord] = record
             var poi = RegionCatalog.poi_for_chunk(coord)
             if not poi.is_empty() and bool(poi.get("is_anchor",false)) and discovered_pois.has(str(poi.get("id",""))):
@@ -10694,7 +11355,21 @@ func _region_map_snapshot():
     var supply_event = SupplyEventSystem.active_event(faction_state,world_day)
     if not supply_event.is_empty():
         marks.append({"coord":SupplyEventSystem.active_coord(faction_state,world_day),"kind":"danger","label":SupplyEventSystem.marker_label(faction_state,world_day),"system":true})
+    var slice_target = VerticalSlice.marker_target(
+        faction_state,
+        world_day,
+        _vertical_slice_at_lazaret(),
+        discovered_pois.has(VerticalSlice.HIGH_RISK_POI_ID),
+        _vertical_slice_inventory_counts()
+    )
+    if not slice_target.is_empty():
+        var slice_poi = RegionCatalog.poi_by_id(str(slice_target.get("poi_id","")))
+        if not slice_poi.is_empty():
+            marks.append({"coord":slice_poi.get("coord",current_chunk),"kind":str(slice_target.get("kind","note")),"label":str(slice_target.get("label","ПОЛЕВОЙ МАРШРУТ")),"system":true})
+    var established_routes = SandboxRouteMap.links(faction_state,discovered_pois)
     var snapshot = {"center":region_map_center,"cells":cells,"pois":pois,"markers":marks,"player":current_chunk}
+    if not established_routes.is_empty():
+        snapshot["established_routes"] = established_routes
     if region_map_selected_chunk.x < 900000:
         snapshot["selected"] = region_map_selected_chunk
     if _has_home():
@@ -10739,11 +11414,15 @@ func _open_region_map():
         _close_inventory()
     _cancel_reload()
     region_map_open = true
+    _play_ui_sfx("open")
     if _expedition_sector_distance(current_chunk,region_map_center) > REGION_MAP_MAX:
         _rebuild_region_map_grid(current_chunk)
     home_journal_open = false
+    world_chronicle_open = false
     if home_journal_panel != null:
         home_journal_panel.visible = false
+    if world_chronicle_panel != null:
+        world_chronicle_panel.visible = false
     if region_map_panel != null:
         region_map_panel.visible = true
     if region_map_selected_chunk.x >= 900000:
@@ -10753,9 +11432,14 @@ func _open_region_map():
     _refresh_region_map_ui()
 
 func _close_region_map():
+    if region_map_open:
+        _play_ui_sfx("close")
     home_journal_open = false
+    world_chronicle_open = false
     if home_journal_panel != null:
         home_journal_panel.visible = false
+    if world_chronicle_panel != null:
+        world_chronicle_panel.visible = false
     region_map_open = false
     if region_map_canvas != null:
         region_map_canvas.visible = false
@@ -10784,11 +11468,28 @@ func _refresh_region_map_ui():
         detail_lines.append("РАДИОСИГНАЛ: " + SupplyEventSystem.marker_label(faction_state,world_day))
         detail_lines.append(SupplyEventSystem.detail_text(faction_state,world_day))
     if discovered:
-        detail_lines.append("Район: %s" % _district_display_name(str(profile.get("district_id","old_center"))))
+        var route_links = SandboxRouteMap.links(faction_state,discovered_pois)
+        var survey_context = RegionSurveyContext.context_for_coord(selected,discovered_chunks,discovered_pois,route_links)
+        var visible_district_name = str(survey_context.get("name",_district_display_name(str(profile.get("district_id","old_center")))))
+        detail_lines.append("Район: %s" % visible_district_name)
         var map_risk = int(poi.get("risk",profile.get("risk",2))) if poi_known else int(profile.get("risk",2))
         detail_lines.append("Опасность: %d/5" % map_risk)
+        if not survey_context.is_empty():
+            var district_description = str(survey_context.get("description",""))
+            if district_description != "":
+                detail_lines.append("Характер: %s" % district_description)
+            detail_lines.append("Обследовано секторов района: %d" % int(survey_context.get("known_sectors",0)))
+            var known_landmarks = RegionSurveyContext.landmark_text(survey_context)
+            if known_landmarks != "":
+                detail_lines.append("Известные ориентиры: %s" % known_landmarks)
+            var established_link_count = int(survey_context.get("established_links",0))
+            if established_link_count > 0:
+                detail_lines.append("Налаженных связей района: %d" % established_link_count)
         if poi_known:
             detail_lines.append(str(poi.get("description","Обнаруженный ориентир.")))
+        var route_labels = SandboxRouteMap.labels_at_coord(route_links,selected)
+        for route_label in route_labels:
+            detail_lines.append("Налаженный маршрут: %s" % str(route_label))
     else:
         detail_lines.append("Статус: НЕ ИССЛЕДОВАН  •  опасность неизвестна")
         detail_lines.append("Можно назначить как разведывательную цель.")
@@ -10805,13 +11506,28 @@ func _refresh_region_map_ui():
     else:
         region_map_active_label.text = "Выберите сектор и назначьте цель.\nДом: %s" % str(expedition_journal["home"].get("name","не закреплён"))
         if not _has_home():
-            region_map_active_label.text = "Сначала закрепите здание: Дом / журнал.\nИсследовать мир можно и без плана."
+            if VerticalSlice.active(faction_state):
+                region_map_active_label.text = "Полевой маршрут активен.\nСледуйте системной метке; дом — позже."
+            else:
+                region_map_active_label.text = "Сначала закрепите здание: Дом / журнал.\nИсследовать мир можно и без плана."
         region_map_cancel_button.disabled = true
     region_map_plan_button.text = "ОБНОВИТЬ ЦЕЛЬ" if expedition_active else "НАЗНАЧИТЬ ЦЕЛЬ"
     region_map_plan_button.disabled = selected == current_chunk or not _has_home() or selected == _home_chunk()
-    region_map_plan_button.tooltip_text = "Цель должна быть вне домашнего сектора."
+    if not _has_home():
+        region_map_plan_button.tooltip_text = "Планирование маршрута требует закреплённого дома. Исследовать мир можно и без плана."
+    elif selected == current_chunk:
+        region_map_plan_button.tooltip_text = "Выберите другой сектор."
+    elif selected == _home_chunk():
+        region_map_plan_button.tooltip_text = "Домашний сектор уже является точкой возврата."
+    else:
+        region_map_plan_button.tooltip_text = "Назначить выбранный сектор целью вылазки."
+    if world_chronicle_button != null:
+        var unread_news = WorldChronicle.unread_count(faction_state)
+        world_chronicle_button.text = "ЭФИР" if unread_news <= 0 else "ЭФИР %d" % min(99,unread_news)
     if home_journal_open:
         _refresh_home_journal_ui()
+    if world_chronicle_open:
+        _refresh_world_chronicle_ui()
 
 func _plan_selected_expedition():
     if region_map_selected_chunk.x >= 900000 or region_map_selected_chunk == current_chunk:
@@ -11177,8 +11893,11 @@ func _open_home_journal():
     if not region_map_open:
         _open_region_map()
     home_journal_open = true
+    world_chronicle_open = false
     if region_map_panel != null:
         region_map_panel.visible = false
+    if world_chronicle_panel != null:
+        world_chronicle_panel.visible = false
     if home_journal_panel != null:
         home_journal_panel.visible = true
     _refresh_home_journal_ui()
@@ -12080,6 +12799,27 @@ func _create_hud():
     hud_interaction_key_label.name = "InteractionKeyGlyph"
     interaction_label = _hud_make_row_label(hud_interaction_panel,25,11.0,130,17,"",6,Color(0.94,0.92,0.84),HORIZONTAL_ALIGNMENT_CENTER)
 
+    # 1.23-dev15: survival_feedback existed for years but was never rendered by the
+    # reference HUD. Keep it as a short-lived, non-interactive world message so NPC
+    # reactions, recovery notices and action feedback are actually visible to players.
+    hud_feedback_panel = Panel.new()
+    hud_feedback_panel.name = "SurvivalFeedback"
+    hud_feedback_panel.position = Vector2(110,158)
+    hud_feedback_panel.size = Vector2(420,40)
+    hud_feedback_panel.z_index = 20
+    hud_feedback_panel.add_theme_stylebox_override("panel",_hud_panel_style(true))
+    hud_feedback_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    hud_feedback_panel.clip_contents = true
+    hud_feedback_panel.visible = false
+    hud_world_root.add_child(hud_feedback_panel)
+    _hud_add_panel_detail(hud_feedback_panel,hud_feedback_panel.size,accent)
+    hud_feedback_label = _hud_make_label(
+        hud_feedback_panel,Vector2(10,5),Vector2(400,30),"",5,Color(0.94,0.92,0.84),HORIZONTAL_ALIGNMENT_CENTER
+    )
+    hud_feedback_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    hud_feedback_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    hud_feedback_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
     debug_label = Label.new()
     debug_label.position = Vector2(160,18)
     debug_label.size = Vector2(320,66)
@@ -12099,6 +12839,12 @@ func _update_hud():
     # 0.61 reference-interface pass: persistent survival HUD stays visible behind
     # inventory/workbench overlays, matching the diegetic multi-panel target.
     hud_world_root.visible = true
+
+    if hud_feedback_panel != null and hud_feedback_label != null:
+        var feedback_visible = survival_feedback_time > 0.0 and survival_feedback != ""
+        hud_feedback_panel.visible = feedback_visible
+        if feedback_visible:
+            hud_feedback_label.text = survival_feedback
 
     if hud_rig_quick_panel != null and hud_rig_quick_label != null:
         var pocket_count = _rig_pocket_count()
@@ -12821,12 +13567,15 @@ func _open_weapon_mod_panel(weapon_id,instance_id = ""):
     mod_weapon_id = weapon_id
     mod_weapon_instance_id = iid
     mod_panel_open = true
+    _play_ui_sfx("open")
     _hover_hide_item()
     mod_status.text = "Изменения применяются только к выбранному экземпляру."
     mod_panel.visible = true
     _rebuild_weapon_mod_ui()
 
-func _close_weapon_mod_panel():
+func _close_weapon_mod_panel(with_sound = true):
+    if mod_panel_open and bool(with_sound):
+        _play_ui_sfx("close")
     mod_panel_open = false
     mod_weapon_id = ""
     mod_weapon_instance_id = ""
@@ -13027,7 +13776,7 @@ func _apply_container_panel_layout(grid_size):
         return
     var panel_width = max(238.0,14.0 + float(grid_size.x * CELL))
     var details_y = 50.0 + float(grid_size.y * CELL)
-    var buttons_y = details_y + 35.0
+    var buttons_y = details_y + 49.0
     var panel_height = buttons_y + 39.0
     container_panel.size = Vector2(panel_width,panel_height)
     cont_grid_control.size = Vector2(grid_size.x * CELL,grid_size.y * CELL)
@@ -13035,7 +13784,7 @@ func _apply_container_panel_layout(grid_size):
         cont_title.size = Vector2(panel_width - 24.0,20.0)
     if cont_details != null:
         cont_details.position = Vector2(12,details_y)
-        cont_details.size = Vector2(panel_width - 24.0,28.0)
+        cont_details.size = Vector2(panel_width - 24.0,44.0)
     if cont_take_button != null:
         cont_take_button.position = Vector2(12,buttons_y)
     if cont_take_all_button != null:
@@ -13352,8 +14101,8 @@ func _create_inventory_ui():
     inventory_panel.add_child(inv_grid_control)
 
     inv_details = Label.new()
-    inv_details.position = Vector2(16,204)
-    inv_details.size = Vector2(338,48)
+    inv_details.position = Vector2(16,200)
+    inv_details.size = Vector2(338,87)
     inv_details.add_theme_font_size_override("font_size",8)
     inventory_panel.add_child(inv_details)
 
@@ -13363,10 +14112,10 @@ func _create_inventory_ui():
     weight_label.add_theme_font_size_override("font_size",8)
     inventory_panel.add_child(weight_label)
 
-    _make_button(inventory_panel,Vector2(16,276),Vector2(78,30),"ИСП.",_use_selected_inventory)
-    _make_button(inventory_panel,Vector2(100,276),Vector2(78,30),"ВЫБРОС",_drop_selected_inventory)
-    _make_button(inventory_panel,Vector2(184,276),Vector2(78,30),"СОРТ",_sort_inventory)
-    _make_button(inventory_panel,Vector2(268,276),Vector2(86,30),"ЗАКРЫТЬ",_close_inventory)
+    _make_button(inventory_panel,Vector2(16,292),Vector2(78,30),"ИСП.",_use_selected_inventory)
+    _make_button(inventory_panel,Vector2(100,292),Vector2(78,30),"ВЫБРОС",_drop_selected_inventory)
+    _make_button(inventory_panel,Vector2(184,292),Vector2(78,30),"СОРТ",_sort_inventory)
+    _make_button(inventory_panel,Vector2(268,292),Vector2(86,30),"ЗАКРЫТЬ",_close_inventory)
 
     # Equipment is permanently visible at the side of normal inventory.
     equipment_panel = Panel.new()
@@ -13405,7 +14154,7 @@ func _create_inventory_ui():
 
     # Container replaces equipment side panel during looting.
     container_panel = Panel.new()
-    container_panel.position = Vector2(270,118)
+    container_panel.position = Vector2(270,113)
     container_panel.size = Vector2(238,348)
     container_panel.scale = Vector2(0.68,0.68)
     container_panel.add_theme_stylebox_override("panel",_visual_panel_style())
@@ -13432,8 +14181,8 @@ func _create_inventory_ui():
 
     cont_details = Label.new()
     cont_details.position = Vector2(12,274)
-    cont_details.size = Vector2(214,28)
-    cont_details.add_theme_font_size_override("font_size",8)
+    cont_details.size = Vector2(214,44)
+    cont_details.add_theme_font_size_override("font_size",7)
     container_panel.add_child(cont_details)
 
     cont_take_button = _make_button(container_panel,Vector2(12,309),Vector2(96,28),"ЗАБРАТЬ",_take_selected_container)
@@ -13509,7 +14258,34 @@ func _make_item_icon(id):
         return atlas
 
     var img = Image.create(18,18,false,Image.FORMAT_RGBA8)
-    img.fill(Color(0.12,0.13,0.13,1.0))
+    var item_def = item_defs.get(id,{})
+    if str(item_def.get("category","")) == "strategic":
+        # Strategic progression items intentionally do not consume atlas slots in this
+        # no-new-visuals branch. Give them a readable schematic terminal icon instead
+        # of the old featureless fallback square.
+        var accent = Color(str(item_def.get("color","#718078")))
+        var bg = Color(0.055,0.065,0.062,1.0)
+        var plate = accent.darkened(0.38)
+        img.fill(bg)
+        for yy in range(3,15):
+            for xx in range(3,15):
+                img.set_pixel(xx,yy,plate)
+        for i in range(2,16):
+            img.set_pixel(i,2,accent)
+            img.set_pixel(i,15,accent.darkened(0.22))
+            img.set_pixel(2,i,accent)
+            img.set_pixel(15,i,accent.darkened(0.22))
+        # Four corner fasteners and a simple circuit/document glyph keep the icon
+        # recognizable at native pixel size without pretending to be new authored art.
+        for pnt in [Vector2i(4,4),Vector2i(13,4),Vector2i(4,13),Vector2i(13,13)]:
+            img.set_pixel(pnt.x,pnt.y,accent.lightened(0.28))
+        for x in range(6,12):
+            img.set_pixel(x,7,accent.lightened(0.18))
+            img.set_pixel(x,10,accent.lightened(0.08))
+        img.set_pixel(8,8,accent.lightened(0.42))
+        img.set_pixel(9,9,accent.lightened(0.42))
+    else:
+        img.fill(Color(0.12,0.13,0.13,1.0))
     var tex = ImageTexture.create_from_image(img)
     item_icon_cache[id] = tex
     return tex
@@ -14403,10 +15179,10 @@ func _interior_floor_detail_sprite(parent,index,pos,rotation_value,scale_value):
     parent.add_child(sprite)
     return sprite
 
-func _decorate_interior_floor_details(building,size,building_id):
+func _decorate_interior_floor_details(building,size,visual_seed_id):
     if building == null:
         return
-    var seed_value = abs(hash(str(building_id))) + int(size.x * 13.0 + size.y * 7.0)
+    var seed_value = abs(hash(str(visual_seed_id))) + int(size.x * 13.0 + size.y * 7.0)
     var rng = RandomNumberGenerator.new()
     rng.seed = seed_value
     # Keep the center aisle readable. Flat floor detail belongs around room edges,
@@ -14421,7 +15197,7 @@ func _decorate_interior_floor_details(building,size,building_id):
     ]
     var count = 3 if size.x < 190.0 else (6 if size.x >= 250.0 else 4)
     for i in range(count):
-        var p = candidates[(i + int(abs(hash(str(building_id)))) ) % candidates.size()]
+        var p = candidates[(i + int(abs(hash(str(visual_seed_id)))) ) % candidates.size()]
         p += Vector2(rng.randf_range(-8.0,8.0),rng.randf_range(-5.0,5.0))
         var index = rng.randi_range(0,7)
         var rot = 0.0 if index in [2,3,4,6,7] else rng.randf_range(-0.25,0.25)
@@ -14954,6 +15730,7 @@ func _toggle_inventory():
     else:
         _cancel_reload()
         inventory_open = true
+        _play_ui_sfx("open")
         active_container_key = ""
         selected_inventory_index = -1
         selected_container_index = -1
@@ -14972,6 +15749,8 @@ func _close_inventory():
         _close_base_build()
         return
 
+    if inventory_open:
+        _play_ui_sfx("close")
     inventory_open = false
     active_container_key = ""
     selected_inventory_index = -1
@@ -14982,13 +15761,20 @@ func _close_inventory():
     equipment_panel.visible = false
     container_panel.visible = false
     _hover_hide_item()
-    _close_weapon_mod_panel()
+    _close_weapon_mod_panel(false)
 
 func _open_container(key):
     if not container_states.has(key):
         return
+    if _high_risk_container_locked(key):
+        var state = container_states[key]
+        var poi_id = str(state.get("poi_id",""))
+        var spec = HighRiskMechanics.site(poi_id)
+        _set_survival_feedback("ЗАКРЫТЫЙ СЕКТОР • %s" % str(spec.get("access_label","нужен внутренний доступ")),2.6)
+        return
     active_container_key = key
     inventory_open = true
+    _play_ui_sfx("open")
     selected_inventory_index = -1
     selected_container_index = -1
     _refresh_inventory_ui()
@@ -15032,7 +15818,7 @@ func _refresh_inventory_ui():
         _rebuild_grid(cont_grid_control,entries,container_grid.x,container_grid.y,false)
 
         if selected_container_index >= 0 and selected_container_index < entries.size():
-            cont_details.text = _entry_description(entries[selected_container_index])
+            cont_details.text = _container_entry_description(entries[selected_container_index])
         else:
             cont_details.text = "Контейнер пуст." if entries.is_empty() else "Выбери предмет в контейнере."
 
@@ -15715,6 +16501,43 @@ func _entry_description(entry):
 
     return text
 
+func _container_entry_description(entry):
+    var id = str(entry.get("id",""))
+    if not item_defs.has(id):
+        return id
+
+    var item = item_defs[id]
+    var text = "%s\n[%s] • %d шт • %.2f кг" % [
+        str(item.get("name",id)),
+        _item_rarity_label(id),
+        int(entry.get("qty",1)),
+        _entry_total_weight(entry)
+    ]
+
+    if str(item.get("category","")) == "weapon" and weapon_defs.has(id):
+        var iid = str(entry.get("instance_id",""))
+        var firearm = weapon_defs[id]
+        text += "\nСост. %d%% • Урон %d • Маг. %d/%d" % [
+            int(_weapon_condition_value(id,iid)),
+            int(firearm.get("damage",0)),
+            _weapon_mag_value(id,iid),
+            _weapon_mag_capacity(id,iid)
+        ]
+    elif str(item.get("category","")) == "melee" and melee_defs.has(id):
+        var melee = melee_defs[id]
+        text += "\nУрон %d • Выносл. %d • Дист. %d" % [
+            int(melee.get("damage",0)),
+            int(melee.get("stamina",0)),
+            int(melee.get("range",0))
+        ]
+    elif _is_water_container_item(id):
+        var iid = str(entry.get("instance_id",""))
+        text += "\nВода %.2f / %.2f л" % [_water_container_fill_l(id,iid),_water_container_capacity_l(id)]
+    elif str(item.get("use","")) == "gear":
+        text += "\n%s" % _slot_name(str(item.get("slot","")))
+
+    return text
+
 func _select_inventory_entry(index):
     _inventory_item_clicked(index)
 
@@ -16082,6 +16905,7 @@ func _drop_selected_inventory():
     dropped_items.append(record)
     var drop_noise = 50.0 + min(45.0,_entry_total_weight(entry) * 10.0)
     _emit_ai_sound(drop_pos,drop_noise,"drop",1.0)
+    _play_world_sfx("item_drop",-13.0,0.028)
     if _high_risk_floor_active():
         _spawn_world_item(
             high_risk_floor_root,
@@ -16136,9 +16960,16 @@ func _update_interaction_prompt():
     if type == "world_item":
         interaction_label.text = "ПОДОБРАТЬ  •  %s" % name.to_upper()
     elif type == "container":
-        interaction_label.text = "ОБЫСКАТЬ  •  %s" % name.to_upper()
+        var container_key = str(target.get_meta("container_key",""))
+        interaction_label.text = ("ЗАПЕРТО  •  %s" if _high_risk_container_locked(container_key) else "ОБЫСКАТЬ  •  %s") % name.to_upper()
     elif type == "floor_transition":
-        interaction_label.text = "ПЕРЕЙТИ  •  %s" % name.to_upper()
+        var floor_poi_id = str(target.get_meta("floor_poi_id",high_risk_floor_poi_id))
+        var target_floor = int(target.get_meta("target_floor",1))
+        var source_floor = int(target.get_meta("source_floor",1))
+        if target_floor == 3 and source_floor == 2 and HighRiskMechanics.has(floor_poi_id) and not _high_risk_access_unlocked(floor_poi_id):
+            interaction_label.text = "РАЗБЛОКИРОВАТЬ  •  %s" % name.to_upper()
+        else:
+            interaction_label.text = "ПЕРЕЙТИ  •  %s" % name.to_upper()
     elif type == "door":
         var open = bool(target.get_meta("door_open",false))
         var door_condition = clamp(float(target.get_meta("door_condition",DOOR_MAX_CONDITION)),0.0,DOOR_MAX_CONDITION)
@@ -16167,11 +16998,16 @@ func _update_interaction_prompt():
     elif type == "trader":
         interaction_label.text = "ТОРГОВАТЬ  •  %s" % name.to_upper()
     elif type == "contract_board":
-        interaction_label.text = "КОНТРАКТЫ  •  %s" % name.to_upper()
+        var board_label = str(target.get_meta("contract_board_label","КОНТРАКТЫ"))
+        interaction_label.text = "%s  •  %s" % [board_label.to_upper(),name.to_upper()]
     elif type == "supply_event_cargo":
         interaction_label.text = "ОБЕЗОПАСИТЬ ГРУЗ  •  %s" % name.to_upper()
     elif type == "faction_npc":
         interaction_label.text = "ГОВОРИТЬ  •  %s" % name.to_upper()
+    elif type == "story_clue":
+        var story_id = str(target.get_meta("story_id",""))
+        var story_action = "ПЕРЕЧИТАТЬ" if WorldChronicle.story_seen(faction_state,story_id) else "ЧИТАТЬ"
+        interaction_label.text = "%s  •  %s" % [story_action,name.to_upper()]
     elif type == "base_heater":
         interaction_label.text = "ОБОГРЕВАТЕЛЬ"
     elif type == "base_campfire":
@@ -16246,6 +17082,9 @@ func _nearest_interactable():
         elif type == "faction_npc":
             limit = max(limit,76.0)
             priority = 9.0
+        elif type == "story_clue":
+            limit = max(limit,70.0)
+            priority = 10.0
         elif type == "base_heater" or type == "base_campfire" or type == "base_rain_collector" or type == "base_lamp" or type == "base_cot" or type == "base_barricade":
             limit = max(limit,72.0)
             priority = 6.0
@@ -16304,11 +17143,13 @@ func _interact():
     elif type == "trader":
         _open_trader(str(target.get_meta("trader_id","")))
     elif type == "contract_board":
-        _open_contract_board(str(target.get_meta("faction_id","")),str(target.get_meta("display_name","")))
+        _open_contract_board(str(target.get_meta("faction_id","")),str(target.get_meta("display_name","")),str(target.get_meta("npc_id","")))
     elif type == "supply_event_cargo":
         _resolve_supply_event(target)
     elif type == "faction_npc":
         _talk_faction_npc(target)
+    elif type == "story_clue":
+        _read_story_clue(target)
     elif type == "base_heater":
         _toggle_base_heater(target)
     elif type == "base_campfire":
@@ -16430,6 +17271,220 @@ func _target_farm_site_state(poi_id:String) -> Dictionary:
         return {}
     return raw.duplicate(true)
 
+func _high_risk_cycle(poi_id:String) -> int:
+    return max(0,int(_target_farm_site_state(poi_id).get("cycle",0)))
+
+func _high_risk_access_unlocked(poi_id:String) -> bool:
+    if not HighRiskMechanics.has(poi_id):
+        return true
+    return HighRiskMechanics.access_unlocked(high_risk_state,poi_id,_high_risk_cycle(poi_id))
+
+func _high_risk_floor_effective_enemy_count(poi_id:String,floor_index:int,data:Dictionary) -> int:
+    var count = max(0,int(data.get("enemy_count",0)))
+    if poi_id == VerticalSlice.HIGH_RISK_POI_ID:
+        count = VerticalSlice.clinical_floor_enemy_count(faction_state,floor_index,count)
+    return count
+
+func _high_risk_floor_threats_cleared(poi_id:String,floor_index:int) -> bool:
+    if floor_index <= 1 or not HighRiskFloorCatalog.has_poi(poi_id):
+        return true
+    var data = HighRiskFloorCatalog.floor(poi_id,floor_index)
+    if data.is_empty():
+        return true
+    var anchor = _high_risk_floor_anchor(poi_id)
+    var count = _high_risk_floor_effective_enemy_count(poi_id,floor_index,data)
+    for i in range(count):
+        var spawn_id = 2000 + floor_index * 100 + i
+        var key = "%d:%d:%d" % [anchor.x,anchor.y,spawn_id]
+        if not bool(defeated.get(key,false)):
+            return false
+    return true
+
+func _high_risk_unlock_access(poi_id:String,source_floor:int) -> bool:
+    if not HighRiskMechanics.has(poi_id):
+        return true
+    if _high_risk_access_unlocked(poi_id):
+        return true
+    if source_floor != 2:
+        return false
+    if not _high_risk_floor_threats_cleared(poi_id,2):
+        _set_survival_feedback("БЛОКИРОВКА • сначала очистите текущий уровень.",2.4)
+        return false
+    var cycle = _high_risk_cycle(poi_id)
+    if HighRiskMechanics.unlock_access(high_risk_state,poi_id,cycle,world_day):
+        var spec = HighRiskMechanics.site(poi_id)
+        _record_world_news("danger","",str(spec.get("access_news","В опасной зоне вскрыт внутренний доступ.")),world_day,int(world_minutes),false)
+        _set_survival_feedback("ВНУТРЕННИЙ ДОСТУП РАЗБЛОКИРОВАН",2.4)
+    return true
+
+func _high_risk_container_locked(key:String) -> bool:
+    if not container_states.has(key):
+        return false
+    var state = container_states[key]
+    if typeof(state) != TYPE_DICTIONARY or not bool(state.get("target_farm",false)):
+        return false
+    var poi_id = str(state.get("poi_id",""))
+    return HighRiskMechanics.has(poi_id) and not _high_risk_access_unlocked(poi_id)
+
+func _high_risk_recovery_loot(entries:Array,poi_id:String,key:String,cycle:int) -> Array:
+    if not HighRiskMechanics.has(poi_id) or cycle <= 0:
+        return entries
+    var out = []
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(int(hash("hr-recovery:%s:%s:%d" % [poi_id,key,cycle]))) + 1
+    var qty_mult = HighRiskMechanics.recovery_qty_multiplier(cycle)
+    for raw in entries:
+        if typeof(raw) != TYPE_DICTIONARY:
+            continue
+        var entry = raw.duplicate(true)
+        var item_id = str(entry.get("id",""))
+        if not item_defs.has(item_id):
+            continue
+        var rarity = _item_rarity_key(item_id)
+        if rng.randf() > HighRiskMechanics.recovery_keep_chance(rarity,cycle):
+            continue
+        var qty = max(1,int(entry.get("qty",1)))
+        entry["qty"] = max(1,int(floor(float(qty) * qty_mult)))
+        out.append(entry)
+    # A recovered site should still contain salvage. If filtering happened to
+    # remove everything, retain one non-specialized entry at quantity one.
+    if out.is_empty():
+        for raw in entries:
+            if typeof(raw) != TYPE_DICTIONARY:
+                continue
+            var item_id = str(raw.get("id",""))
+            var rarity = _item_rarity_key(item_id)
+            if rarity in ["specialized","unique"]:
+                continue
+            var fallback = raw.duplicate(true)
+            fallback["qty"] = 1
+            out.append(fallback)
+            break
+    return out
+
+func _high_risk_reoccupation_restore_key(poi:Dictionary,key:String,cycle:int) -> bool:
+    var poi_id = str(poi.get("id",""))
+    if not HighRiskMechanics.has(poi_id):
+        return true
+    var parts = key.split(":")
+    if parts.size() < 3:
+        return false
+    var coord = Vector2i(int(parts[0]),int(parts[1]))
+    var spawn_id = int(parts[2])
+    var anchor:Vector2i = poi.get("coord",poi.get("anchor",Vector2i(999999,999999)))
+    var core_offset:Vector2i = HighRiskMechanics.site(poi_id).get("core_offset",Vector2i.ZERO)
+    var core_coord = anchor + core_offset
+    # The dangerous interior and the local incident always return. Ground
+    # perimeter bodies only partially repopulate, keeping a cleared place changed.
+    if spawn_id >= 2000 or coord == core_coord:
+        return true
+    var roll = float(abs(int(hash("%s:%d" % [key,cycle]))) % 10000) / 10000.0
+    return roll < HighRiskMechanics.reoccupation_ratio(poi_id)
+
+func _spawn_high_risk_local_incident(chunk,coord:Vector2i,poi_id:String,cell_offset:Vector2i) -> void:
+    if not HighRiskMechanics.has(poi_id) or not discovered_pois.has(poi_id):
+        return
+    var spec = HighRiskMechanics.site(poi_id)
+    if spec.get("incident_offset",Vector2i(999,999)) != cell_offset:
+        return
+    var cycle = _high_risk_cycle(poi_id)
+    var count = max(0,int(spec.get("incident_count",0)))
+    if count <= 0 or HighRiskMechanics.incident_resolved(high_risk_state,poi_id,cycle):
+        return
+    var all_defeated = true
+    for i in range(count):
+        var key = "%d:%d:%d" % [coord.x,coord.y,HighRiskMechanics.incident_spawn_id(i)]
+        if not bool(defeated.get(key,false)):
+            all_defeated = false
+            break
+    # Old schema-122 saves can already contain these defeated IDs without the new
+    # high_risk_state block. Adopt that state instead of resurrecting/announcing it.
+    if all_defeated:
+        HighRiskMechanics.mark_incident_resolved(high_risk_state,poi_id,cycle)
+        return
+    if HighRiskMechanics.mark_incident_announced(high_risk_state,poi_id,cycle):
+        _record_world_news("danger","",str(spec.get("incident_news","В опасной зоне снова замечено движение.")),world_day,int(world_minutes),false)
+        _set_survival_feedback("HIGH RISK • %s" % str(spec.get("incident_label","ЛОКАЛЬНАЯ УГРОЗА")),2.2)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(int(hash("hr-incident:%s:%d" % [poi_id,cycle]))) + 1
+    var profile = str(spec.get("incident_profile","high_core"))
+    for i in range(count):
+        var spawn_id = HighRiskMechanics.incident_spawn_id(i)
+        var key = "%d:%d:%d" % [coord.x,coord.y,spawn_id]
+        var pos = _safe_enemy_spawn(rng)
+        var kind = _infected_kind_for_encounter(profile,rng)
+        if bool(defeated.get(key,false)):
+            continue
+        var enemy = _spawn_enemy(chunk,coord,spawn_id,pos,kind)
+        if is_instance_valid(enemy):
+            enemy.set_meta("high_risk_incident",true)
+            enemy.set_meta("high_risk_poi_id",poi_id)
+
+func _high_risk_check_incident_resolution(coord:Vector2i,spawn_id:int) -> void:
+    if spawn_id < HighRiskMechanics.incident_spawn_id(0):
+        return
+    var poi = RegionCatalog.poi_for_chunk(coord)
+    var poi_id = str(poi.get("id",""))
+    if not HighRiskMechanics.has(poi_id):
+        return
+    var spec = HighRiskMechanics.site(poi_id)
+    var anchor:Vector2i = poi.get("coord",poi.get("anchor",Vector2i(999999,999999)))
+    var incident_coord = anchor + spec.get("incident_offset",Vector2i(999,999))
+    if coord != incident_coord:
+        return
+    var count = max(0,int(spec.get("incident_count",0)))
+    for i in range(count):
+        var key = "%d:%d:%d" % [coord.x,coord.y,HighRiskMechanics.incident_spawn_id(i)]
+        if not bool(defeated.get(key,false)):
+            return
+    var cycle = _high_risk_cycle(poi_id)
+    if HighRiskMechanics.mark_incident_resolved(high_risk_state,poi_id,cycle):
+        _record_world_news("recovery","","%s: локальная угроза подавлена, но объект остаётся опасным." % str(poi.get("short_name",poi.get("name",poi_id))),world_day,int(world_minutes),false)
+
+func _high_risk_remaining_threats(poi_id:String) -> int:
+    if not HighRiskMechanics.has(poi_id):
+        return 0
+    var poi = RegionCatalog.poi_by_id(poi_id)
+    if poi.is_empty():
+        return 0
+    var anchor:Vector2i = poi.get("coord",Vector2i(999999,999999))
+    var remaining = 0
+    for off in PoiCatalog.footprint(poi_id):
+        var cell = PoiCatalog.cell(poi_id,off)
+        var coord = anchor + off
+        var count = max(0,int(cell.get("enemy_count",0)))
+        for i in range(count):
+            var key = "%d:%d:%d" % [coord.x,coord.y,i]
+            if not bool(defeated.get(key,false)):
+                remaining += 1
+    for floor_index in HighRiskFloorCatalog.floors(poi_id):
+        var floor_data = HighRiskFloorCatalog.floor(poi_id,int(floor_index))
+        var count = max(0,int(floor_data.get("enemy_count",0)))
+        for i in range(count):
+            var spawn_id = 2000 + int(floor_index) * 100 + i
+            var key = "%d:%d:%d" % [anchor.x,anchor.y,spawn_id]
+            if not bool(defeated.get(key,false)):
+                remaining += 1
+    var spec = HighRiskMechanics.site(poi_id)
+    var incident_coord = anchor + spec.get("incident_offset",Vector2i(999,999))
+    var incident_count = max(0,int(spec.get("incident_count",0)))
+    for i in range(incident_count):
+        var key = "%d:%d:%d" % [incident_coord.x,incident_coord.y,HighRiskMechanics.incident_spawn_id(i)]
+        if not bool(defeated.get(key,false)):
+            remaining += 1
+    return remaining
+
+func _high_risk_status_label(poi_id:String) -> String:
+    if not HighRiskMechanics.has(poi_id):
+        return ""
+    var site = _target_farm_site_state(poi_id)
+    return HighRiskMechanics.status_label(
+        _high_risk_access_unlocked(poi_id),
+        _high_risk_remaining_threats(poi_id),
+        int(site.get("ready_day",0)),
+        world_day
+    )
+
 func _target_farm_cancel_schedule(poi_id:String):
     if poi_id == "":
         return
@@ -16460,6 +17515,11 @@ func _target_farm_schedule_if_cleared(poi_id:String):
     site["ready_day"] = world_day + _target_farm_refresh_days(poi)
     site["cycle"] = int(site.get("cycle",0))
     loot_refresh_sites[poi_id] = site
+    if HighRiskMechanics.has(poi_id):
+        var cycle = max(0,int(site.get("cycle",0)))
+        if HighRiskMechanics.mark_depleted(high_risk_state,poi_id,cycle,world_day):
+            var title = str(poi.get("short_name",poi.get("name",poi_id)))
+            _record_world_news("world","","%s вычищен до глубинных запасов. Повторное заселение займёт время." % title,world_day,int(world_minutes),false)
 
 func _target_farm_note_container_change(key:String,player_added=false):
     if not container_states.has(key):
@@ -16479,7 +17539,7 @@ func _target_farm_note_container_change(key:String,player_added=false):
     if state.get("items",[]).is_empty():
         _target_farm_schedule_if_cleared(poi_id)
 
-func _reset_target_farm_threats(poi:Dictionary):
+func _reset_target_farm_threats(poi:Dictionary,cycle:int = 0):
     if typeof(poi) != TYPE_DICTIONARY or poi.is_empty():
         return
     var anchor:Vector2i = poi.get("coord",poi.get("anchor",Vector2i(999999,999999)))
@@ -16493,7 +17553,8 @@ func _reset_target_farm_threats(poi:Dictionary):
         var key = str(raw_key)
         for prefix in prefixes:
             if key.begins_with(prefix):
-                defeated.erase(raw_key)
+                if _high_risk_reoccupation_restore_key(poi,key,cycle):
+                    defeated.erase(raw_key)
                 break
 
 func _target_farm_other_site_chunk_loaded(poi:Dictionary,current_coord:Vector2i) -> bool:
@@ -16535,10 +17596,13 @@ func _prepare_target_farm_site(poi:Dictionary) -> bool:
         var state = container_states[key]
         var grid = _container_grid_size(state)
         var table_name = str(state.get("loot_table",farm_profile))
-        state["items"] = _generate_loot("%s:refresh:%d" % [key,cycle],table_name,grid.x,grid.y)
+        var refreshed = _generate_loot("%s:refresh:%d" % [key,cycle],table_name,grid.x,grid.y)
+        state["items"] = _high_risk_recovery_loot(refreshed,poi_id,key,cycle)
         state["generated_day"] = world_day
         state["refresh_cycle"] = cycle
         container_states[key] = state
+        if str(key).ends_with(":cache_3"):
+            _ensure_high_risk_strategic_cache_item(poi_id,"cache_3",str(key))
     site["cycle"] = cycle
     site["last_refresh_day"] = world_day
     site["ready_day"] = 0
@@ -16546,7 +17610,62 @@ func _prepare_target_farm_site(poi:Dictionary) -> bool:
     loot_refresh_sites[poi_id] = site
     # A new target-farm cycle must also restore the location's danger; otherwise a
     # cleared dungeon would become a free vending machine on later visits.
-    _reset_target_farm_threats(poi)
+    _reset_target_farm_threats(poi,cycle)
+    if HighRiskMechanics.has(poi_id):
+        HighRiskMechanics.mark_reoccupied(high_risk_state,poi_id,cycle,world_day)
+        var title = str(poi.get("short_name",poi.get("name",poi_id)))
+        _record_world_news("danger","","%s снова небезопасен: заражённые вернулись, но прежних запасов там уже не будет." % title,world_day,int(world_minutes),false)
+    return true
+
+func _strategic_item_exists_in_world(item_id:String) -> bool:
+    if item_id == "":
+        return false
+    for entry in inventory_entries:
+        if str(entry.get("id","")) == item_id:
+            return true
+    for state in container_states.values():
+        if typeof(state) != TYPE_DICTIONARY:
+            continue
+        for entry in state.get("items",[]):
+            if typeof(entry) == TYPE_DICTIONARY and str(entry.get("id","")) == item_id:
+                return true
+    for entry in dropped_items:
+        if typeof(entry) == TYPE_DICTIONARY and str(entry.get("id","")) == item_id:
+            return true
+    var faction_id = SettlementProjects.faction_for_item(item_id)
+    if faction_id != "" and bool(SettlementProjects.record(faction_state,faction_id).get("strategic_installed",false)):
+        return true
+    return false
+
+func _ensure_high_risk_strategic_cache_item(poi_id:String,container_id:String,key:String) -> bool:
+    # One authored core cache per High Risk site receives the progression item.
+    # A persistent spawned flag prevents target-farm refreshes, save migration or
+    # chunk reloads from duplicating it. Old dev5 saves get the item on the next
+    # visit if it has never existed in inventory/world/project state.
+    if container_id != "cache_3" or not HighRiskMechanics.has(poi_id):
+        return false
+    var item_id = HighRiskMechanics.strategic_item(poi_id)
+    if item_id == "" or not item_defs.has(item_id):
+        return false
+    if HighRiskMechanics.strategic_spawned(high_risk_state,poi_id):
+        return false
+    if _strategic_item_exists_in_world(item_id):
+        HighRiskMechanics.mark_strategic_spawned(high_risk_state,poi_id)
+        return false
+    if not container_states.has(key):
+        return false
+    var state = container_states[key]
+    if typeof(state) != TYPE_DICTIONARY:
+        return false
+    var entries = state.get("items",[])
+    if typeof(entries) != TYPE_ARRAY:
+        entries = []
+    var grid = _container_grid_size(state)
+    if _grid_add(entries,item_id,1,grid.x,grid.y) != 0:
+        return false
+    state["items"] = entries
+    container_states[key] = state
+    HighRiskMechanics.mark_strategic_spawned(high_risk_state,poi_id)
     return true
 
 func _create_container(chunk, coord, local_pos, container_id, loot_table, display_name, grid_w=CONTAINER_W, grid_h=CONTAINER_H):
@@ -16559,6 +17678,13 @@ func _create_container(chunk, coord, local_pos, container_id, loot_table, displa
     var poi = RegionCatalog.poi_for_chunk(coord)
     var poi_id = str(poi.get("id",""))
     var target_farm = poi_id != "" and _target_farm_profile(poi) == str(loot_table)
+    # A pre-dev6 save may contain an authored core cache that the player already
+    # emptied. Preserve that exact empty state: the new strategic item waits for the
+    # site's normal reoccupation cycle instead of silently repopulating the cache.
+    var strategic_legacy_empty = false
+    if container_states.has(key):
+        var pre_dev6_state = container_states.get(key,{})
+        strategic_legacy_empty = typeof(pre_dev6_state) == TYPE_DICTIONARY and pre_dev6_state.get("items",[]).is_empty()
 
     if not container_states.has(key):
         container_states[key] = {
@@ -16608,6 +17734,9 @@ func _create_container(chunk, coord, local_pos, container_id, loot_table, displa
         container_states[key] = state
         if target_farm and state.get("items",[]).is_empty():
             _target_farm_schedule_if_cleared(poi_id)
+
+    if not strategic_legacy_empty:
+        _ensure_high_risk_strategic_cache_item(poi_id,str(container_id),key)
 
     var node = Node2D.new()
     node.position = local_pos
@@ -16825,6 +17954,7 @@ func _repair_shelter_door(door):
         door_states[str(door.get_meta("door_key",""))] = false
         _apply_door_state(door,false,false)
     _emit_ai_sound(door.global_position,82.0,"workbench",0.75)
+    _play_world_sfx("workbench",-11.0,0.022)
     _set_survival_feedback("Дверь укреплена: %d%%" % int(round(condition)),1.8)
     call_deferred("_refresh_inventory_ui")
     return true
@@ -16961,6 +18091,7 @@ func _repair_shelter_window(node):
         _set_breach_state_record(key,rec)
         _refresh_shelter_window(node)
         _emit_ai_sound(node.global_position,86.0,"workbench",0.78)
+        _play_world_sfx("workbench",-11.0,0.022)
         _set_survival_feedback("Окно укреплено металлической накладкой",1.9)
         call_deferred("_refresh_inventory_ui")
         return true
@@ -16985,6 +18116,7 @@ func _repair_shelter_window(node):
     _set_breach_state_record(key,rec)
     _refresh_shelter_window(node)
     _emit_ai_sound(node.global_position,80.0,"workbench",0.72)
+    _play_world_sfx("workbench",-11.0,0.022)
     _set_survival_feedback("Окно восстановлено: %d%%" % int(round(condition / _window_condition_max(rec) * 100.0)),1.8)
     call_deferred("_refresh_inventory_ui")
     return true
@@ -17164,6 +18296,7 @@ func _toggle_door(node):
         door_states[key] = false
         _apply_door_state(node,false,false)
         _emit_ai_sound(node.global_position,105.0,"door",1.15)
+        _play_world_sfx("door_close",-8.5,0.012)
     else:
         var local_player = node.to_local(player.global_position)
         var swing = -PI * 0.5 if local_player.y >= 0.0 else PI * 0.5
@@ -17171,6 +18304,7 @@ func _toggle_door(node):
         door_states[key] = true
         _apply_door_state(node,true,false)
         _emit_ai_sound(node.global_position,82.0,"door",0.85)
+        _play_world_sfx("door_open",-10.0,0.012)
 
 func _apply_door_state(node, open, snap=false):
     node.set_meta("door_open",open)
@@ -17456,6 +18590,9 @@ func _use_high_risk_floor_transition(node) -> void:
     if target_floor <= 1:
         _exit_high_risk_floor(true)
         return
+    if target_floor == 3 and source_floor == 2 and HighRiskMechanics.has(poi_id):
+        if not _high_risk_access_unlocked(poi_id) and not _high_risk_unlock_access(poi_id,source_floor):
+            return
     var ground_pos = high_risk_floor_ground_position
     if source_floor <= 1:
         ground_pos = node.global_position + Vector2(0,34)
@@ -17875,12 +19012,16 @@ func _build_high_risk_floor(root,poi_id:String,floor_index:int,data:Dictionary) 
     _multifloor_add_fixture_rows(root,size,theme)
     _multifloor_add_corridor_lights(root,size,theme)
     var down_label = "СПУСК • 1 ЭТАЖ" if floor_index == 2 else ("СПУСК • %d ЭТАЖ" % (floor_index-1))
-    if poi_id == "underground_object_vector":
+    if poi_id == VerticalSlice.HIGH_RISK_POI_ID:
+        down_label = "ВЫХОД • ПРИЁМНОЕ ОТДЕЛЕНИЕ" if floor_index == 2 else "К ВЫХОДУ • 2 ЭТАЖ"
+    elif poi_id == "underground_object_vector":
         down_label = "ПОДЪЁМ К ВЫХОДУ" if floor_index == 2 else "ПОДЪЁМ • ГЛУБИНА -%d" % (floor_index-1)
     _create_high_risk_floor_transition(root,Vector2(0,size.y*0.40),poi_id,floor_index-1,floor_index,down_label)
     if floor_index < HighRiskFloorCatalog.max_floor(poi_id):
         var up_label = "ЛЕСТНИЦА • %d ЭТАЖ" % (floor_index+1)
-        if poi_id == "underground_object_vector":
+        if poi_id == VerticalSlice.HIGH_RISK_POI_ID and floor_index == 2:
+            up_label = "АВАРИЙНЫЙ ДОСТУП • 3 ЭТАЖ"
+        elif poi_id == "underground_object_vector":
             up_label = "СПУСК • ГЛУБИНА -%d" % (floor_index+1)
         _create_high_risk_floor_transition(root,Vector2(0,-size.y*0.40),poi_id,floor_index+1,floor_index,up_label)
 
@@ -17888,8 +19029,11 @@ func _build_high_risk_floor(root,poi_id:String,floor_index:int,data:Dictionary) 
     for container in data.get("containers",[]):
         var cid = "mf_%s_f%d_%s" % [poi_id,floor_index,str(container.get("id","cache"))]
         _create_container(root,anchor,container.get("pos",Vector2.ZERO),cid,str(container.get("loot","residential")),str(container.get("name","Запасы")))
+    var high_risk_floor_story = HighRiskStoryCatalog.floor_clue(poi_id,floor_index)
+    if not high_risk_floor_story.is_empty():
+        _create_environmental_story_clue(root,high_risk_floor_story)
 
-    var count = int(data.get("enemy_count",0))
+    var count = _high_risk_floor_effective_enemy_count(poi_id,floor_index,data)
     var profile = str(data.get("enemy_profile","high_interior"))
     var rng = RandomNumberGenerator.new()
     rng.seed = abs(int(hash("%s:%d" % [poi_id,floor_index]))) + 1
@@ -18599,10 +19743,13 @@ func _build_showcase_chunk(chunk,coord):
 
     _create_container(chunk,coord,Vector2(112,108),"pharmacy_main","pharmacy","Медицинский шкаф")
     _create_container(chunk,coord,Vector2(555,120),"grocery_main","grocery","Полки магазина")
-    _create_container(chunk,coord,Vector2(112,602),"garage_all_items_0163","all_items_test","ТЕСТ: ВСЕ ПРЕДМЕТЫ",QA_ALL_ITEMS_CONTAINER_W,QA_ALL_ITEMS_CONTAINER_H)
+    # Feature Lock: the full-catalogue QA crate exists only in -dev builds.
+    # Stable/RC builds must never expose it even though the showcase chunk itself is normal world content.
+    if _developer_tools_available():
+        _create_container(chunk,coord,Vector2(112,602),"garage_all_items_0163","all_items_test","ТЕСТ: ВСЕ ПРЕДМЕТЫ",QA_ALL_ITEMS_CONTAINER_W,QA_ALL_ITEMS_CONTAINER_H)
+        _create_world_label(chunk,Vector2(112,565),"ТЕСТ-ЯЩИК: ВСЕ ПРЕДМЕТЫ",7,Color("d1b970"))
     _create_container(chunk,coord,Vector2(570,600),"res_weapon","weapon_cache_test","Скрытый тайник")
     _create_workbench(chunk,Vector2(165,596))
-    _create_world_label(chunk,Vector2(112,565),"ТЕСТ-ЯЩИК: ВСЕ ПРЕДМЕТЫ",7,Color("d1b970"))
 
     _create_car(chunk,Vector2(240,408),Color("47545c"),-0.08)
     _create_car(chunk,Vector2(510,350),Color("663d36"),0.05)
@@ -19070,6 +20217,17 @@ func _create_faction_npc(chunk,record:Dictionary):
     var npc_id = str(record.get("npc_id",""))
     if npc_id == "":
         return null
+    # Permanent settlement residents participate in the named-NPC state machine.
+    # Temporary faction NPCs (for example supply-event survivors) deliberately do
+    # not: their lifetime is owned by the event that spawned them.
+    var is_named_npc = not FactionNpcState.canonical(npc_id).is_empty()
+    var npc_status = "alive"
+    if is_named_npc:
+        FactionNpcState.ensure_state(faction_state,world_day)
+        var npc_state_record = FactionNpcState.record(faction_state,npc_id,world_day)
+        if npc_state_record.is_empty() or not FactionNpcState.is_present(faction_state,npc_id,world_day):
+            return null
+        npc_status = str(npc_state_record.get("status","alive"))
     var node = Node2D.new()
     node.name = "FactionNPC_%s" % npc_id
     node.position = record.get("pos",Vector2(384,384))
@@ -19081,6 +20239,7 @@ func _create_faction_npc(chunk,record:Dictionary):
     node.set_meta("faction_id",str(record.get("faction_id","")))
     node.set_meta("display_name",str(record.get("name",npc_id)))
     node.set_meta("npc_role",str(record.get("role","житель поселения")))
+    node.set_meta("npc_status",npc_status)
     node.set_meta("interaction_radius",76.0)
     var trader_id = TraderCatalog.trader_for_npc(npc_id)
     var contract_board = ContractCatalog.board_for_npc(npc_id)
@@ -19114,11 +20273,28 @@ func _create_faction_npc(chunk,record:Dictionary):
     name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     node.add_child(name_label)
 
+    var state_label = Label.new()
+    state_label.name = "NpcStatusLabel"
+    state_label.position = Vector2(-34,-58)
+    state_label.size = Vector2(68,10)
+    state_label.text = "РАНЕН" if npc_status == "wounded" else ""
+    state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    state_label.add_theme_font_size_override("font_size",5)
+    state_label.modulate = Color("d38b78")
+    state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    state_label.visible = is_named_npc and npc_status == "wounded"
+    node.add_child(state_label)
+
     if trader_id != "" or not contract_board.is_empty():
         var role_label = Label.new()
         role_label.position = Vector2(-30,-37)
         role_label.size = Vector2(60,11)
-        role_label.text = "ТОРГОВЕЦ" if trader_id != "" else "КОНТРАКТЫ"
+        if trader_id != "":
+            role_label.text = "ТОРГОВЕЦ"
+        elif bool(contract_board.get("personal",false)):
+            role_label.text = "ПОРУЧЕНИЕ"
+        else:
+            role_label.text = "КОНТРАКТЫ"
         role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         role_label.add_theme_font_size_override("font_size",5)
         role_label.modulate = Color("c6aa62")
@@ -19132,6 +20308,44 @@ func _spawn_faction_npcs(chunk,poi_id:String,cell_offset:Vector2i):
     for record in FactionSettlementCatalog.npcs(poi_id,cell_offset):
         _create_faction_npc(chunk,record)
 
+func _record_named_npc_interaction(npc_id:String,kind:String,text:String,attitude_delta:int = 0) -> Dictionary:
+    if npc_id == "" or FactionNpcState.canonical(npc_id).is_empty():
+        return {}
+    return FactionNpcState.record_interaction(faction_state,npc_id,world_day,kind,text,attitude_delta)
+
+func _refresh_named_npc_runtime(npc_id:String) -> void:
+    var present = FactionNpcState.is_present(faction_state,npc_id,world_day)
+    var npc_status = FactionNpcState.status(faction_state,npc_id,world_day)
+    for node in get_tree().get_nodes_in_group("faction_npcs"):
+        if not is_instance_valid(node) or str(node.get_meta("npc_id","")) != npc_id:
+            continue
+        if not present:
+            node.queue_free()
+            continue
+        node.set_meta("npc_status",npc_status)
+        var state_label = node.get_node_or_null("NpcStatusLabel")
+        if state_label != null:
+            state_label.text = "РАНЕН" if npc_status == "wounded" else ""
+            state_label.visible = npc_status == "wounded"
+
+func _set_named_npc_status(npc_id:String,new_status:String,reason:String = "") -> Dictionary:
+    var result = FactionNpcState.set_status(faction_state,npc_id,new_status,world_day,reason)
+    if not bool(result.get("ok",false)) or not bool(result.get("changed",false)):
+        return result
+    var rec = result.get("record",{})
+    var faction_id = str(rec.get("faction_id",""))
+    var npc_name = str(rec.get("name",npc_id))
+    var news = "%s снова на месте и вернулся к своим обязанностям." % npc_name
+    match new_status:
+        "wounded": news = "%s получил ранение. В поселении говорят, что пока он работает через силу." % npc_name
+        "missing": news = "%s не вернулся. В поселении пока не знают, что с ним случилось." % npc_name
+        "dead": news = "%s погиб. Его место в поселении опустело." % npc_name
+    if reason.strip_edges() != "":
+        news += " " + reason.strip_edges()
+    _record_world_news("npc",faction_id,news,world_day,int(world_minutes),false)
+    _refresh_named_npc_runtime(npc_id)
+    return result
+
 func _talk_faction_npc(node):
     if not is_instance_valid(node):
         return
@@ -19140,12 +20354,16 @@ func _talk_faction_npc(node):
         var line = "Нас зажали на дороге. Сначала убери заражённых, потом проверь груз."
         if stage == "overrun":
             line = "Еле держусь. Груз ещё в машине — если очистишь дорогу, его можно спасти."
-        _set_survival_feedback("%s • %s
-%s" % [str(node.get_meta("display_name","Охранник")),str(node.get_meta("npc_role","уцелевший")),line],3.8)
+        _set_survival_feedback("%s • %s\n%s" % [str(node.get_meta("display_name","Охранник")),str(node.get_meta("npc_role","уцелевший")),line],3.8)
         return
     var npc_id = str(node.get_meta("npc_id",""))
     var name = str(node.get_meta("display_name",""))
     var role = str(node.get_meta("npc_role",""))
+    var faction_id = str(node.get_meta("faction_id",""))
+    var npc_status = FactionNpcState.status(faction_state,npc_id,world_day)
+    var rep = FactionEconomy.reputation(faction_state,faction_id)
+    var attitude = FactionNpcState.attitude_score(faction_state,npc_id,rep,world_day)
+    var relation_text = FactionNpcState.attitude_label(attitude)
     var line = "Держись ближе к освещённым улицам. За стенами сейчас неспокойно."
     match npc_id:
         "perron_steward": line = "Если привезёшь припасы, это почувствует весь Перрон, не только рынок."
@@ -19156,7 +20374,45 @@ func _talk_faction_npc(node):
         "mechanics_storekeeper": line = "Склад не резиновый. Завалишь нас одним товаром — цена просядет."
         "lazaret_doctor": line = "Тяжёлые случаи лечатся запасами, а запасы сами себя не пополняют."
         "lazaret_researcher": line = "Образцы и реагенты интересуют нас больше оружия."
-    _set_survival_feedback("%s • %s\n%s" % [name,role,line],3.8)
+    var settlement = SettlementCrisis.faction_status(faction_state,faction_id)
+    var settlement_stage = str(settlement.get("stage","stable"))
+    var shortage_name = SettlementCrisis.resource_label(str(settlement.get("worst_resource","food")))
+    if settlement_stage == "crisis":
+        line += " Сейчас у нас настоящий кризис: хуже всего с %s." % shortage_name
+    elif settlement_stage == "shortage":
+        line += " Запасы просели; особенно не хватает того, что связано с %s." % shortage_name
+    elif settlement_stage == "strain":
+        line += " Пока держимся, но снабжение уже чувствуется на каждом складе."
+    var sandbox_route_note = SandboxRouteConsequences.npc_note(faction_state,faction_id)
+    if sandbox_route_note != "":
+        line += " " + sandbox_route_note
+    if npc_status == "wounded":
+        line = "После ранения долго не простою, так что говори по делу. " + line
+    var slice_rec = VerticalSlice.record(faction_state)
+    var slice_completed = bool(slice_rec.get("completed",false))
+    var doctor_debrief = npc_id == VerticalSlice.DOCTOR_NPC_ID and VerticalSlice.doctor_debrief_ready(faction_state)
+    if doctor_debrief:
+        var recovery = VerticalSlice.settlement_recovery_summary(faction_state)
+        line = "Груз распределили. %s Я больше не веду тебя по маршруту — дальше сам выбирай, кому помогать и куда идти." % str(recovery.get("note","Аварийный дефицит снят."))
+        if VerticalSlice.mark_doctor_debrief_seen(faction_state,world_day):
+            _record_named_npc_interaction(npc_id,"vertical_slice_debrief","Миронова подвела итог первой клинической вылазки и отпустила игрока в свободный маршрут.",6)
+            rep = FactionEconomy.reputation(faction_state,faction_id)
+            attitude = FactionNpcState.attitude_score(faction_state,npc_id,rep,world_day)
+            relation_text = FactionNpcState.attitude_label(attitude)
+            _save_state()
+    elif slice_completed and faction_id == VerticalSlice.FACTION_ID:
+        var recovery = VerticalSlice.settlement_recovery_summary(faction_state)
+        line += " После клинического груза здесь стало легче: %s" % str(recovery.get("note","аварийный дефицит снят."))
+    else:
+        var last = FactionNpcState.last_history(faction_state,npc_id,world_day)
+        if str(last.get("kind","")) == "contract_complete":
+            line += " И да — прошлую работу здесь помнят."
+        elif attitude >= 60:
+            line += " Тебе здесь уже доверяют больше, чем большинству чужаков."
+        elif attitude <= -15:
+            line += " Но после прежних дел к тебе пока присматриваются."
+    _record_named_npc_interaction(npc_id,"talk","Разговор в поселении.",0)
+    _set_survival_feedback("%s • %s • %s\n%s" % [name,role,relation_text,line],5.2 if doctor_debrief else 4.4)
 
 func _build_major_poi_chunk(chunk,coord,profile) -> bool:
     var poi = profile.get("poi",{})
@@ -19238,10 +20494,7 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
         )
 
     for fence_data in cell_data.get("fences",[]):
-        if HighRiskSiteCatalog.has(poi_id):
-            _hr_fence(chunk,fence_data,poi_id,cell_offset)
-        else:
-            _create_fence(chunk,fence_data.get("pos",Vector2(384,80)),float(fence_data.get("length",120.0)),float(fence_data.get("rotation",0.0)))
+        _create_fence(chunk,fence_data.get("pos",Vector2(384,80)),float(fence_data.get("length",120.0)),float(fence_data.get("rotation",0.0)))
     for lamp_pos in cell_data.get("lamps",[]):
         _create_lamp(chunk,lamp_pos)
     for bench_pos in cell_data.get("workbenches",[]):
@@ -19254,6 +20507,21 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
             int(prop.get("z",3)),
             float(prop.get("scale",0.5))
         )
+    for accent in MinorPoiDressing.accents_for(poi_id,cell_offset):
+        var accent_sprite = _world_prop_sprite(
+            str(accent.get("kind","debris")),
+            chunk,
+            accent.get("pos",Vector2.ZERO),
+            int(accent.get("z",3)),
+            float(accent.get("scale",0.5))
+        )
+        if is_instance_valid(accent_sprite):
+            accent_sprite.set_meta("minor_poi_dressing",true)
+            accent_sprite.set_meta("minor_poi_id",poi_id)
+            accent_sprite.set_meta("minor_poi_cell",MinorPoiDressing.cell_key(cell_offset))
+    var poi_story_clue = PoiStoryCatalog.clue_for(poi_id,cell_offset)
+    if not poi_story_clue.is_empty():
+        _create_environmental_story_clue(chunk,poi_story_clue)
     if cell_data.has("settlement_style"):
         _dress_faction_settlement(chunk,coord,cell_data,str(poi.get("name",poi_name)))
     _spawn_faction_npcs(chunk,poi_id,cell_offset)
@@ -19269,6 +20537,9 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
         )
     if HighRiskSiteCatalog.has(poi_id):
         _dress_high_risk_site(chunk,coord,poi_id,cell_offset,cell_data)
+        var high_risk_ground_story = HighRiskStoryCatalog.ground_clue(poi_id,cell_offset)
+        if not high_risk_ground_story.is_empty():
+            _create_environmental_story_clue(chunk,high_risk_ground_story)
     else:
         _dress_major_poi(chunk,coord,str(cell_data.get("ground","")))
     return true
@@ -20639,69 +21910,6 @@ func _hr_paint(layer,kind:String,offset:Vector2i,rng):
             _hr_dash(layer,Vector2(20,466),Vector2(748,466),Color(0.80,0.80,0.74,0.35),18,16,2,rng)
 
 # ---------------------------------------------------------------- perimeter --
-# ------------------------------------------------------- High Risk fences --
-# The authored chain-link chokepoints of a High Risk sector were laid out for the
-# old building footprints. Cut each fence into 31 px sections and only build the
-# runs that do not cross a building or stand in front of its facade, block a
-# door, or double the PO-2 perimeter wall; stubs shorter than two sections go.
-func _hr_fence_blocked(chunk,rect:Rect2,sides:Dictionary) -> bool:
-    for child in chunk.get_children():
-        if not child.has_meta("world_building"):
-            continue
-        var sz:Vector2 = child.get_meta("building_size",Vector2.ZERO)
-        var foot = Rect2(child.position - sz * 0.5,sz)
-        # footprint plus the strip in front of the south facade (canopies, steps)
-        if rect.intersects(foot.grow_individual(10,10,10,26)):
-            return true
-        var door = child.position + Vector2(float(child.get_meta("door_local_x",0.0)),sz.y * 0.5)
-        if rect.grow(44.0).has_point(door):
-            return true
-    if sides.has("n") and rect.position.y < 52.0:
-        return true
-    if sides.has("s") and rect.end.y > 716.0:
-        return true
-    if sides.has("w") and rect.position.x < 50.0:
-        return true
-    if sides.has("e") and rect.end.x > 718.0:
-        return true
-    return false
-
-func _hr_fence(chunk,fence_data:Dictionary,poi_id:String,cell_offset:Vector2i):
-    var pos:Vector2 = fence_data.get("pos",Vector2(384,80))
-    var length = float(fence_data.get("length",120.0))
-    var rot = float(fence_data.get("rotation",0.0))
-    var vertical = abs(sin(rot)) > 0.7
-    var fp = PoiCatalog.footprint(poi_id)
-    var sides = {}
-    for d in [["n",Vector2i(0,-1)],["s",Vector2i(0,1)],["w",Vector2i(-1,0)],["e",Vector2i(1,0)]]:
-        if not fp.has(cell_offset + d[1]):
-            sides[d[0]] = true
-    var seg = 31.0
-    var n = max(1,int(ceil(length / seg)))
-    var keep = []
-    for i in range(n):
-        var t = -length * 0.5 + seg * (float(i) + 0.5)
-        var c = pos + (Vector2(0,t) if vertical else Vector2(t,0))
-        var r = Rect2(c - Vector2(4,seg * 0.5),Vector2(8,seg)) if vertical else Rect2(c - Vector2(seg * 0.5,4),Vector2(seg,8))
-        keep.append(not _hr_fence_blocked(chunk,r,sides))
-    var kept = 0
-    var i = 0
-    while i < n:
-        if not keep[i]:
-            i += 1
-            continue
-        var j = i
-        while j < n and keep[j]:
-            j += 1
-        if j - i >= 2:
-            var a = -length * 0.5 + seg * float(i)
-            var b = min(length * 0.5,-length * 0.5 + seg * float(j))
-            var mid = (a + b) * 0.5
-            _create_fence(chunk,pos + (Vector2(0,mid) if vertical else Vector2(mid,0)),b - a,rot)
-            kept += 1
-        i = j
-    chunk.set_meta("hr_fence_runs",int(chunk.get_meta("hr_fence_runs",0)) + kept)
-
 func _hr_perimeter(chunk,poi_id:String,offset:Vector2i,style:String):
     var fp = PoiCatalog.footprint(poi_id)
     var sides = {}
@@ -20809,13 +22017,14 @@ func _sync_loaded_supply_event_stage(event:Dictionary):
         else:
             survivors[i].set_meta("supply_event_stage",stage)
 
-func _apply_supply_event_day_result(result:Dictionary):
+func _apply_supply_event_day_result(result:Dictionary,event_day:int = -1):
     if result.is_empty():
         return
     if bool(result.get("created",false)):
         var event = result.get("event",{})
         var faction_id = str(event.get("faction",""))
         var faction_name = str(FactionCatalog.faction(faction_id).get("short_name",faction_id))
+        _record_world_news("supply",faction_id,"%s: рейс снабжения не вышел на связь. Последний сигнал отмечен на полевой карте." % faction_name,event_day,0,false)
         _set_survival_feedback("РАДИО • %s
 %s
 Отметка добавлена на полевую карту." % [faction_name,str(result.get("message","Пропал рейс снабжения."))],5.0)
@@ -20824,14 +22033,21 @@ func _apply_supply_event_day_result(result:Dictionary):
         var expired_root = _loaded_supply_event_root(str(expired_event.get("id","")))
         if is_instance_valid(expired_root):
             expired_root.queue_free()
+        var expired_faction = str(expired_event.get("faction",""))
+        var expired_name = str(FactionCatalog.faction(expired_faction).get("short_name",expired_faction))
+        _record_world_news("supply",expired_faction,"%s: пропавший рейс признан потерянным. Поселение урезает резервы." % expired_name,event_day,0,false)
         _set_survival_feedback("СНАБЖЕНИЕ • %s" % str(result.get("message","Рейс потерян.")),4.0)
     elif bool(result.get("stage_changed",false)):
         var event = result.get("event",{})
         _sync_loaded_supply_event_stage(event)
         var stage = str(event.get("stage",""))
+        var stage_faction = str(event.get("faction",""))
+        var stage_name = str(FactionCatalog.faction(stage_faction).get("short_name",stage_faction))
         if stage == "overrun":
+            _record_world_news("danger",stage_faction,"Связь с рейсом %s оборвалась. На месте, вероятно, заражённые." % stage_name,event_day,0,false)
             _set_survival_feedback("РАДИО • связь с пропавшим рейсом оборвалась.",3.5)
         elif stage == "looted":
+            _record_world_news("danger",stage_faction,"Рейс %s не отвечает; груз растаскивают, к месту сходятся заражённые." % stage_name,event_day,0,false)
             _set_survival_feedback("РАДИО • к месту пропажи уже стягиваются мародёры и заражённые.",3.5)
     if region_map_open:
         _refresh_region_map_ui()
@@ -20893,8 +22109,14 @@ func _resolve_supply_event(target):
     var resource_gain = float(result.get("resource_gain",0.0))
     var tickets = int(result.get("tickets",0))
     var reputation = int(result.get("reputation",0))
+    _record_world_news("supply",faction_id,"%s подтверждает: пропавший рейс спасён, уцелевший груз дошёл до своих." % faction_name,world_day,int(world_minutes),false)
+    var slice_reserve = _vertical_slice_issue_field_reserve()
+    var reserve_text = ""
+    if not slice_reserve.is_empty():
+        reserve_text = "
+Полевой резерв: 9×18 +%d • бинты +%d" % [int(slice_reserve.get("ammo_9x18",0)),int(slice_reserve.get("bandage",0))]
     _set_survival_feedback("РЕЙС %s СПАСЁН
-Снабжение +%.0f • репутация +%d • талоны +%d" % [faction_name,resource_gain,reputation,tickets],5.0)
+Снабжение +%.0f • репутация +%d • талоны +%d%s" % [faction_name,resource_gain,reputation,tickets,reserve_text],5.0)
     var root_node = target.get_parent()
     if is_instance_valid(root_node) and bool(root_node.get_meta("world_event_root",false)):
         root_node.queue_free()
@@ -21003,6 +22225,81 @@ func _world_event_anchor(chunk,event:Dictionary,coord:Vector2i) -> Vector2:
 func _event_prop(root,kind:String,offset:Vector2,scale_value:float = 0.5,z_value:int = 4):
     return _world_prop_sprite(kind,root,offset,z_value,scale_value)
 
+func _decorate_world_event_variant(root,coord:Vector2i,event_id:String) -> int:
+    if root == null:
+        return -1
+    var variant = EncounterSceneVariety.variant_for(coord,event_id)
+    if variant < 0:
+        return -1
+    root.set_meta("scene_variant",variant)
+    for accent in EncounterSceneVariety.accents_for(coord,event_id):
+        _event_prop(
+            root,
+            str(accent.get("kind","")),
+            accent.get("pos",Vector2.ZERO),
+            float(accent.get("scale",0.4)),
+            int(accent.get("z",2))
+        )
+    return variant
+
+func _create_environmental_story_clue(parent:Node,clue:Dictionary):
+    if parent == null or clue.is_empty():
+        return null
+    var story_id = str(clue.get("id",""))
+    if story_id == "":
+        return null
+    var node = Node2D.new()
+    node.name = "StoryClue_%s" % story_id
+    node.position = clue.get("pos",Vector2.ZERO)
+    node.z_index = 8
+    node.z_as_relative = false
+    node.add_to_group("interactable")
+    node.set_meta("interaction_type","story_clue")
+    node.set_meta("interaction_radius",70.0)
+    node.set_meta("display_name",str(clue.get("prompt","ЗАПИСКА")))
+    node.set_meta("story_id",story_id)
+    node.set_meta("story_title",str(clue.get("title","Запись")))
+    node.set_meta("story_text",str(clue.get("text","")))
+    parent.add_child(node)
+    _world_prop_sprite(str(clue.get("prop_kind","paper_stack")),node,Vector2.ZERO,0,float(clue.get("scale",0.4)))
+    return node
+
+func _resolve_story_thread_echoes() -> Array:
+    var chronicle = faction_state.get("world_chronicle",{})
+    var seen = chronicle.get("story_seen",[]) if typeof(chronicle) == TYPE_DICTIONARY else []
+    var added:Array = []
+    for thread in StoryThreadCatalog.ready_unseen(seen):
+        var thread_id = str(thread.get("id",""))
+        var title = str(thread.get("title","Полевая сводка"))
+        var text = str(thread.get("text",""))
+        if thread_id == "" or text == "":
+            continue
+        WorldChronicle.append_story(faction_state,world_day,int(world_minutes),thread_id,title,text)
+        added.append(thread_id)
+        chronicle = faction_state.get("world_chronicle",{})
+        seen = chronicle.get("story_seen",[]) if typeof(chronicle) == TYPE_DICTIONARY else []
+    return added
+
+func _read_story_clue(node:Node) -> void:
+    if not is_instance_valid(node):
+        return
+    var story_id = str(node.get_meta("story_id",""))
+    var title = str(node.get_meta("story_title",node.get_meta("display_name","Запись")))
+    var text = str(node.get_meta("story_text",""))
+    if story_id == "" or text == "":
+        return
+    var was_seen = WorldChronicle.story_seen(faction_state,story_id)
+    WorldChronicle.append_story(faction_state,world_day,int(world_minutes),story_id,title,text)
+    node.set_meta("story_seen",true)
+    _resolve_story_thread_echoes()
+    _set_survival_feedback("%s • %s\n%s" % [("ЗАПИСЬ" if was_seen else "НАЙДЕНА ЗАПИСЬ"),title,text],6.0)
+    if world_chronicle_button != null:
+        var unread_news = WorldChronicle.unread_count(faction_state)
+        world_chronicle_button.text = "ЭФИР" if unread_news <= 0 else "ЭФИР %d" % min(99,unread_news)
+    if world_chronicle_open:
+        _refresh_world_chronicle_ui()
+    _save_state()
+
 func _spawn_world_event_enemy(chunk,coord:Vector2i,spawn_id:int,pos:Vector2,kind:String = "normal"):
     var key = "%d:%d:%d" % [coord.x,coord.y,spawn_id]
     if bool(defeated.get(key,false)):
@@ -21072,6 +22369,14 @@ func _build_world_event(chunk,coord:Vector2i,profile:Dictionary,event:Dictionary
             _event_prop(root,"tipped_chair",Vector2(-34,-8),0.50,3)
             _event_prop(root,"scattered_bottles",Vector2(38,16),0.48,2)
             _event_prop(root,"newspapers_wide",Vector2(10,-24),0.46,2)
+
+    # 1.24-dev2: derived cosmetic accents only. Dynamic supply convoys and all
+    # gameplay-bearing encounter data deliberately bypass this layer.
+    if event_id != "supply_convoy":
+        _decorate_world_event_variant(root,coord,event_id)
+        var story_clue = EnvironmentalStoryCatalog.clue_for(coord,event_id)
+        if not story_clue.is_empty():
+            _create_environmental_story_clue(root,story_clue)
 
     var loot_profile = EncounterCatalog.loot_profile(event,zone)
     if loot_profile != "" and _loot_profile_risk(loot_profile) <= risk:
@@ -21165,6 +22470,12 @@ func _build_procedural_chunk(chunk,coord):
                 var building_set = str(profile.get("building_set","mixed_residential"))
                 archetype_data = BuildingCatalog.archetype(building_set,i,poi_kind)
                 archetype_id = str(archetype_data.get("id","utility_house"))
+                # 1.24-dev1: procedural content variety is derived from coord + slot.
+                # It never changes gameplay ids/loot/geometry and is not persisted.
+                var content_variant = WorldContentVariety.variant_for(coord,archetype_id,i)
+                if content_variant >= 0 and not preserve_082_layout:
+                    archetype_data["content_variant"] = content_variant
+                    archetype_data["content_seed"] = WorldContentVariety.visual_seed_key(coord,archetype_id,i)
                 var min_size = archetype_data.get("size_min",Vector2(145,105))
                 var max_size = archetype_data.get("size_max",Vector2(210,150))
                 if preserve_082_layout:
@@ -21290,6 +22601,8 @@ func _build_procedural_chunk(chunk,coord):
         enemy_count = max(0,int(round(float(enemy_count) * float(authored_cell.get("enemy_mult",1.0)))))
         if authored_cell.has("enemy_count"):
             enemy_count = max(0,int(authored_cell.get("enemy_count",enemy_count)))
+        if poi_id == VerticalSlice.HIGH_RISK_POI_ID:
+            enemy_count = VerticalSlice.clinical_ground_enemy_count(faction_state,poi.get("cell_offset",Vector2i.ZERO),enemy_count)
 
     var world_event = {}
     if not authored_poi and not is_legacy and not preserve_082_layout and not _chunk_has_player_base(coord):
@@ -21339,6 +22652,8 @@ func _build_procedural_chunk(chunk,coord):
         int(rng.seed) + 701,
         str(authored_cell.get("enemy_profile","standard")) if authored_poi else "standard"
     )
+    if authored_poi:
+        _spawn_high_risk_local_incident(chunk,coord,poi_id,poi.get("cell_offset",Vector2i.ZERO))
 
 func _decorate_region_identity(chunk,coord,profile):
     # 0.82 deliberately uses small physical signs/landmarks instead of a map UI.
@@ -21586,8 +22901,35 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             _layout_wall_v(building,0.0,inner_h,4.0,28.0)
             _archetype_prop(building,"cabinet",Vector2(-size.x*0.22,back_y),0.48)
 
+    _decorate_world_content_variant_interior(building,archetype_id,data,size)
     building.set_meta("authored_layout",layout)
     building.set_meta("layout_version",3)
+
+func _decorate_world_content_variant_interior(building,archetype_id,data,size):
+    if building == null or not data.has("content_variant"):
+        return
+    var profile = WorldContentVariety.profile_for(archetype_id,int(data.get("content_variant",-1)))
+    for spec in profile.get("interior",[]):
+        var pos = Vector2(float(spec.get("fx",0.0)) * size.x,float(spec.get("fy",0.0)) * size.y)
+        _archetype_prop(building,str(spec.get("kind","floor_papers")),pos,float(spec.get("scale",0.42)),int(spec.get("z",2)))
+
+func _decorate_world_content_variant_facade(facade,archetype_id,data,size):
+    if facade == null or not data.has("content_variant"):
+        return
+    var profile = WorldContentVariety.profile_for(archetype_id,int(data.get("content_variant",-1)))
+    var facade_height = float(facade.get_meta("facade_height",56.0))
+    for spec in profile.get("facade",[]):
+        var pos = Vector2(float(spec.get("fx",0.0)) * size.x,-float(spec.get("fy",0.45)) * facade_height)
+        _world_prop_sprite(str(spec.get("kind","wall_grime")),facade,pos,int(spec.get("z",2)),float(spec.get("scale",0.42)))
+
+func _decorate_world_content_variant_yard(chunk,center,size,archetype_id,data):
+    if chunk == null or not data.has("content_variant"):
+        return
+    var profile = WorldContentVariety.profile_for(archetype_id,int(data.get("content_variant",-1)))
+    var front = center + Vector2(0,size.y*0.5 + 54)
+    for spec in profile.get("yard",[]):
+        var pos = front + Vector2(float(spec.get("fx",0.0)) * size.x,float(spec.get("dy",8.0)))
+        _world_prop_sprite(str(spec.get("kind","street_debris")),chunk,pos,int(spec.get("z",2)),float(spec.get("scale",0.40)))
 
 func _decorate_archetype_facade(facade,archetype_id,data,size):
     if facade == null:
@@ -21691,6 +23033,7 @@ func _decorate_archetype_yard(chunk,center,size,archetype_id,data):
             _world_prop_sprite("cardboard_boxes",chunk,front + Vector2(46,7),3,0.42)
         "residential":
             _world_prop_sprite("trash_bag",chunk,front + Vector2(44,8),3,0.40)
+    _decorate_world_content_variant_yard(chunk,center,size,archetype_id,data)
 
 func _add_segmented_south_wall(building,size,door_x,window_xs):
     var openings = [{"x":float(door_x),"half":16.0}]
@@ -21735,6 +23078,10 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     building.set_meta("building_id",str(building_id))
     building.set_meta("building_size",size)
     building.set_meta("door_local_x",0.0)
+    var visual_seed_id = str(archetype_data.get("content_seed",building_id))
+    if archetype_data.has("content_variant"):
+        building.set_meta("content_variant",int(archetype_data.get("content_variant",-1)))
+        building.set_meta("content_seed",visual_seed_id)
     chunk.add_child(building)
 
     # 1.22-dev4: faction settlement buildings carry an authored exterior model.
@@ -21766,7 +23113,7 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     _ellipse(Vector2(0,size.y*0.52),size.x*0.42,8,Color(0.02,0.02,0.02,0.14),building)
     _interior_floor_sprite(building,sign_text,size)
     _decorate_interior_depth_shading(building,size,sign_text,building_id)
-    _decorate_interior_floor_details(building,size,building_id)
+    _decorate_interior_floor_details(building,size,visual_seed_id)
     _decorate_building_wall_texture(building,sign_text,size)
 
     # 0.83 keeps the outer footprint stable, but authored archetypes can shift the
@@ -21811,6 +23158,8 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     var facade_profile = str(archetype_data.get("facade","")) if archetype_id != "" else ""
     if settlement_model.is_empty():
         _build_tall_facade(facade,sign_text,size,building_id,door_x,facade_height,facade_profile)
+        if archetype_id != "":
+            _decorate_world_content_variant_facade(facade,archetype_id,archetype_data,size)
     else:
         _build_settlement_model_facade(facade,settlement_model,size,door_x,sign_text)
 
@@ -21833,7 +23182,7 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     if not settlement_model.is_empty():
         _build_settlement_model_roof(roof,settlement_model,facade_height)
     else:
-        _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data)
+        _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data,visual_seed_id)
 
     var interior_rect = Rect2(
         chunk.global_position + center - size*0.5 + Vector2(10,6),
@@ -21869,7 +23218,7 @@ func _exterior_model(model_id:String) -> Dictionary:
         return HighRiskBuildingModels.model(model_id)
     return {}
 
-func _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data):
+func _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data,visual_seed_id = ""):
     _poly(PackedVector2Array([
         Vector2(-size.x*0.52,-size.y*0.52),
         Vector2(size.x*0.52,-size.y*0.52),
@@ -21878,8 +23227,9 @@ func _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_
     ]),Color("262b29"),roof)
     _roof_surface_sprite(roof,sign_text,size)
     _rect(Vector2(0,size.y*0.47),Vector2(size.x*0.96,6),Color("181c1b"),roof)
-    _decorate_roof_art(roof,sign_text,size,building_id)
-    _decorate_roof_details(roof,sign_text,size,building_id)
+    var roof_seed_id = visual_seed_id if str(visual_seed_id) != "" else str(building_id)
+    _decorate_roof_art(roof,sign_text,size,roof_seed_id)
+    _decorate_roof_details(roof,sign_text,size,roof_seed_id)
     if archetype_id != "":
         _decorate_archetype_roof(roof,archetype_id,archetype_data,size)
 
@@ -22244,7 +23594,6 @@ func _create_fence(chunk,pos,length,rotation_value = 0.0):
             _rect(Vector2(x,-3),Vector2(3,28),Color("4a4f4b"),fence)
             _rect(Vector2(x-4,-10),Vector2(8,2),Color("80857d"),fence)
     _add_static_rect(fence,Vector2(0,0),Vector2(length,6))
-    return fence
 
 
 
@@ -23326,6 +24675,7 @@ func _update_enemies(delta):
         ):
             attack_cd = max(0.58,float(enemy.get_meta("attack_interval",0.9)))
             attack_anim = 0.26
+            _play_distance_sfx("infected_attack",enemy.global_position,-9.0,360.0,0.025)
             _apply_enemy_hit(float(enemy.get_meta("attack_damage",8.0)))
 
         enemy.set_meta("ai_state",state)
@@ -23826,9 +25176,11 @@ func _update_survival(delta):
     if moving_now and sprint_noise_time <= 0.0:
         if is_sprinting:
             _emit_ai_sound(player.global_position,138.0,"sprint",1.0)
+            _play_world_sfx("footstep_sprint",-12.5,0.035)
             sprint_noise_time = 0.48
         else:
             _emit_ai_sound(player.global_position,52.0,"walk",1.0)
+            _play_world_sfx("footstep_walk",-16.0,0.035)
             sprint_noise_time = 0.80
 
     survival_feedback_time = max(0.0,survival_feedback_time - delta)
@@ -24254,6 +25606,7 @@ func _apply_enemy_hit(base_damage):
     var final_damage = _damage_after_armor(base_damage,zone)
     health = max(0.0,health - final_damage)
     modern_survivor_hit_time = modern_survivor_hit_duration
+    _play_world_sfx("player_hit",-9.0,0.018)
 
     var trauma = final_damage * _injury_zone_trauma_mult(zone)
     _apply_body_injury(zone,trauma)
@@ -25346,6 +26699,7 @@ func _repair_base_barricade(node):
     base_objects[index] = rec
     _refresh_base_object_node(base_id)
     _emit_ai_sound(node.global_position,78.0,"workbench",0.70)
+    _play_world_sfx("workbench",-11.0,0.022)
     _set_survival_feedback("Баррикада отремонтирована: %d%%" % int(round(condition)),1.8)
     call_deferred("_refresh_inventory_ui")
     return true
@@ -25388,6 +26742,7 @@ func _build_base_object(kind):
     next_base_id += 1
     _spawn_base_object(rec)
     _emit_ai_sound(player.global_position,112.0,"workbench",1.10)
+    _play_world_sfx("workbench",-11.0,0.022)
 
     if base_build_status != null:
         if kind == "campfire":
@@ -25507,6 +26862,7 @@ func _dismantle_nearest_base_object():
 
     base_objects.remove_at(best_index)
     _emit_ai_sound(player.global_position,74.0,"workbench",0.75)
+    _play_world_sfx("workbench",-11.0,0.022)
 
     if base_build_status != null:
         base_build_status.text = "Разобрано: %s" % _base_object_name(kind)
@@ -26025,9 +27381,11 @@ func _simulate_rest(hours):
         var step = min(REST_STEP_SECONDS,min(remaining,weather_timer))
         var step_hours = step * max(0.01,day_speed) / 60.0
         var quality = _rest_quality()
+        var previous_rest_day = world_day
         var advanced_minutes = world_minutes + step_hours * 60.0
         world_day += int(floor(advanced_minutes / 1440.0))
         world_minutes = fmod(advanced_minutes,1440.0)
+        _process_world_day_rollovers(previous_rest_day,world_day)
 
         _advance_base_time_for_rest(step_hours)
         _update_nutrition(step)
@@ -26141,6 +27499,7 @@ func _open_rest_panel(node):
 
     rest_source_base_id = base_id
     rest_open = true
+    _play_ui_sfx("open")
     inventory_open = true
     is_sprinting = false
     player.velocity = Vector2.ZERO
@@ -26187,6 +27546,8 @@ func _pack_current_bedroll():
 
 
 func _close_rest_panel():
+    if rest_open:
+        _play_ui_sfx("close")
     rest_open = false
     rest_source_base_id = -1
     inventory_open = false
@@ -26307,6 +27668,7 @@ func _open_base_build():
 
     base_build_open = true
     inventory_open = true
+    _play_ui_sfx("open")
     selected_inventory_index = -1
     selected_container_index = -1
     active_container_key = ""
@@ -26323,12 +27685,129 @@ func _open_base_build():
     _refresh_base_build_ui()
 
 func _close_base_build():
+    if base_build_open:
+        _play_ui_sfx("close")
     base_build_open = false
     inventory_open = false
 
     if base_build_panel != null:
         base_build_panel.visible = false
 
+
+func _record_world_news(kind:String,faction_id:String,text:String,event_day:int = -1,event_minute:int = -1,announce:bool = false) -> Dictionary:
+    var day = world_day if event_day < 1 else event_day
+    var minute = int(world_minutes) if event_minute < 0 and day == world_day else max(0,event_minute)
+    var entry = WorldChronicle.append(faction_state,day,minute,kind,faction_id,text)
+    if entry.is_empty():
+        return entry
+    if world_chronicle_open:
+        WorldChronicle.mark_read(faction_state)
+        _refresh_world_chronicle_ui()
+    if world_chronicle_button != null:
+        var unread_news = WorldChronicle.unread_count(faction_state)
+        world_chronicle_button.text = "ЭФИР" if unread_news <= 0 else "ЭФИР %d" % min(99,unread_news)
+    if announce:
+        _set_survival_feedback("РАДИО • %s" % str(entry.get("text",text)),4.0)
+    return entry
+
+func _settlement_status_snapshot() -> Dictionary:
+    var snapshot = {}
+    for raw_faction_id in FactionCatalog.ids():
+        var faction_id = str(raw_faction_id)
+        var status = SettlementCrisis.faction_status(faction_state,faction_id)
+        snapshot[faction_id] = {
+            "stage":str(status.get("stage","stable")),
+            "worst_resource":str(status.get("worst_resource","food"))
+        }
+    return snapshot
+
+func _record_settlement_status_changes(before:Dictionary,event_day:int) -> void:
+    for raw_faction_id in FactionCatalog.ids():
+        var faction_id = str(raw_faction_id)
+        var old_status = before.get(faction_id,{})
+        var current = SettlementCrisis.faction_status(faction_state,faction_id)
+        var old_stage = str(old_status.get("stage",current.get("stage","stable")))
+        var new_stage = str(current.get("stage","stable"))
+        if old_stage == new_stage:
+            continue
+        var faction_name = str(FactionCatalog.faction(faction_id).get("short_name",faction_id))
+        var resource_id = str(current.get("worst_resource",old_status.get("worst_resource","food")))
+        var resource_name = SettlementCrisis.resource_label(resource_id)
+        var old_rank = SettlementCrisis.stage_rank(old_stage)
+        var new_rank = SettlementCrisis.stage_rank(new_stage)
+        if new_rank > old_rank:
+            var message = "%s вводит режим экономии: хуже всего сейчас с направлением «%s»." % [faction_name,resource_name]
+            if new_stage == "shortage":
+                message = "%s сообщает о дефиците: направление «%s» просело, выдачу запасов сокращают." % [faction_name,resource_name]
+            elif new_stage == "crisis":
+                message = "%s передаёт аварийное сообщение: направление «%s» на грани срыва." % [faction_name,resource_name]
+            _record_world_news("shortage",faction_id,message,event_day,0,new_stage in ["shortage","crisis"])
+        else:
+            var message = "%s сообщает: снабжение выправляется, самый тяжёлый период по направлению «%s» пройден." % [faction_name,resource_name]
+            if new_stage == "stable":
+                message = "%s сообщает о стабилизации: основные запасы снова держатся без аварийного режима." % faction_name
+            _record_world_news("recovery",faction_id,message,event_day,0,old_stage == "crisis")
+
+func _apply_contract_day_results(events:Array,event_day:int) -> void:
+    for raw_event in events:
+        if typeof(raw_event) != TYPE_DICTIONARY:
+            continue
+        var contract = raw_event.get("contract",{})
+        if typeof(contract) != TYPE_DICTIONARY or contract.is_empty():
+            continue
+        var faction_id = str(contract.get("faction",""))
+        var owner_npc_id = str(contract.get("owner_npc_id",""))
+        var owner_name = str(FactionNpcState.canonical(owner_npc_id).get("name",owner_npc_id))
+        var title = str(contract.get("title","личное поручение"))
+        var status = str(raw_event.get("status",""))
+        if status == "failed":
+            _record_world_news("npc",faction_id,"%s сообщает: срок поручения «%s» вышел, работа сорвана." % [owner_name,title],event_day,0,false)
+        elif status == "cancelled":
+            _record_world_news("npc",faction_id,"Поручение «%s» снято: %s сейчас недоступен." % [title,owner_name],event_day,0,false)
+
+func _record_regional_endgame_outcome(outcome:Dictionary,event_day:int) -> void:
+    if typeof(outcome) != TYPE_DICTIONARY or outcome.is_empty():
+        return
+    var definition = RegionalEndgame.GLOBAL_OUTCOMES.get(str(outcome.get("id","")),{})
+    _record_world_news("world","","ИТОГ РЕГИОНА • %s. %s" % [str(definition.get("title","СЕЗОН ЗАВЕРШЁН")),str(definition.get("text",""))],event_day,0,false)
+    var rows = outcome.get("factions",{})
+    if typeof(rows) != TYPE_DICTIONARY:
+        return
+    for faction_id in FactionCatalog.ids():
+        var fid = str(faction_id)
+        var row = rows.get(fid,{})
+        if typeof(row) != TYPE_DICTIONARY:
+            continue
+        var short_name = str(FactionCatalog.faction(fid).get("short_name",fid))
+        _record_world_news("world",fid,"%s: %s • минимум сезона %d • тяжёлых дней %d • рейсы %d спасено / %d потеряно." % [short_name,RegionalEndgame.faction_outcome_label(str(row.get("category","critical"))),int(round(float(row.get("min_seen",0.0)))),int(row.get("hardship_days",0)),int(row.get("supply_recovered",0)),int(row.get("supply_lost",0))],event_day,0,false)
+
+func _process_world_day_rollovers(previous_day:int,new_day:int) -> void:
+    if new_day <= previous_day:
+        return
+    for day_step in range(new_day - previous_day):
+        var tick_day = previous_day + day_step + 1
+        var crisis_before = _settlement_status_snapshot()
+        FactionEconomy.daily_tick(faction_state)
+        var regional_result = RegionalEndgame.daily_tick(faction_state,tick_day)
+        var supply_result = SupplyEventSystem.daily_tick(faction_state,tick_day,_supply_event_blocked_chunks())
+        _apply_supply_event_day_result(supply_result,tick_day)
+        _record_settlement_status_changes(crisis_before,tick_day)
+        var contract_events = ContractSystem.daily_tick(faction_state,tick_day)
+        _apply_contract_day_results(contract_events,tick_day)
+        if bool(regional_result.get("completed",false)) and regional_result.get("outcome",{}).is_empty():
+            var resolved_outcome = RegionalEndgame.resolve_outcome(faction_state,tick_day)
+            regional_result["outcome"] = resolved_outcome
+            regional_result["outcome_generated"] = not resolved_outcome.is_empty()
+        for checkpoint_day in regional_result.get("checkpoints",[]):
+            var checkpoint_text = "Первая неделя кризисного режима: резервы уходят быстрее расчёта, поселения перераспределяют транспорт и охрану." if int(checkpoint_day) == 7 else "Вторая неделя кризисного режима: накопленные поломки и потери на дорогах усилили нагрузку на общий контур."
+            _record_world_news("danger","",checkpoint_text,tick_day,0,false)
+            _set_survival_feedback("КРИЗИСНЫЙ СЕЗОН • ПИК НАГРУЗКИ",3.5)
+        if bool(regional_result.get("completed",false)) or bool(regional_result.get("outcome_generated",false)):
+            _record_regional_endgame_outcome(regional_result.get("outcome",{}),tick_day)
+        if bool(regional_result.get("completed",false)):
+            var ending = RegionalEndgame.outcome_definition(faction_state)
+            _set_survival_feedback("ИТОГ РЕГИОНА • %s" % str(ending.get("title","СЕЗОН ЗАВЕРШЁН")),5.0)
+    TradingMarket.restock_all(faction_state,new_day)
 
 func _create_day_night():
     canvas_modulate = CanvasModulate.new()
@@ -26367,14 +27846,7 @@ func _update_day_night(delta):
     if advanced_minutes >= 1440.0:
         world_day += int(floor(advanced_minutes / 1440.0))
     world_minutes = fmod(advanced_minutes,1440.0)
-    if world_day > previous_day:
-        for _day_step in range(world_day - previous_day):
-            FactionEconomy.daily_tick(faction_state)
-            var tick_day = previous_day + _day_step + 1
-            var supply_result = SupplyEventSystem.daily_tick(faction_state,tick_day,_supply_event_blocked_chunks())
-            _apply_supply_event_day_result(supply_result)
-        TradingMarket.restock_all(faction_state,world_day)
-        ContractSystem.refresh_offers(faction_state,world_day,false)
+    _process_world_day_rollovers(previous_day,world_day)
     var hour = world_minutes / 60.0
     # Deliberately restrained daylight: the world should never look like a clean
     # neutral editor preview. Local lamps/fire now carry the warm contrast seen in
@@ -26443,69 +27915,69 @@ func _create_trader_ui():
     add_child(trader_canvas)
 
     trader_panel = Panel.new()
-    trader_panel.position = Vector2(38,36)
-    trader_panel.size = Vector2(564,404)
+    trader_panel.position = Vector2(38,12)
+    trader_panel.size = Vector2(564,336)
     trader_panel.add_theme_stylebox_override("panel",_visual_panel_style())
     trader_panel.visible = false
     trader_canvas.add_child(trader_panel)
     _hud_add_panel_detail(trader_panel,trader_panel.size,Color(0.52,0.46,0.30))
 
     trader_title = Label.new()
-    trader_title.position = Vector2(18,12)
+    trader_title.position = Vector2(18,10)
     trader_title.size = Vector2(528,20)
     trader_title.add_theme_font_size_override("font_size",13)
     trader_panel.add_child(trader_title)
 
     trader_subtitle = Label.new()
-    trader_subtitle.position = Vector2(18,33)
-    trader_subtitle.size = Vector2(528,44)
+    trader_subtitle.position = Vector2(18,31)
+    trader_subtitle.size = Vector2(528,34)
     trader_subtitle.add_theme_font_size_override("font_size",7)
     trader_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     trader_subtitle.modulate = Color(0.72,0.74,0.68)
     trader_panel.add_child(trader_subtitle)
 
     var sell_header = Label.new()
-    sell_header.position = Vector2(18,78)
+    sell_header.position = Vector2(18,70)
     sell_header.text = "ТОВАР ТОРГОВЦА"
     sell_header.add_theme_font_size_override("font_size",8)
     sell_header.modulate = Color("c6aa62")
     trader_panel.add_child(sell_header)
 
     var buy_header = Label.new()
-    buy_header.position = Vector2(296,78)
+    buy_header.position = Vector2(296,70)
     buy_header.text = "ВАШ ТОВАР / БАРТЕР"
     buy_header.add_theme_font_size_override("font_size",8)
     buy_header.modulate = Color("c6aa62")
     trader_panel.add_child(buy_header)
 
     trader_stock_list = ItemList.new()
-    trader_stock_list.position = Vector2(18,96)
-    trader_stock_list.size = Vector2(250,218)
+    trader_stock_list.position = Vector2(18,84)
+    trader_stock_list.size = Vector2(250,160)
     trader_stock_list.add_theme_font_size_override("font_size",7)
     trader_stock_list.select_mode = ItemList.SELECT_SINGLE
     trader_stock_list.item_selected.connect(_trader_stock_selected)
     trader_panel.add_child(trader_stock_list)
 
     trader_inventory_list = ItemList.new()
-    trader_inventory_list.position = Vector2(296,96)
-    trader_inventory_list.size = Vector2(250,218)
+    trader_inventory_list.position = Vector2(296,84)
+    trader_inventory_list.size = Vector2(250,160)
     trader_inventory_list.add_theme_font_size_override("font_size",7)
     trader_inventory_list.select_mode = ItemList.SELECT_SINGLE
     trader_inventory_list.item_selected.connect(_trader_inventory_selected)
     trader_panel.add_child(trader_inventory_list)
 
     trader_status = Label.new()
-    trader_status.position = Vector2(18,320)
+    trader_status.position = Vector2(18,250)
     trader_status.size = Vector2(528,42)
     trader_status.add_theme_font_size_override("font_size",7)
     trader_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     trader_status.modulate = Color(0.82,0.82,0.75)
     trader_panel.add_child(trader_status)
 
-    _make_button(trader_panel,Vector2(18,366),Vector2(112,28),"КУПИТЬ 1",_trade_buy_selected)
-    _make_button(trader_panel,Vector2(138,366),Vector2(112,28),"ПРОДАТЬ 1",_trade_sell_selected)
-    _make_button(trader_panel,Vector2(258,366),Vector2(132,28),"ОБМЕН",_trade_barter_selected)
-    _make_button(trader_panel,Vector2(434,366),Vector2(112,28),"ЗАКРЫТЬ",_close_trader)
+    _make_button(trader_panel,Vector2(18,298),Vector2(112,28),"КУПИТЬ 1",_trade_buy_selected)
+    _make_button(trader_panel,Vector2(138,298),Vector2(112,28),"ПРОДАТЬ 1",_trade_sell_selected)
+    _make_button(trader_panel,Vector2(258,298),Vector2(132,28),"ОБМЕН",_trade_barter_selected)
+    _make_button(trader_panel,Vector2(434,298),Vector2(112,28),"ЗАКРЫТЬ",_close_trader)
 
 func _trade_item_name(item_id:String) -> String:
     if item_defs.has(item_id):
@@ -26516,7 +27988,12 @@ func _trade_tier_name_for_min(points:int) -> String:
     return str(FactionCatalog.reputation_tier(points).get("name","ЧУЖОЙ"))
 
 func _open_trader(trader_id:String):
-    if TraderCatalog.trader(trader_id).is_empty():
+    var trader_data = TraderCatalog.trader(trader_id)
+    if trader_data.is_empty():
+        return
+    var trader_npc_id = str(trader_data.get("npc_id",""))
+    if trader_npc_id != "" and not FactionNpcState.service_available(faction_state,trader_npc_id,world_day):
+        _set_survival_feedback("Торговец сейчас недоступен: %s." % str(trader_data.get("name",trader_npc_id)),2.8)
         return
     _cancel_reload()
     if inventory_open:
@@ -26529,13 +28006,17 @@ func _open_trader(trader_id:String):
         _close_contract_board()
     active_trader_id = trader_id
     trader_open = true
+    _play_ui_sfx("open")
     trader_selected_stock_item = ""
     trader_selected_inventory_index = -1
     TradingMarket.ensure_state(faction_state,world_day)
     TradingMarket.restock(faction_state,trader_id,world_day,false)
+    _record_named_npc_interaction(trader_npc_id,"trade_open","Разговор у торгового прилавка.",0)
     _refresh_trader_ui()
 
 func _close_trader():
+    if trader_open:
+        _play_ui_sfx("close")
     trader_open = false
     active_trader_id = ""
     trader_selected_stock_item = ""
@@ -26721,7 +28202,9 @@ func _trade_buy_selected():
     _ensure_runtime_item_instance_ids()
     _ensure_water_container_runtime_state()
     _ensure_weapon_runtime_state(false)
+    _play_ui_sfx("confirm")
     _set_survival_feedback("Куплено: %s • %d тал." % [_trade_item_name(item_id),total],1.8)
+    _record_named_npc_interaction(str(TraderCatalog.trader(active_trader_id).get("npc_id","")),"trade","Покупка: %s." % _trade_item_name(item_id),0)
     _refresh_trader_ui()
     return true
 
@@ -26745,7 +28228,9 @@ func _trade_sell_selected():
         trader_status.text = "Предмет уже недоступен."
         return false
     trader_selected_inventory_index = -1
+    _play_ui_sfx("confirm")
     _set_survival_feedback("Продано: %s • +%d тал." % [_trade_item_name(item_id),total],1.8)
+    _record_named_npc_interaction(str(TraderCatalog.trader(active_trader_id).get("npc_id","")),"trade","Продажа: %s." % _trade_item_name(item_id),0)
     _refresh_trader_ui()
     return true
 
@@ -26804,7 +28289,9 @@ func _trade_barter_selected():
         cash_text = "доплата %d тал." % delta
     elif delta < 0:
         cash_text = "сдача %d тал." % (-delta)
+    _play_ui_sfx("confirm")
     _set_survival_feedback("Обмен: %d× %s → %s • %s" % [sell_qty,_trade_item_name(sell_item),_trade_item_name(buy_item),cash_text],2.2)
+    _record_named_npc_interaction(str(TraderCatalog.trader(active_trader_id).get("npc_id","")),"trade","Бартер: %s на %s." % [_trade_item_name(sell_item),_trade_item_name(buy_item)],0)
     _refresh_trader_ui()
     return true
 
@@ -26816,47 +28303,55 @@ func _create_contract_ui():
     add_child(contract_canvas)
 
     contract_panel = Panel.new()
-    contract_panel.position = Vector2(38,36)
-    contract_panel.size = Vector2(564,404)
+    contract_panel.position = Vector2(38,12)
+    contract_panel.size = Vector2(564,336)
     contract_panel.add_theme_stylebox_override("panel",_visual_panel_style())
     contract_panel.visible = false
     contract_canvas.add_child(contract_panel)
     _hud_add_panel_detail(contract_panel,contract_panel.size,Color(0.45,0.48,0.34))
 
     contract_title = Label.new()
-    contract_title.position = Vector2(18,12)
+    contract_title.position = Vector2(18,10)
     contract_title.size = Vector2(528,20)
     contract_title.add_theme_font_size_override("font_size",13)
     contract_panel.add_child(contract_title)
 
     contract_subtitle = Label.new()
-    contract_subtitle.position = Vector2(18,34)
-    contract_subtitle.size = Vector2(528,40)
+    contract_subtitle.position = Vector2(18,32)
+    contract_subtitle.size = Vector2(410,34)
     contract_subtitle.add_theme_font_size_override("font_size",7)
     contract_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     contract_subtitle.modulate = Color(0.72,0.74,0.68)
     contract_panel.add_child(contract_subtitle)
 
     contract_list = ItemList.new()
-    contract_list.position = Vector2(18,82)
-    contract_list.size = Vector2(528,170)
+    contract_list.position = Vector2(18,72)
+    contract_list.size = Vector2(528,124)
     contract_list.add_theme_font_size_override("font_size",8)
     contract_list.select_mode = ItemList.SELECT_SINGLE
     contract_list.item_selected.connect(_contract_selected)
     contract_panel.add_child(contract_list)
 
     contract_status = Label.new()
-    contract_status.position = Vector2(18,260)
-    contract_status.size = Vector2(528,96)
+    contract_status.position = Vector2(18,202)
+    contract_status.size = Vector2(528,90)
     contract_status.add_theme_font_size_override("font_size",7)
     contract_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     contract_status.modulate = Color(0.82,0.82,0.75)
     contract_panel.add_child(contract_status)
 
-    _make_button(contract_panel,Vector2(18,366),Vector2(112,28),"ПРИНЯТЬ",_contract_accept_selected)
-    _make_button(contract_panel,Vector2(138,366),Vector2(112,28),"СДАТЬ",_contract_complete_selected)
-    _make_button(contract_panel,Vector2(258,366),Vector2(132,28),"ОТКАЗАТЬСЯ",_contract_abandon_selected)
-    _make_button(contract_panel,Vector2(434,366),Vector2(112,28),"ЗАКРЫТЬ",_close_contract_board)
+    contract_project_button = _make_button(contract_panel,Vector2(430,34),Vector2(116,26),"ПРОЕКТ",_contract_toggle_project_mode)
+
+    contract_accept_button = _make_button(contract_panel,Vector2(18,298),Vector2(112,28),"ПРИНЯТЬ",_contract_accept_selected)
+    contract_complete_button = _make_button(contract_panel,Vector2(138,298),Vector2(112,28),"СДАТЬ",_contract_complete_selected)
+    contract_abandon_button = _make_button(contract_panel,Vector2(258,298),Vector2(132,28),"ОТКАЗАТЬСЯ",_contract_abandon_selected)
+    contract_project_install_button = _make_button(contract_panel,Vector2(18,298),Vector2(138,28),"ПЕРЕДАТЬ УЗЕЛ",_settlement_project_install_item)
+    contract_project_commit_button = _make_button(contract_panel,Vector2(164,298),Vector2(138,28),"ВНЕСТИ ЗАПАСЫ",_settlement_project_commit_resources)
+    contract_project_back_button = _make_button(contract_panel,Vector2(310,298),Vector2(116,28),"К КОНТРАКТАМ",_contract_toggle_project_mode)
+    contract_close_button = _make_button(contract_panel,Vector2(434,298),Vector2(112,28),"ЗАКРЫТЬ",_close_contract_board)
+    contract_project_install_button.visible = false
+    contract_project_commit_button.visible = false
+    contract_project_back_button.visible = false
 
 func _contract_item_names() -> Dictionary:
     var names = {}
@@ -26874,8 +28369,18 @@ func _contract_inventory_counts() -> Dictionary:
         counts[item_id] = int(counts.get(item_id,0)) + max(1,int(entry.get("qty",1)))
     return counts
 
-func _open_contract_board(faction_id:String,npc_name:String):
-    if FactionCatalog.faction(faction_id).is_empty():
+func _open_contract_board(faction_id:String,npc_name:String,npc_id:String = ""):
+    var faction_data = FactionCatalog.faction(faction_id)
+    if faction_data.is_empty():
+        return
+    var resolved_npc_id = npc_id
+    if resolved_npc_id == "":
+        for raw in faction_data.get("npc_roster",[]):
+            if str(raw.get("name","")) == npc_name and not ContractCatalog.board_for_npc(str(raw.get("id",""))).is_empty():
+                resolved_npc_id = str(raw.get("id",""))
+                break
+    if resolved_npc_id != "" and not FactionNpcState.service_available(faction_state,resolved_npc_id,world_day):
+        _set_survival_feedback("%s сейчас не может принимать поручения." % npc_name,2.8)
         return
     _cancel_reload()
     if inventory_open:
@@ -26888,20 +28393,178 @@ func _open_contract_board(faction_id:String,npc_name:String):
         _close_developer_panel()
     active_contract_faction = faction_id
     active_contract_npc_name = npc_name
+    active_contract_npc_id = resolved_npc_id
     selected_contract_id = ""
     selected_contract_source = ""
+    contract_project_mode = false
     contract_open = true
+    _play_ui_sfx("open")
     ContractSystem.ensure_state(faction_state,world_day)
+    if active_contract_npc_id == VerticalSlice.DOCTOR_NPC_ID and VerticalSlice.mark_doctor_met(faction_state,world_day):
+        ContractSystem.refresh_offers(faction_state,world_day,true)
+        _record_world_news("shortage","lazaret","Доктор Миронова подтверждает дефицит: Лазарету нужен медицинский груз и человек на аварийную связь.",world_day,int(world_minutes),false)
+        _set_survival_feedback("МИРОНОВА • аварийный заказ добавлен на доску",2.8)
+    _record_named_npc_interaction(active_contract_npc_id,"contract_board","Разговор о поручениях поселения.",0)
     _refresh_contract_ui()
 
 func _close_contract_board():
+    if contract_open:
+        _play_ui_sfx("close")
     contract_open = false
     active_contract_faction = ""
     active_contract_npc_name = ""
+    active_contract_npc_id = ""
     selected_contract_id = ""
     selected_contract_source = ""
+    contract_project_mode = false
     if contract_panel != null:
         contract_panel.visible = false
+
+func _contract_toggle_project_mode():
+    if not contract_open:
+        return false
+    var board = ContractCatalog.board_for_npc(active_contract_npc_id)
+    if bool(board.get("personal",false)) or SettlementProjects.project(active_contract_faction).is_empty():
+        if contract_status != null:
+            contract_status.text = "Стратегические складские проекты ведутся через общую доску поселения."
+        return false
+    contract_project_mode = not contract_project_mode
+    selected_contract_id = ""
+    selected_contract_source = ""
+    _refresh_contract_ui()
+    return true
+
+func _settlement_project_complete_feedback(faction_id:String) -> void:
+    var spec = SettlementProjects.project(faction_id)
+    if spec.is_empty():
+        return
+    for trader_id in TraderCatalog.traders_for_faction(faction_id):
+        TradingMarket.restock(faction_state,str(trader_id),world_day,true)
+    _record_world_news("project",faction_id,str(spec.get("completion_news","В поселении завершён крупный инфраструктурный проект.")),world_day,int(world_minutes),false)
+    _record_named_npc_interaction(active_contract_npc_id,"settlement_project","Завершён проект «%s»." % str(spec.get("title","ПРОЕКТ")),6)
+    _set_survival_feedback("ПРОЕКТ ЗАВЕРШЁН • %s" % str(spec.get("title","ИНФРАСТРУКТУРА")),4.0)
+
+func _settlement_project_install_item():
+    if not contract_open or not contract_project_mode:
+        return false
+    var faction_id = active_contract_faction
+    var spec = SettlementProjects.project(faction_id)
+    if spec.is_empty():
+        return false
+    if not SettlementProjects.has_access(faction_state,faction_id):
+        contract_status.text = "Поселение не доверит стратегический узел исполнителю с репутацией ниже %d." % SettlementProjects.MIN_REPUTATION
+        return false
+    var rec = SettlementProjects.record(faction_state,faction_id)
+    if bool(rec.get("completed",false)):
+        contract_status.text = "Проект уже завершён."
+        return false
+    if bool(rec.get("strategic_installed",false)):
+        contract_status.text = "Стратегический узел уже передан на проект."
+        return false
+    var item_id = str(spec.get("strategic_item",""))
+    if _inventory_count(item_id) <= 0:
+        contract_status.text = "Нужен предмет: %s.\n%s" % [str(spec.get("strategic_label",item_id)),str(spec.get("source_hint",""))]
+        return false
+    if not _contract_remove_item_units(item_id,1):
+        contract_status.text = "Не удалось передать стратегический предмет из рюкзака."
+        return false
+    var result = SettlementProjects.install_strategic_item(faction_state,faction_id,item_id,world_day)
+    if not bool(result.get("ok",false)):
+        _grid_add(inventory_entries,item_id,1,INV_W,INV_H)
+        _ensure_runtime_item_instance_ids()
+        contract_status.text = "Проект не принял стратегический узел."
+        return false
+    _record_world_news("project",faction_id,"На проект «%s» передан стратегический узел: %s." % [str(spec.get("title","ПРОЕКТ")),str(spec.get("strategic_label",item_id))],world_day,int(world_minutes),false)
+    _record_named_npc_interaction(active_contract_npc_id,"settlement_project","Передан стратегический узел для проекта «%s»." % str(spec.get("title","ПРОЕКТ")),2)
+    _set_survival_feedback("СТРАТЕГИЧЕСКИЙ УЗЕЛ ПЕРЕДАН",2.6)
+    if bool(result.get("completed_now",false)):
+        _settlement_project_complete_feedback(faction_id)
+    _refresh_contract_ui()
+    return true
+
+func _settlement_project_commit_resources():
+    if not contract_open or not contract_project_mode:
+        return false
+    var faction_id = active_contract_faction
+    var result = SettlementProjects.commit_resources(faction_state,faction_id,world_day)
+    if not bool(result.get("ok",false)):
+        var reason = str(result.get("reason",""))
+        if reason == "reputation":
+            contract_status.text = "Крупные складские списания доступны с репутации %d." % SettlementProjects.MIN_REPUTATION
+        elif reason == "reserve_floor":
+            contract_status.text = "Склады не отдадут аварийный остаток. Поднимите нужные ресурсы выше %d через торговлю, поставки, контракты или маршруты." % int(SettlementProjects.RESERVE_FLOOR)
+        elif reason == "completed":
+            contract_status.text = "Проект уже завершён."
+        else:
+            contract_status.text = "Сейчас склад не может провести вклад в проект."
+        return false
+    var committed = result.get("committed",{})
+    var parts = []
+    if typeof(committed) == TYPE_DICTIONARY:
+        for resource_id in SettlementProjects.RESOURCE_KEYS:
+            var amount = float(committed.get(resource_id,0.0))
+            if amount > 0.001:
+                parts.append("%s %d" % [SettlementProjects.resource_label(resource_id),int(round(amount))])
+    _record_named_npc_interaction(active_contract_npc_id,"settlement_project","Со складов выделены запасы на проект «%s»." % str(SettlementProjects.project(faction_id).get("title","ПРОЕКТ")),1)
+    _set_survival_feedback("СКЛАДСКОЙ ВКЛАД • %s" % ", ".join(parts),2.8)
+    if bool(result.get("completed_now",false)):
+        _settlement_project_complete_feedback(faction_id)
+    _refresh_contract_ui()
+    return true
+
+func _refresh_settlement_project_ui():
+    var faction_id = active_contract_faction
+    var spec = SettlementProjects.project(faction_id)
+    if spec.is_empty():
+        contract_project_mode = false
+        return
+    var faction_data = FactionCatalog.faction(faction_id)
+    var rec = SettlementProjects.record(faction_state,faction_id)
+    var rep = FactionEconomy.reputation(faction_state,faction_id)
+    var resources = faction_state.get("factions",{}).get(faction_id,{}).get("resources",{})
+    var completed = bool(rec.get("completed",false))
+    contract_title.text = "%s  •  СТРАТЕГИЧЕСКИЙ ПРОЕКТ" % str(faction_data.get("short_name",faction_id)).to_upper()
+    contract_subtitle.text = "%s  |  реп. %d/%d  |  склад: еда %d • медицина %d • техника %d • безопасность %d" % [
+        str(spec.get("title","ПРОЕКТ")),rep,SettlementProjects.MIN_REPUTATION,
+        int(round(float(resources.get("food",0.0)))),int(round(float(resources.get("medicine",0.0)))),
+        int(round(float(resources.get("technical",0.0)))),int(round(float(resources.get("security",0.0))))
+    ]
+    contract_list.clear()
+    var strategic_label = str(spec.get("strategic_label",spec.get("strategic_item","")))
+    contract_list.add_item("[%s]  %s" % ["ГОТОВО" if bool(rec.get("strategic_installed",false)) else "НУЖНО",strategic_label])
+    var targets = spec.get("resource_targets",{})
+    var progress = rec.get("resources",{})
+    for resource_id in SettlementProjects.RESOURCE_KEYS:
+        var target = float(targets.get(resource_id,0.0))
+        if target <= 0.001:
+            continue
+        var done = float(progress.get(resource_id,0.0))
+        var prefix = "ГОТОВО" if done + 0.001 >= target else "СКЛАД"
+        contract_list.add_item("[%s]  %s  %d/%d" % [prefix,SettlementProjects.resource_label(resource_id).to_upper(),int(round(done)),int(round(target))])
+    var effect_parts = []
+    for resource_id in spec.get("daily_resources",{}).keys():
+        effect_parts.append("+%.2f %s/день" % [float(spec["daily_resources"][resource_id]),SettlementProjects.resource_label(str(resource_id))])
+    var state_text = "ЗАВЕРШЁН" if completed else ("ДОСТУПЕН" if SettlementProjects.has_access(faction_state,faction_id) else "НУЖНА РЕПУТАЦИЯ %d" % SettlementProjects.MIN_REPUTATION)
+    contract_status.add_theme_font_size_override("font_size",6)
+    contract_status.text = "%s\nСТАТУС: %s • защищённый остаток склада ≥%d\nВКЛАД: запасы поселения (торговля, контракты, поставки, маршруты), не предметы из рюкзака.\nЭФФЕКТ: %s • профильный restock ×%.2f" % [
+        str(spec.get("description","")),state_text,int(SettlementProjects.RESERVE_FLOOR),
+        ", ".join(effect_parts),float(spec.get("restock_factor",1.0))
+    ]
+    if not bool(rec.get("strategic_installed",false)):
+        contract_status.text += "\nИСТОЧНИК: " + str(spec.get("source_hint",""))
+    if completed:
+        contract_status.text += "\nЗавершено: день %d." % int(rec.get("completed_day",0))
+    contract_status.size = Vector2(528,90)
+
+    contract_accept_button.visible = false
+    contract_complete_button.visible = false
+    contract_abandon_button.visible = false
+    contract_project_install_button.visible = true
+    contract_project_commit_button.visible = true
+    contract_project_back_button.visible = true
+    contract_project_install_button.disabled = completed or bool(rec.get("strategic_installed",false)) or not SettlementProjects.has_access(faction_state,faction_id)
+    contract_project_commit_button.disabled = completed or not SettlementProjects.has_access(faction_state,faction_id)
+    contract_project_button.visible = false
 
 func _contract_is_ready(contract:Dictionary) -> bool:
     return ContractSystem.can_complete(contract,_contract_inventory_counts(),discovered_pois)
@@ -26920,9 +28583,29 @@ func _refresh_contract_ui():
     var rep = FactionEconomy.reputation(faction_state,active_contract_faction)
     var tier = FactionEconomy.reputation_tier(faction_state,active_contract_faction)
     var resources = faction_state.get("factions",{}).get(active_contract_faction,{}).get("resources",{})
-    contract_title.text = "%s  •  КОНТРАКТЫ" % str(faction_data.get("short_name",active_contract_faction)).to_upper()
-    contract_subtitle.text = "%s  |  %s (%d)  |  еда %d  медицина %d  техника %d  безопасность %d  |  %s  |  %s" % [
-        active_contract_npc_name,str(tier.get("name","ЧУЖОЙ")),rep,
+    var npc_relation = ""
+    if active_contract_npc_id != "":
+        npc_relation = " • %s" % FactionNpcState.attitude_label(FactionNpcState.attitude_score(faction_state,active_contract_npc_id,rep,world_day))
+    var board = ContractCatalog.board_for_npc(active_contract_npc_id)
+    var personal_board = bool(board.get("personal",false))
+    if contract_project_mode and personal_board:
+        contract_project_mode = false
+    if contract_project_mode:
+        _refresh_settlement_project_ui()
+        return
+    contract_status.add_theme_font_size_override("font_size",7)
+    contract_status.size = Vector2(528,90)
+    contract_accept_button.visible = true
+    contract_complete_button.visible = true
+    contract_abandon_button.visible = true
+    contract_project_install_button.visible = false
+    contract_project_commit_button.visible = false
+    contract_project_back_button.visible = false
+    contract_project_button.visible = not personal_board and not SettlementProjects.project(active_contract_faction).is_empty()
+    var board_label = str(board.get("label","КОНТРАКТЫ"))
+    contract_title.text = "%s  •  %s" % [str(faction_data.get("short_name",active_contract_faction)).to_upper(),board_label.to_upper()]
+    contract_subtitle.text = "%s%s  |  %s (%d)  |  еда %d  медицина %d  техника %d  безопасность %d  |  %s  |  %s" % [
+        active_contract_npc_name,npc_relation,str(tier.get("name","ЧУЖОЙ")),rep,
         int(round(float(resources.get("food",0.0)))),int(round(float(resources.get("medicine",0.0)))),
         int(round(float(resources.get("technical",0.0)))),int(round(float(resources.get("security",0.0)))),
         SettlementCrisis.summary(faction_state,active_contract_faction,world_day),
@@ -26930,11 +28613,19 @@ func _refresh_contract_ui():
     ]
     contract_list.clear()
     var selected_index = -1
-    var active_contracts = ContractSystem.active_for_faction(faction_state,active_contract_faction)
+    var active_contracts = ContractSystem.active_for_board(faction_state,active_contract_faction,active_contract_npc_id)
     if active_contracts.is_empty():
-        var offers = ContractSystem.offers_for_faction(faction_state,active_contract_faction,world_day)
+        var offers = ContractSystem.offers_for_board(faction_state,active_contract_faction,active_contract_npc_id,world_day)
         for contract in offers:
-            var row = "[ДОСТУПНО]  %s  •  до дня %d" % [str(contract.get("title","КОНТРАКТ")),int(contract.get("offer_expires_day",world_day))]
+            var offer_prefix = "[ЛИЧНО]"
+            if str(contract.get("owner_npc_id","")) == "":
+                if str(contract.get("kind","")) == "discover_poi":
+                    var route_poi = RegionCatalog.poi_by_id(str(contract.get("poi_id","")))
+                    var route_risk = clampi(int(route_poi.get("risk",0)),0,5)
+                    offer_prefix = "[РАЗВЕДКА • РИСК %d]" % route_risk if route_risk > 0 else "[РАЗВЕДКА]"
+                else:
+                    offer_prefix = "[ПОСТАВКА]"
+            var row = "%s  %s  •  предложение до дня %d" % [offer_prefix,str(contract.get("title","КОНТРАКТ")),int(contract.get("offer_expires_day",world_day))]
             contract_list.add_item(row)
             var idx = contract_list.item_count - 1
             contract_list.set_item_metadata(idx,{"source":"offer","id":str(contract.get("id",""))})
@@ -26943,7 +28634,9 @@ func _refresh_contract_ui():
     for contract in active_contracts:
         var ready = _contract_is_ready(contract)
         var prefix = "[ГОТОВО]" if ready else "[АКТИВНО]"
-        contract_list.add_item("%s  %s" % [prefix,str(contract.get("title","КОНТРАКТ"))])
+        var deadline = int(contract.get("deadline_day",0))
+        var deadline_text = " • срок до дня %d" % deadline if deadline > 0 else ""
+        contract_list.add_item("%s  %s%s" % [prefix,str(contract.get("title","КОНТРАКТ")),deadline_text])
         var idx = contract_list.item_count - 1
         contract_list.set_item_metadata(idx,{"source":"active","id":str(contract.get("id",""))})
         if str(contract.get("id","")) == selected_contract_id and selected_contract_source == "active":
@@ -26951,7 +28644,10 @@ func _refresh_contract_ui():
     if selected_index >= 0:
         contract_list.select(selected_index)
     if selected_contract_id == "":
-        contract_status.text = "Выберите предложение. Активный контракт сдаётся тому же ответственному NPC после выполнения условий. Точных маркеров разведки нет — работают названия и ориентиры."
+        if ContractCatalog.is_personal_board(active_contract_npc_id):
+            contract_status.text = "Это личные поручения конкретного человека. Предложения недолговечны, а после принятия у части задач идёт срок. Отказ и просрочка могут повлиять на отношение и ресурсы поселения."
+        else:
+            contract_status.text = RegionalEndgame.board_text(faction_state,world_day) + "\n\nВыберите предложение. Активный контракт сдаётся тому же ответственному NPC после выполнения условий. Точных маркеров разведки нет — работают названия и ориентиры."
     else:
         _refresh_contract_selection_status()
 
@@ -26977,6 +28673,8 @@ func _refresh_contract_selection_status():
         contract_status.text += "\n\n" + consequence
 
 func _contract_selected(index:int):
+    if contract_project_mode:
+        return
     if index < 0 or index >= contract_list.item_count:
         return
     var meta = contract_list.get_item_metadata(index)
@@ -26987,6 +28685,8 @@ func _contract_selected(index:int):
     _refresh_contract_selection_status()
 
 func _contract_accept_selected():
+    if contract_project_mode:
+        return false
     if not contract_open or selected_contract_source != "offer" or selected_contract_id == "":
         contract_status.text = "Выберите доступное предложение."
         return false
@@ -26995,7 +28695,12 @@ func _contract_accept_selected():
         contract_status.text = str(result.get("reason","Контракт не удалось принять."))
         return false
     selected_contract_source = "active"
-    _set_survival_feedback("Контракт принят: %s" % str(result.get("contract",{}).get("title","КОНТРАКТ")),2.0)
+    var accepted_title = str(result.get("contract",{}).get("title","КОНТРАКТ"))
+    _play_ui_sfx("confirm")
+    _set_survival_feedback("Контракт принят: %s" % accepted_title,2.0)
+    var accepted_contract = result.get("contract",{})
+    if str(accepted_contract.get("owner_npc_id","")) == "":
+        _record_named_npc_interaction(active_contract_npc_id,"contract_accept","Принято поручение «%s»." % accepted_title,1)
     ContractSystem.refresh_offers(faction_state,world_day,false)
     _refresh_contract_ui()
     return true
@@ -27016,7 +28721,59 @@ func _contract_remove_item_units(item_id:String,quantity:int) -> bool:
         remaining -= take
     return remaining <= 0
 
+func _record_contract_world_news(result:Dictionary) -> void:
+    if not bool(result.get("ok",false)):
+        return
+    var faction_id = str(result.get("faction",""))
+    var faction_name = str(FactionCatalog.faction(faction_id).get("short_name",faction_id))
+    var contract_title_text = str(result.get("title","работы"))
+    var opened_route = str(result.get("opened_route",""))
+    if opened_route != "":
+        var route_news = SandboxRouteConsequences.news_text(opened_route)
+        if route_news == "":
+            route_news = "%s сообщает: после работ по «%s» действует новый постоянный маршрут снабжения." % [faction_name,contract_title_text]
+        _record_world_news("route",faction_id,route_news,world_day,int(world_minutes),false)
+    if bool(result.get("personal",false)):
+        var owner_npc_id = str(result.get("owner_npc_id",""))
+        var owner_name = str(FactionNpcState.canonical(owner_npc_id).get("name",owner_npc_id))
+        var chain_step = int(result.get("chain_step",0))
+        _record_world_news("npc",faction_id,"%s подтверждает: личное поручение «%s» выполнено%s." % [owner_name,contract_title_text,"; работа продолжается" if chain_step == 1 else ""],world_day,int(world_minutes),false)
+
+    var conflict_outcome = result.get("conflict_outcome",{})
+    if typeof(conflict_outcome) == TYPE_DICTIONARY and not conflict_outcome.is_empty():
+        var winner_id = str(conflict_outcome.get("winner",faction_id))
+        var loser_id = str(conflict_outcome.get("loser",""))
+        var winner_name = str(FactionCatalog.faction(winner_id).get("short_name",winner_id))
+        var loser_name = str(FactionCatalog.faction(loser_id).get("short_name",loser_id))
+        var relation_delta = int(conflict_outcome.get("relation_delta",0))
+        var relation_word = "ухудшились" if relation_delta < 0 else "улучшились"
+        _record_world_news("relations",winner_id,"После решения по «%s» отношения между %s и %s %s." % [contract_title_text,winner_name,loser_name,relation_word],world_day,int(world_minutes),false)
+
+    var endgame_outcome = result.get("endgame_outcome",{})
+    if typeof(endgame_outcome) != TYPE_DICTIONARY or endgame_outcome.is_empty():
+        return
+    var chain_data = FactionEndgame.chain(faction_id)
+    var chain_name = str(chain_data.get("name","СТРАТЕГИЧЕСКИЙ ПРОЕКТ"))
+    if bool(endgame_outcome.get("final",false)):
+        var effect_name = str(chain_data.get("effect_name",chain_name))
+        _record_world_news("project",faction_id,"%s завершил проект «%s». Инфраструктура «%s» введена в постоянную работу." % [faction_name,chain_name,effect_name],world_day,int(world_minutes),false)
+        var effect = FactionEndgame.effect_for_faction(faction_state,faction_id)
+        var relation_changes = effect.get("relations",{})
+        if typeof(relation_changes) == TYPE_DICTIONARY:
+            for raw_other_id in relation_changes.keys():
+                var delta = int(relation_changes[raw_other_id])
+                if delta == 0:
+                    continue
+                var other_id = str(raw_other_id)
+                var other_name = str(FactionCatalog.faction(other_id).get("short_name",other_id))
+                var final_relation_word = "сблизились" if delta > 0 else "отдалились"
+                _record_world_news("relations",faction_id,"После запуска «%s» %s и %s заметно %s." % [effect_name,faction_name,other_name,final_relation_word],world_day,int(world_minutes),false)
+    else:
+        _record_world_news("project",faction_id,"%s завершил очередной этап проекта «%s». Работы переходят к следующей фазе." % [faction_name,chain_name],world_day,int(world_minutes),false)
+
 func _contract_complete_selected():
+    if contract_project_mode:
+        return false
     if not contract_open or selected_contract_source != "active" or selected_contract_id == "":
         contract_status.text = "Выберите активный контракт."
         return false
@@ -27042,6 +28799,10 @@ func _contract_complete_selected():
     if not bool(result.get("ok",false)):
         contract_status.text = str(result.get("reason","Не удалось закрыть контракт."))
         return false
+    _record_contract_world_news(result)
+    var opened_route = str(result.get("opened_route",""))
+    if opened_route != "":
+        SandboxRouteConsequences.apply_opening_stock(faction_state,opened_route)
     var faction_id = str(result.get("faction",""))
     var affected_factions = result.get("affected_factions",[faction_id])
     if typeof(affected_factions) != TYPE_ARRAY:
@@ -27066,22 +28827,45 @@ func _contract_complete_selected():
             endgame_text = " • ФРАКЦИОННАЯ ЦЕПОЧКА ЗАВЕРШЕНА"
         else:
             endgame_text = " • этап цепочки %d завершён" % int(endgame_outcome.get("step",0))
-    _set_survival_feedback("Контракт закрыт: %s • +%d тал. • +%d реп.%s%s%s" % [
-        str(result.get("title","КОНТРАКТ")),int(result.get("tickets",0)),int(result.get("reputation",0)),route_text,relation_text,endgame_text
-    ],3.8)
+    var slice_text = ""
+    if str(contract.get("template_id","")) == VerticalSlice.CRISIS_TEMPLATE_ID:
+        var slice_after = _vertical_slice_refresh()
+        if bool(slice_after.get("completed",false)):
+            var recovery = VerticalSlice.settlement_recovery_summary(faction_state)
+            slice_text = " • Лазарет: %s" % str(recovery.get("note","дефицит снят"))
+    _play_ui_sfx("confirm")
+    _set_survival_feedback("Контракт закрыт: %s • +%d тал. • +%d реп.%s%s%s%s" % [
+        str(result.get("title","КОНТРАКТ")),int(result.get("tickets",0)),int(result.get("reputation",0)),route_text,relation_text,endgame_text,slice_text
+    ],5.0 if slice_text != "" else 3.8)
+    if not bool(result.get("personal",false)):
+        _record_named_npc_interaction(active_contract_npc_id,"contract_complete","Выполнено поручение «%s»." % str(result.get("title","КОНТРАКТ")),4)
     selected_contract_id = ""
     selected_contract_source = ""
     _refresh_contract_ui()
     return true
 
 func _contract_abandon_selected():
+    if contract_project_mode:
+        return false
     if not contract_open or selected_contract_source != "active" or selected_contract_id == "":
         contract_status.text = "Выберите активный контракт."
         return false
-    if not ContractSystem.abandon(faction_state,selected_contract_id,world_day):
-        contract_status.text = "Контракт уже недоступен."
+    var abandoned = ContractSystem.contract_by_id(faction_state,selected_contract_id)
+    var result = ContractSystem.abandon_with_result(faction_state,selected_contract_id,world_day)
+    if not bool(result.get("ok",false)):
+        contract_status.text = str(result.get("reason","Контракт уже недоступен."))
         return false
-    _set_survival_feedback("Контракт снят без штрафа к репутации.",1.8)
+    var personal = str(abandoned.get("owner_npc_id","")) != ""
+    if personal:
+        var penalty = result.get("penalty",{})
+        var rep_delta = int(penalty.get("reputation_delta",0))
+        var relation_delta = int(penalty.get("attitude_delta",0))
+        _set_survival_feedback("Личное поручение снято • реп. %+d • отношение %+d" % [rep_delta,relation_delta],2.6)
+        var owner_name = str(FactionNpcState.canonical(str(abandoned.get("owner_npc_id",""))).get("name",active_contract_npc_name))
+        _record_world_news("npc",active_contract_faction,"%s сообщает: поручение «%s» снято после отказа исполнителя." % [owner_name,str(abandoned.get("title","КОНТРАКТ"))],world_day,int(world_minutes),false)
+    else:
+        _set_survival_feedback("Контракт снят без штрафа к репутации.",1.8)
+        _record_named_npc_interaction(active_contract_npc_id,"contract_abandon","Отказ от поручения «%s»." % str(abandoned.get("title","КОНТРАКТ")),-2)
     selected_contract_id = ""
     selected_contract_source = ""
     ContractSystem.refresh_offers(faction_state,world_day,false)
@@ -27144,6 +28928,7 @@ func _save_state():
         "wetness":wetness,
         "container_states":container_states,
         "loot_refresh_sites":loot_refresh_sites,
+        "high_risk_state":high_risk_state,
         "door_states":door_states,
         "shelter_breach_states":shelter_breach_states,
         "map_markers":map_markers,
@@ -27241,6 +29026,8 @@ func _sanitize_loaded_state(migrate_legacy_weapon_state = false):
                 "last_refresh_day":max(0,int(raw_state.get("last_refresh_day",0)))
             }
         loot_refresh_sites = clean_refresh
+
+    high_risk_state = HighRiskMechanics.sanitize_state(high_risk_state)
 
     for i in range(dropped_items.size() - 1,-1,-1):
         if not item_defs.has(str(dropped_items[i].get("id",""))):
@@ -27371,6 +29158,7 @@ func _load_state():
     wetness = float(parsed.get("wetness",0.0))
     container_states = parsed.get("container_states",{})
     loot_refresh_sites = parsed.get("loot_refresh_sites",{})
+    high_risk_state = parsed.get("high_risk_state",{})
     door_states = parsed.get("door_states",{})
     shelter_breach_states = parsed.get("shelter_breach_states",{})
     if typeof(shelter_breach_states) != TYPE_DICTIONARY:
@@ -27391,6 +29179,8 @@ func _load_state():
         faction_state["supply_events"] = SupplyEventSystem.default_state(world_day)
     else:
         SupplyEventSystem.ensure_state(faction_state,world_day)
+    WorldChronicle.ensure_state(faction_state)
+    FactionNpcState.ensure_state(faction_state,world_day)
     expedition_active = bool(parsed.get("expedition_active",false))
     expedition_target_name = str(parsed.get("expedition_target_name",""))
     expedition_target_reached = bool(parsed.get("expedition_target_reached",false))

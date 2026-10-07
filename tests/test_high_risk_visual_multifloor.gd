@@ -28,7 +28,7 @@ func run():
     root.add_child(game)
     await process_frame
 
-    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.23.0-dev1", "current build version mismatch")
+    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.37.1", "current build version mismatch")
 
     var ids = [
         "quarantine_center_12",

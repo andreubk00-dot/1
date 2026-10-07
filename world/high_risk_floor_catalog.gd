@@ -92,7 +92,7 @@ const FLOORSETS = {
                 "enemy_profile":"clinical_core",
                 "enemy_count":12,
                 "containers":[
-                    {"id":"floor3_surgery_store","pos":Vector2(-344,-150),"loot":"medical_secure","name":"Стерильный хирургический шкаф"},
+                    {"id":"floor3_surgery_store","pos":Vector2(-344,-150),"loot":"clinical_slice_reserve","name":"Аварийный хирургический резерв"},
                     {"id":"floor3_lab_store","pos":Vector2(342,150),"loot":"medical_secure","name":"Лабораторный резерв"}
                 ]
             }

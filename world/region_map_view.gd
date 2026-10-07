@@ -13,7 +13,9 @@ const SHORT_NAMES = {"old_center":"ЦЕНТР","panel_west":"ЖИЛМАССИВ"
     "market_east":"ТОРГОВЫЙ РЯД","south_residential":"ЮЖНЫЙ РАЙОН",
     "industrial_belt":"ПРОМЗОНА","rail_corridor":"Ж/Д КОРИДОР",
     "dacha_west":"ДАЧИ / СНТ","north_woodland":"ЛЕСОПОЛОСА",
-    "military_northeast":"ВОЕННЫЙ ПЕРИМЕТР"}
+    "military_northeast":"ВОЕННЫЙ ПЕРИМЕТР",
+    "outer_residential":"ОКРАИНЫ","outer_industrial":"ПРОМ. ОКРАИНА",
+    "outer_rural":"ПРИГОРОД","outer_woodland":"ЛЕСНАЯ ОКРАИНА"}
 var zoom_index = 0
 var center = Vector2i.ZERO
 var data = {}
@@ -163,6 +165,25 @@ func _draw():
     for f in [0.33,0.67]:
         draw_line(Vector2(size.x*f,0),Vector2(size.x*f,size.y),Color(INK,0.08),1)
         draw_line(Vector2(size.x*f+1,0),Vector2(size.x*f+1,size.y),Color(1,1,0.8,0.10),1)
+    # Persistent logistics links are map memory, not navigation paths. They are
+    # deliberately thinner/more muted than the active expedition route and have
+    # no arrowheads or intermediate waypoints.
+    for link in data.get("established_routes",[]):
+        if typeof(link) != TYPE_DICTIONARY:
+            continue
+        var from_coord = link.get("from",Vector2i(999999,999999))
+        var to_coord = link.get("to",Vector2i(999999,999999))
+        if from_coord.x >= 900000 or to_coord.x >= 900000:
+            continue
+        # Do not let an off-screen straight segment masquerade as surveyed road
+        # geometry through unknown territory. A link is drawn only near an endpoint.
+        if not contains_sector(from_coord) and not contains_sector(to_coord):
+            continue
+        var a = project(from_coord)
+        var b = project(to_coord)
+        draw_dashed_line(a,b,Color("6f6b4f"),0.9,5.0)
+        draw_circle(a,2.0,Color("6f6b4f"))
+        draw_circle(b,2.0,Color("6f6b4f"))
     var route = data.get("route",[])
     for i in range(1,route.size()):
         draw_dashed_line(project(route[i-1]),project(route[i]),Color("854d36"),1.3,3.0)

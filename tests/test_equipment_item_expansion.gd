@@ -136,7 +136,7 @@ func run():
 
     # Every new item is guaranteed in the permanent QA showcase crate.
     check(game.CONTAINER_W == 8 and game.CONTAINER_H == 8, "normal container grid changed")
-    check(game.QA_ALL_ITEMS_CONTAINER_W == 20 and game.QA_ALL_ITEMS_CONTAINER_H == 8, "QA crate grid changed unexpectedly")
+    check(game.QA_ALL_ITEMS_CONTAINER_W == 20 and game.QA_ALL_ITEMS_CONTAINER_H == 10, "QA crate grid changed unexpectedly")
     var qa_entries = game._generate_loot("qa:test:equipment110","all_items_test",game.QA_ALL_ITEMS_CONTAINER_W,game.QA_ALL_ITEMS_CONTAINER_H)
     var qa_ids = {}
     for rec in qa_entries:

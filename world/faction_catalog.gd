@@ -77,7 +77,9 @@ const ITEM_CATEGORIES = {
     "police_vest":"armor","military_vest":"armor","ballistic_helmet":"armor","field_rig":"armor","assault_rig":"armor",
     "cap":"household","wool_hat":"household","light_jacket":"household","rain_jacket":"technical","insulated_parka":"technical","storm_poncho":"technical",
     "field_backpack":"technical","hiking_backpack":"technical","expedition_pack":"technical","bedroll":"technical",
-    "makarov_extmag":"parts","shotgun_exttube":"parts","akm_extmag":"parts","muzzle_brake":"parts","suppressor":"parts"
+    "makarov_extmag":"parts","shotgun_exttube":"parts","akm_extmag":"parts","muzzle_brake":"parts","suppressor":"parts",
+    "old_checkpoint_documents":"strategic","military_radio_station":"strategic",
+    "generator_control_unit":"strategic","laboratory_analyzer":"strategic"
 }
 
 static func faction(faction_id:String) -> Dictionary:

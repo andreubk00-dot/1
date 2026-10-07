@@ -58,10 +58,16 @@ func run():
     game.antibiotic_time = 3.0
     game.warm_drink_time = 1.0
     game.well_fed_time = 4.0
+    game.faction_state = game.FactionEconomy.default_state()
+    for resource_id in game.FactionEconomy.RESOURCE_KEYS:
+        game.faction_state["factions"]["perron"]["resources"][resource_id] = 55.1
+    var perron_food_before_midnight = float(game.faction_state["factions"]["perron"]["resources"]["food"])
     game.add_source("heater",100.0)
     check(is_equal_approx(game._rest_heat_minutes_remaining(),400.0),"fuel forecast must use world clock")
     result = game._simulate_rest(1)
     check(game.world_day == 2 and abs(game.world_minutes - 30.0) < 0.001,"rest must cross midnight once")
+    check(float(game.faction_state["factions"]["perron"]["resources"]["food"]) < perron_food_before_midnight,"cross-midnight rest must run faction daily economy")
+    check(game.WorldChronicle.entries(game.faction_state,8).size() > 0,"cross-midnight rest must feed world chronicle when settlement state changes")
     check(game.painkiller_time == 0.0 and game.antibiotic_time == 0.0,"medication must expire during sleep")
     check(game.warm_drink_time == 0.0 and game.well_fed_time == 0.0,"nutrition buffs must expire during sleep")
     check(game.stamina <= game._survival_stamina_cap(),"wake stamina must use final condition")

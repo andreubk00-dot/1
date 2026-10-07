@@ -44,6 +44,8 @@ static func _read_file(path:String) -> Dictionary:
         return {}
     if parsed.has("faction_state") and typeof(parsed.get("faction_state",{})) != TYPE_DICTIONARY:
         return {}
+    if parsed.has("high_risk_state") and typeof(parsed.get("high_risk_state",{})) != TYPE_DICTIONARY:
+        return {}
     return parsed
 
 static func read_save(path:String) -> Dictionary:

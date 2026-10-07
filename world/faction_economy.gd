@@ -5,6 +5,11 @@ const FactionRelations = preload("res://world/faction_relations.gd")
 const SupplyEventSystem = preload("res://world/supply_event_system.gd")
 const SettlementCrisis = preload("res://world/settlement_crisis.gd")
 const FactionEndgame = preload("res://world/faction_endgame.gd")
+const WorldChronicle = preload("res://world/world_chronicle.gd")
+const FactionNpcState = preload("res://world/faction_npc_state.gd")
+const SettlementProjects = preload("res://world/settlement_projects.gd")
+const VerticalSlice = preload("res://world/vertical_slice.gd")
+const RegionalEndgame = preload("res://world/regional_endgame.gd")
 
 const RESOURCE_KEYS = ["food","medicine","technical","security"]
 const DEFAULT_RESOURCE = 55.0
@@ -16,6 +21,13 @@ const MAX_RESOURCE = 100.0
 # player deliveries, routes and faction projects remain materially valuable.
 const EMERGENCY_SELF_SUPPLY_START = 35.0
 const EMERGENCY_SELF_SUPPLY_RATE = 0.12
+
+# 1.23-dev16: passive infrastructure may specialize and stabilize a settlement, but it
+# must not pin canonical resources at the absolute 100 cap forever. This ceiling is
+# applied only to the COMBINED daily gain from open routes + finalized faction endgame
+# + completed settlement projects. Direct deliveries/trading, supply-event recovery,
+# contract rewards and crisis/emergency logic stay outside this cap.
+const PASSIVE_LOGISTICS_SOFT_CEILING = 92.0
 
 static func default_state() -> Dictionary:
     var factions = {}
@@ -37,11 +49,16 @@ static func default_state() -> Dictionary:
         "traders":TraderCatalog.default_trader_states(1),
         "world_routes":{},
         "contract_history":[],
-        "contracts":{"offers":{},"active":{},"last_refresh_day":{},"serial":0}
+        "contracts":{"offers":{},"personal_offers":{},"active":{},"last_refresh_day":{},"personal_last_refresh_day":{},"serial":0}
     }
     FactionRelations.ensure_state(state)
     SupplyEventSystem.ensure_state(state,1)
     FactionEndgame.ensure_state(state)
+    WorldChronicle.ensure_state(state)
+    FactionNpcState.ensure_state(state,1)
+    SettlementProjects.ensure_state(state)
+    VerticalSlice.ensure_state(state)
+    RegionalEndgame.ensure_state(state)
     return state
 
 static func sanitize_state(raw) -> Dictionary:
@@ -72,7 +89,7 @@ static func sanitize_state(raw) -> Dictionary:
     var history = raw.get("contract_history",[])
     state["contract_history"] = history.duplicate(true) if typeof(history) == TYPE_ARRAY else []
     var contracts = raw.get("contracts",{})
-    state["contracts"] = contracts.duplicate(true) if typeof(contracts) == TYPE_DICTIONARY else {"offers":{},"active":{},"last_refresh_day":{},"serial":0}
+    state["contracts"] = contracts.duplicate(true) if typeof(contracts) == TYPE_DICTIONARY else {"offers":{},"personal_offers":{},"active":{},"last_refresh_day":{},"personal_last_refresh_day":{},"serial":0}
     var raw_relations = raw.get("relations",{})
     if typeof(raw_relations) == TYPE_DICTIONARY:
         state["relations"] = raw_relations.duplicate(true)
@@ -85,9 +102,29 @@ static func sanitize_state(raw) -> Dictionary:
     var raw_endgame = raw.get("faction_endgame",{})
     if typeof(raw_endgame) == TYPE_DICTIONARY:
         state["faction_endgame"] = raw_endgame.duplicate(true)
+    var raw_chronicle = raw.get("world_chronicle",{})
+    if typeof(raw_chronicle) == TYPE_DICTIONARY:
+        state["world_chronicle"] = raw_chronicle.duplicate(true)
+    var raw_named_npcs = raw.get("named_npcs",{})
+    if typeof(raw_named_npcs) == TYPE_DICTIONARY:
+        state["named_npcs"] = raw_named_npcs.duplicate(true)
+    var raw_projects = raw.get("settlement_projects",{})
+    if typeof(raw_projects) == TYPE_DICTIONARY:
+        state["settlement_projects"] = raw_projects.duplicate(true)
+    var raw_vertical_slice = raw.get("vertical_slice",{})
+    if typeof(raw_vertical_slice) == TYPE_DICTIONARY:
+        state["vertical_slice"] = raw_vertical_slice.duplicate(true)
+    var raw_regional_endgame = raw.get("regional_endgame",{})
+    if typeof(raw_regional_endgame) == TYPE_DICTIONARY:
+        state["regional_endgame"] = raw_regional_endgame.duplicate(true)
     FactionRelations.ensure_state(state)
     SupplyEventSystem.ensure_state(state,1)
     FactionEndgame.ensure_state(state)
+    WorldChronicle.ensure_state(state)
+    FactionNpcState.ensure_state(state,1)
+    SettlementProjects.ensure_state(state)
+    VerticalSlice.ensure_state(state)
+    RegionalEndgame.ensure_state(state)
     return state
 
 static func reputation(state:Dictionary,faction_id:String) -> int:
@@ -168,6 +205,40 @@ static func record_sale(state:Dictionary,faction_id:String,item_id:String,quanti
     record["market_pressure"] = pressure
     state["factions"][faction_id] = record
 
+static func _resource_snapshot(state:Dictionary) -> Dictionary:
+    var snapshot = {}
+    for faction_id in FactionCatalog.ids():
+        var resources = state.get("factions",{}).get(faction_id,{}).get("resources",{})
+        var row = {}
+        for resource_id in RESOURCE_KEYS:
+            row[resource_id] = float(resources.get(resource_id,0.0)) if typeof(resources) == TYPE_DICTIONARY else 0.0
+        snapshot[str(faction_id)] = row
+    return snapshot
+
+static func _cap_passive_logistics(state:Dictionary,baseline:Dictionary) -> void:
+    # Preserve the strongest possible semantics for every individual source: below the
+    # soft ceiling routes/projects/endgame keep their authored values. Only their
+    # aggregate ability to refill the top of the meter is limited. If a direct action
+    # put a resource above the ceiling, passive logistics cannot erase normal decay by
+    # topping it back up; it may resume once the resource naturally drops below 92.
+    for faction_id in FactionCatalog.ids():
+        if not state.get("factions",{}).has(faction_id):
+            continue
+        var record = state["factions"][faction_id]
+        var resources = record.get("resources",{})
+        if typeof(resources) != TYPE_DICTIONARY:
+            continue
+        var before = baseline.get(str(faction_id),{})
+        for resource_id in RESOURCE_KEYS:
+            var baseline_value = float(before.get(resource_id,resources.get(resource_id,0.0)))
+            var value = float(resources.get(resource_id,baseline_value))
+            if value <= baseline_value:
+                continue
+            var passive_ceiling = max(PASSIVE_LOGISTICS_SOFT_CEILING,baseline_value)
+            resources[resource_id] = min(value,passive_ceiling)
+        record["resources"] = resources
+        state["factions"][faction_id] = record
+
 static func daily_tick(state:Dictionary) -> void:
     # Markets recover from saturation. Settlement resources decay slowly to create
     # supply demand without turning the game into constant maintenance.
@@ -186,6 +257,10 @@ static func daily_tick(state:Dictionary) -> void:
                 pressure.erase(item_id)
         record["market_pressure"] = pressure
         state["factions"][faction_id] = record
+
+    # Capture the post-consumption baseline. Everything until _cap_passive_logistics()
+    # is passive infrastructure and is intentionally evaluated as one combined layer.
+    var passive_baseline = _resource_snapshot(state)
 
     # Open routes created by completed contracts provide a small persistent daily
     # logistics benefit. The bonus is intentionally weaker than direct player deliveries:
@@ -213,6 +288,14 @@ static func daily_tick(state:Dictionary) -> void:
 
     # Permanent late-game faction infrastructure applies after ordinary decay and routes.
     FactionEndgame.apply_daily_effects(state)
+
+    # 1.23-dev6 local settlement infrastructure: completed projects provide a small
+    # persistent efficiency gain after ordinary decay/routes/endgame effects.
+    SettlementProjects.apply_daily_effects(state)
+
+    # Dev16 aggregate guardrail. Emergency recovery below this block remains uncapped,
+    # and direct/supply/crisis adjustments happen outside FactionEconomy.daily_tick().
+    _cap_passive_logistics(state,passive_baseline)
 
     # Release-candidate long-run guardrail: a settlement that has been ignored for weeks
     # falls into a persistent shortage instead of mathematically decaying every resource

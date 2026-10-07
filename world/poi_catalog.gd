@@ -173,7 +173,7 @@ const COMPOUNDS = {
                     {"id":"building_1","archetype":"rail_store","pos":Vector2(614,142),"size":Vector2(230,110),"sign":"МАТЕРИАЛЬНЫЙ СКЛАД","container_id":"cache_1"},
                     {"id":"building_2","archetype":"utility_house","pos":Vector2(618,616),"size":Vector2(118,84),"sign":"ВЕСОВАЯ","container_id":"cache_2"}
                 ],
-                "loose_containers":[{"id":"cache_3","pos":Vector2(182,602),"loot":"industrial","name":"Паллеты на платформе"}],
+                "loose_containers":[{"id":"cache_3","pos":Vector2(182,602),"loot":"industrial_secure","name":"Резерв инструментальной службы"}],
                 "props":[{"kind":"cardboard_boxes","pos":Vector2(236,532),"z":3,"scale":0.50},{"kind":"supply_crate","pos":Vector2(270,532),"z":3,"scale":0.48}],
                 "enemy_mult":1.20,"tree_mult":0.02,"car_mult":0.55
             }
@@ -206,7 +206,7 @@ const COMPOUNDS = {
                     {"id":"building_1","archetype":"country_house","pos":Vector2(612,140),"size":Vector2(196,140),"sign":"ДОМ №5","container_id":"cache_1"},
                     {"id":"building_2","archetype":"shed","pos":Vector2(166,618),"size":Vector2(108,78),"sign":"ХОЗБЛОК","container_id":"cache_2"}
                 ],
-                "loose_containers":[{"id":"cache_3","pos":Vector2(620,610),"loot":"rural","name":"Погребные запасы"}],
+                "loose_containers":[{"id":"cache_3","pos":Vector2(620,610),"loot":"rural_secure","name":"Общий погребной резерв"}],
                 "fences":[{"pos":Vector2(180,276),"length":178},{"pos":Vector2(590,508),"length":170}],
                 "tree_mult":1.40,"car_mult":0.30
             },

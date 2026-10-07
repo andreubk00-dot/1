@@ -185,7 +185,7 @@ func run():
     # 1.09.1 QA crate: only the authored all-items test fixture grows. Normal
     # gameplay containers remain 8x8 and use the same transfer/grid logic.
     check(game.CONTAINER_W == 8 and game.CONTAINER_H == 8, "normal container dimensions changed")
-    check(game.QA_ALL_ITEMS_CONTAINER_W >= 16 and game.QA_ALL_ITEMS_CONTAINER_H == 8, "QA crate dimensions mismatch")
+    check(game.QA_ALL_ITEMS_CONTAINER_W >= 16 and game.QA_ALL_ITEMS_CONTAINER_H == 10, "QA crate dimensions mismatch")
     check(game._container_grid_size({}) == Vector2i(8,8), "default container grid is not 8x8")
     check(game._container_grid_size({"grid_w":14,"grid_h":8}) == Vector2i(14,8), "custom QA grid size is not honored")
     var qa_entries = game._generate_loot("qa:test:arsenal","all_items_test",game.QA_ALL_ITEMS_CONTAINER_W,game.QA_ALL_ITEMS_CONTAINER_H)

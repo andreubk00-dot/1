@@ -1,7 +1,1 @@
-1.23.0-dev1
-
-Scope: High Risk Visual Rework.
-Base: 1.22.0 Stable.
-First approved 3D master integrated into the production 2D gameplay pipeline:
-Regional Clinical Complex No.4 reception building, model v03.
-Save schema remains 122. Existing 1.22 visual source files are unchanged; new art is additive.
+1.37.1

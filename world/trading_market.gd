@@ -4,6 +4,8 @@ const FactionEconomy = preload("res://world/faction_economy.gd")
 const TraderCatalog = preload("res://world/trader_catalog.gd")
 const SettlementCrisis = preload("res://world/settlement_crisis.gd")
 const FactionEndgame = preload("res://world/faction_endgame.gd")
+const SettlementProjects = preload("res://world/settlement_projects.gd")
+const SandboxRouteConsequences = preload("res://world/sandbox_route_consequences.gd")
 
 # Stateless transaction math. Inventory mutation stays in main_script_mod.gd so the
 # existing grid/instance invariants remain the single source of truth.
@@ -209,7 +211,7 @@ static func restock(state:Dictionary,trader_id:String,world_day:int,force:bool =
         var base_qty = max(1,int(spec.get("qty",1)))
         var resource_id = SettlementCrisis.resource_for_item(item_id)
         var resource = condition if resource_id == "" else SettlementCrisis.resource_value(state,faction_id,resource_id)
-        var supply_mult = (0.45 + clamp(resource / 100.0,0.0,1.0) * 0.75) * SettlementCrisis.restock_factor(state,faction_id,item_id) * FactionEndgame.restock_factor(state,faction_id,item_id)
+        var supply_mult = (0.45 + clamp(resource / 100.0,0.0,1.0) * 0.75) * SettlementCrisis.restock_factor(state,faction_id,item_id) * FactionEndgame.restock_factor(state,faction_id,item_id) * SettlementProjects.restock_factor(state,faction_id,item_id) * SandboxRouteConsequences.restock_factor(state,faction_id,item_id,FactionCatalog.item_category(item_id))
         var required_rep = TraderCatalog.required_rep(trader_id,item_id)
         var target = 0
         if SettlementCrisis.allows_restock(state,faction_id,item_id,required_rep):

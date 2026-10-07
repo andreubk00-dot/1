@@ -23,7 +23,11 @@ func run():
 
     for item_id in game.item_defs.keys():
         var sid = str(item_id)
-        check(game.inventory_icon_regions.has(sid) or game.melee_icon_regions.has(sid),"missing exact inventory art: " + sid)
+        var exact_art = game.inventory_icon_regions.has(sid) or game.melee_icon_regions.has(sid)
+        var procedural_strategic = str(game.item_defs[sid].get("category","")) == "strategic"
+        check(exact_art or procedural_strategic,"missing inventory art contract: " + sid)
+        if procedural_strategic:
+            check(game._make_item_icon(sid) != null,"strategic schematic icon failed: " + sid)
 
     for item_id in game.inventory_icon_regions.keys():
         var sid = str(item_id)
