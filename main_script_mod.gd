@@ -14620,7 +14620,27 @@ func _facade_height_for(sign_text,size,building_id = ""):
     # plinth 10 + 28 per storey + cornice 8
     return 18.0 + 28.0 * float(_facade_storeys_for(_exterior_style_index(sign_text),size,building_id))
 
+# 1.38: Blender-rendered HD twins of the open-world building atlases
+# (tools/blender/world_hd.py). Same cell layout at 2 texels per world unit,
+# drawn at half scale like every other 3D-rendered asset in the game.
+const WORLD_HD_TWINS = {
+    "res://roof_details_v1.png":"res://art/world_hd/roof_details_hd.png"
+}
+var _world_hd_ok = {}
+
+func _world_hd_twin(path:String) -> String:
+    if not WORLD_HD_TWINS.has(path):
+        return ""
+    if not _world_hd_ok.has(path):
+        _world_hd_ok[path] = ResourceLoader.exists(WORLD_HD_TWINS[path])
+    return WORLD_HD_TWINS[path] if _world_hd_ok[path] else ""
+
 func _facade_atlas_sprite(parent,path,region,pos,scale_value = 1.0):
+    var twin = _world_hd_twin(str(path))
+    if twin != "":
+        path = twin
+        region = Rect2(region.position * 2.0,region.size * 2.0)
+        scale_value *= 0.5
     var atlas = load(path)
     if atlas == null:
         return null
@@ -14909,7 +14929,7 @@ func _decorate_roof_details(roof,sign_text,size,building_id):
     var kinds = []
     match style:
         0, 1:
-            kinds = ["roof_puddle","vent_small","roof_debris"]
+            kinds = ["roof_puddle","vent_small"]
             if area.x > 150.0:
                 kinds.append("stair_housing")
             if rng.randf() < 0.5:
@@ -14919,11 +14939,11 @@ func _decorate_roof_details(roof,sign_text,size,building_id):
             if rng.randf() < 0.5:
                 kinds.append("pipe_run")
         2:
-            kinds = ["vent_small","roof_debris"]
+            kinds = ["vent_small"]
         3:
             kinds = ["skylight_row","vent_small","pipe_run"]
         _:
-            kinds = ["roof_debris"]
+            kinds = []                      # roofs carry building elements only, never junk
     for i in range(min(kinds.size(),spots.size())):
         var j = (i + rng.randi_range(0,spots.size() - 1)) % spots.size()
         var spot = spots[j]
@@ -15466,8 +15486,11 @@ func _roof_surface_sprite(parent,sign_text,size):
     # 0.87: typed seamless roof material (bitumen / slab / corrugated / tin / shifer)
     # repeated at native density, framed by parapet or eave strips.
     var style = _roof_style_index(sign_text)
-    var tex = load("res://roof_tile_s%d_v3.png" % style)
+    var hd_path = "res://art/world_hd/roof_tile_s%d_hd.png" % style
+    var hd = ResourceLoader.exists(hd_path)
+    var tex = load(hd_path) if hd else load("res://roof_tile_s%d_v3.png" % style)
     if tex == null:
+        hd = false
         tex = load("res://roof_tile_v2.png")
     if tex == null:
         tex = _roof_surface_texture(sign_text)
@@ -15481,7 +15504,9 @@ func _roof_surface_sprite(parent,sign_text,size):
     sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
     sprite.region_enabled = true
     sprite.region_filter_clip_enabled = false
-    sprite.region_rect = Rect2(0,0,area.x,area.y)
+    var k = 2.0 if hd else 1.0
+    sprite.region_rect = Rect2(0,0,area.x * k,area.y * k)
+    sprite.scale = Vector2(1.0 / k,1.0 / k)
     sprite.position = center
     sprite.modulate = Color(0.94,0.94,0.92,1.0)
     sprite.z_index = 0
@@ -15491,17 +15516,20 @@ func _roof_surface_sprite(parent,sign_text,size):
     return sprite
 
 func _roof_edge_strips(parent,style,center,area):
-    var h_tex = load("res://roof_edge_h_s%d_v1.png" % style)
-    var v_tex = load("res://roof_edge_v_s%d_v1.png" % style)
+    var hd = ResourceLoader.exists("res://art/world_hd/roof_edge_h_s%d_hd.png" % style) and ResourceLoader.exists("res://art/world_hd/roof_edge_v_s%d_hd.png" % style)
+    var h_tex = load(("res://art/world_hd/roof_edge_h_s%d_hd.png" if hd else "res://roof_edge_h_s%d_v1.png") % style)
+    var v_tex = load(("res://art/world_hd/roof_edge_v_s%d_hd.png" if hd else "res://roof_edge_v_s%d_v1.png") % style)
     if h_tex == null or v_tex == null:
         return
+    var k = 2.0 if hd else 1.0
     for edge in [0,1]:
         var strip = Sprite2D.new()
         strip.texture = h_tex
         strip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
         strip.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
         strip.region_enabled = true
-        strip.region_rect = Rect2(0,0,area.x,8)
+        strip.region_rect = Rect2(0,0,area.x * k,8 * k)
+        strip.scale = Vector2(1.0 / k,1.0 / k)
         strip.position = center + Vector2(0,(-area.y*0.5 + 4.0) if edge == 0 else (area.y*0.5 - 4.0))
         strip.flip_v = edge == 1
         strip.z_index = 1
@@ -15513,7 +15541,8 @@ func _roof_edge_strips(parent,style,center,area):
         strip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
         strip.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
         strip.region_enabled = true
-        strip.region_rect = Rect2(0,0,8,area.y)
+        strip.region_rect = Rect2(0,0,8 * k,area.y * k)
+        strip.scale = Vector2(1.0 / k,1.0 / k)
         strip.position = center + Vector2((-area.x*0.5 + 4.0) if edge == 0 else (area.x*0.5 - 4.0),0)
         strip.flip_h = edge == 1
         strip.z_index = 1
@@ -15521,12 +15550,14 @@ func _roof_edge_strips(parent,style,center,area):
         parent.add_child(strip)
 
 func _roof_prop_texture(index):
-    var atlas = load("res://roof_props_v4.png")
+    var hd = ResourceLoader.exists("res://art/world_hd/roof_props_hd.png")
+    var atlas = load("res://art/world_hd/roof_props_hd.png" if hd else "res://roof_props_v4.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
     tex.atlas = atlas
-    tex.region = Rect2(clamp(int(index),0,3) * 64,0,64,64)
+    var c = 128 if hd else 64
+    tex.region = Rect2(clamp(int(index),0,3) * c,0,c,c)
     return tex
 
 func _roof_prop_sprite(parent,index,pos,scale_value,z_value = 1):
@@ -15537,7 +15568,8 @@ func _roof_prop_sprite(parent,index,pos,scale_value,z_value = 1):
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.position = pos
-    sprite.scale = Vector2(scale_value,scale_value)
+    var k = 0.5 if tex.region.size.x > 64.0 else 1.0
+    sprite.scale = Vector2(scale_value * k,scale_value * k)
     sprite.z_index = z_value
     parent.add_child(sprite)
     return sprite
