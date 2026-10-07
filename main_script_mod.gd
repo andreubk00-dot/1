@@ -19709,9 +19709,32 @@ func _validate_chunk_enemy_spawns(chunk):
             # preserving its persistent ID for the next normal chunk load.
             enemy.queue_free()
 
+# 1.38: outside the city the chunk ground changes material, not layout:
+# dirt roads in the dachas, forest tracks, slab roads at the military
+# perimeter, patched concrete in the industrial belt (tools/wa_ground_districts.py).
+const DISTRICT_GROUND = {
+    "dacha_west":"rural","outer_rural":"rural",
+    "north_woodland":"woodland","outer_woodland":"woodland",
+    "military_northeast":"military",
+    "industrial_belt":"industrial","outer_industrial":"industrial","rail_corridor":"industrial"
+}
+
+func _district_ground_path(coord) -> String:
+    var family = str(DISTRICT_GROUND.get(RegionCatalog.district_id_for_chunk(coord),""))
+    if family == "":
+        return ""
+    var path = "res://art/world_hd/ground_%s_hd.png" % family
+    return path if ResourceLoader.exists(path) else ""
+
 func _build_ground(chunk,coord):
     var ground_sprite = Sprite2D.new()
-    ground_sprite.texture = load("res://ground_chunk_v12.png")
+    var district_ground = _district_ground_path(coord) if coord != Vector2i(0,0) else ""
+    if district_ground != "":
+        ground_sprite.texture = load(district_ground)
+        ground_sprite.scale = Vector2(0.5,0.5)
+        ground_sprite.set_meta("district_ground",district_ground)
+    else:
+        ground_sprite.texture = load("res://ground_chunk_v12.png")
     ground_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     ground_sprite.position = Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5)
     ground_sprite.z_index = -20
