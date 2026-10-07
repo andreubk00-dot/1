@@ -19238,7 +19238,10 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
         )
 
     for fence_data in cell_data.get("fences",[]):
-        _create_fence(chunk,fence_data.get("pos",Vector2(384,80)),float(fence_data.get("length",120.0)),float(fence_data.get("rotation",0.0)))
+        if HighRiskSiteCatalog.has(poi_id):
+            _hr_fence(chunk,fence_data,poi_id,cell_offset)
+        else:
+            _create_fence(chunk,fence_data.get("pos",Vector2(384,80)),float(fence_data.get("length",120.0)),float(fence_data.get("rotation",0.0)))
     for lamp_pos in cell_data.get("lamps",[]):
         _create_lamp(chunk,lamp_pos)
     for bench_pos in cell_data.get("workbenches",[]):
@@ -20636,6 +20639,69 @@ func _hr_paint(layer,kind:String,offset:Vector2i,rng):
             _hr_dash(layer,Vector2(20,466),Vector2(748,466),Color(0.80,0.80,0.74,0.35),18,16,2,rng)
 
 # ---------------------------------------------------------------- perimeter --
+# ------------------------------------------------------- High Risk fences --
+# The authored chain-link chokepoints of a High Risk sector were laid out for the
+# old building footprints. Cut each fence into 31 px sections and only build the
+# runs that do not cross a building or stand in front of its facade, block a
+# door, or double the PO-2 perimeter wall; stubs shorter than two sections go.
+func _hr_fence_blocked(chunk,rect:Rect2,sides:Dictionary) -> bool:
+    for child in chunk.get_children():
+        if not child.has_meta("world_building"):
+            continue
+        var sz:Vector2 = child.get_meta("building_size",Vector2.ZERO)
+        var foot = Rect2(child.position - sz * 0.5,sz)
+        # footprint plus the strip in front of the south facade (canopies, steps)
+        if rect.intersects(foot.grow_individual(10,10,10,26)):
+            return true
+        var door = child.position + Vector2(float(child.get_meta("door_local_x",0.0)),sz.y * 0.5)
+        if rect.grow(44.0).has_point(door):
+            return true
+    if sides.has("n") and rect.position.y < 52.0:
+        return true
+    if sides.has("s") and rect.end.y > 716.0:
+        return true
+    if sides.has("w") and rect.position.x < 50.0:
+        return true
+    if sides.has("e") and rect.end.x > 718.0:
+        return true
+    return false
+
+func _hr_fence(chunk,fence_data:Dictionary,poi_id:String,cell_offset:Vector2i):
+    var pos:Vector2 = fence_data.get("pos",Vector2(384,80))
+    var length = float(fence_data.get("length",120.0))
+    var rot = float(fence_data.get("rotation",0.0))
+    var vertical = abs(sin(rot)) > 0.7
+    var fp = PoiCatalog.footprint(poi_id)
+    var sides = {}
+    for d in [["n",Vector2i(0,-1)],["s",Vector2i(0,1)],["w",Vector2i(-1,0)],["e",Vector2i(1,0)]]:
+        if not fp.has(cell_offset + d[1]):
+            sides[d[0]] = true
+    var seg = 31.0
+    var n = max(1,int(ceil(length / seg)))
+    var keep = []
+    for i in range(n):
+        var t = -length * 0.5 + seg * (float(i) + 0.5)
+        var c = pos + (Vector2(0,t) if vertical else Vector2(t,0))
+        var r = Rect2(c - Vector2(4,seg * 0.5),Vector2(8,seg)) if vertical else Rect2(c - Vector2(seg * 0.5,4),Vector2(seg,8))
+        keep.append(not _hr_fence_blocked(chunk,r,sides))
+    var kept = 0
+    var i = 0
+    while i < n:
+        if not keep[i]:
+            i += 1
+            continue
+        var j = i
+        while j < n and keep[j]:
+            j += 1
+        if j - i >= 2:
+            var a = -length * 0.5 + seg * float(i)
+            var b = min(length * 0.5,-length * 0.5 + seg * float(j))
+            var mid = (a + b) * 0.5
+            _create_fence(chunk,pos + (Vector2(0,mid) if vertical else Vector2(mid,0)),b - a,rot)
+            kept += 1
+        i = j
+    chunk.set_meta("hr_fence_runs",int(chunk.get_meta("hr_fence_runs",0)) + kept)
+
 func _hr_perimeter(chunk,poi_id:String,offset:Vector2i,style:String):
     var fp = PoiCatalog.footprint(poi_id)
     var sides = {}
@@ -22178,6 +22244,7 @@ func _create_fence(chunk,pos,length,rotation_value = 0.0):
             _rect(Vector2(x,-3),Vector2(3,28),Color("4a4f4b"),fence)
             _rect(Vector2(x-4,-10),Vector2(8,2),Color("80857d"),fence)
     _add_static_rect(fence,Vector2(0,0),Vector2(length,6))
+    return fence
 
 
 
