@@ -75,6 +75,21 @@ function fixture(){
    g.save.quests.claimed[1]=true;
    g.renderNextSteps();assert(!($('nextSteps').innerHTML.includes('Забери кристаллы')));
  });
+ await test('At most two shard doubles per day across separate runs',async()=>{
+   const f=fixture(),g=f.g;
+   for(let i=0;i<2;i++){
+     g.run={wave:40,reached:40,earnedShards:100,earnedGems:3,resultDoubled:false,revived:false};
+     const p=g.doubleResult();f.getPending().fn();f.getPending().resolve(true);await p;
+     assert.equal(g.save.quests.doubleAds,i+1);
+   }
+   g.run={wave:40,reached:40,earnedShards:100,earnedGems:3,resultDoubled:false,revived:false};
+   await g.doubleResult();
+   assert.equal(f.getCalls(),2);assert.equal(g.save.shards,200);
+ });
+ await test('Ineligible result cannot claim a rewarded doubling',async()=>{
+   const f=fixture();f.g.run.reached=1;await f.g.doubleResult();
+   assert.equal(f.getCalls(),0);assert.equal(f.g.save.shards,0);
+ });
  await test('Save schema and both platform scripts unchanged',async()=>{
    assert(src.includes('out.version=21'));assert(phone.includes('out.version=21'));
    for(const b of [...pc,...mobile])if(b.trim())new Function(b);
