@@ -1603,6 +1603,11 @@ window.ED_BALANCE = Object.freeze({
     hpEndgameGrowth: 1.022,
     hpEndgameStartWave: 60,
     bossLateDampening: 0.035,
+    riftEaseStartWave: 30,
+    riftEasePeakWave: 35,
+    riftEaseEndWave: 55,
+    riftEaseHpFloor: 0.70,
+    riftEaseSpeedFloor: 0.88,
     speedBase: 34,
     speedGrowth: 1.2,
     speedCap: 42,
@@ -1847,7 +1852,7 @@ window.ED_BALANCE = Object.freeze({
 
   const BALANCE = window.ED_BALANCE || {
     version:'fallback-1.8.20', run:{baseCore:100,baseEnergy:74},
-    wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.032,hpEndgameGrowth:1.022,hpEndgameStartWave:60,bossLateDampening:.035,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
+    wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.032,hpEndgameGrowth:1.022,hpEndgameStartWave:60,bossLateDampening:.035,riftEaseStartWave:30,riftEasePeakWave:35,riftEaseEndWave:55,riftEaseHpFloor:.70,riftEaseSpeedFloor:.88,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,unitUpgradeLateGrowth:1.15,unitDamageLateGrowth:1.27,unitLatePivot:8,defenderRangePerLab:.025,defenderRangePerMastery:.01,defenderRangePerStar:.03,defenderRangeBonusCap:.85,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,shardDepthBonusStartWave:30,shardDepthBonusPerWave:.012,shardDepthBonusCap:1.90,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
     commander:{heatMax:100,recoverAt:42,coolBase:28,modeDuration:8,modeEnemySlow:.58,modeDamage:1.9,focusDuration:1.8,weakOpen:1.8,weakCooldown:4.6,eliteOrbChance:.45,orbEnergy:16,orbCharge:24,threatRewardEnergy:10,threatRewardCharge:12,precisionWindow:2.1,precisionDamagePerHit:.025,precisionDamageCap:.24},
@@ -3101,6 +3106,8 @@ window.ED_BALANCE = Object.freeze({
     waveEnemyCount(w){const b=BALANCE.wave;if(this.isBossWave(w))return 1;let n=b.baseCount+Math.floor(w*b.countGrowth)+Math.floor(Math.max(0,w-24)*b.post24Growth)+(w%5===0?b.eliteBonusCount:0);if(w>1&&w%10===1)n=Math.max(b.baseCount,Math.floor(n*(b.postBossCountMultiplier||.86)));return n}
     waveHp(w){const b=BALANCE.wave,early=Math.pow(b.hpEarlyGrowth,Math.min(b.hpEarlyCap,Math.max(0,w-1))),late=Math.pow(b.hpLateGrowth,Math.max(0,Math.min(w,b.hpEndgameStartWave||60)-30))*Math.pow(b.hpEndgameGrowth||b.hpLateGrowth,Math.max(0,w-(b.hpEndgameStartWave||60))),rift=this.run?.rift?.fx?.enemyHp||1,first=this.run?.firstRun?(this.isBossWave(w)?(BALANCE.onboarding?.firstBossHpMultiplier||.92):(w<=9?(BALANCE.onboarding?.firstRunHpMultiplier||.86):1)):1,elite=(w%5===0&&!this.isBossWave(w)?(b.eliteWaveHpMultiplier||1.52):1),breather=(w>1&&w%10===1?(b.postBossHpMultiplier||.90):1);return b.hpBase*early*late*elite*breather*(this.run?.challengeHp||1)*rift*first}
     bossHp(w,b){const v=b.variant||{},softening=1/(1+Math.max(0,w-40)*(BALANCE.wave.bossLateDampening||0));return this.waveHp(w)*b.hp*(v.hp||1)*(1+Math.max(0,w-30)*.012)*softening;}
+    // Smooth onboarding to Rift affixes after wave 30; no abrupt difficulty step at wave 55.
+    riftEase(w){const b=BALANCE.wave,start=b.riftEaseStartWave||30,peak=b.riftEasePeakWave||35,end=b.riftEaseEndWave||55;const inPart=clamp((w-start)/Math.max(1,peak-start),0,1),outPart=clamp((end-w)/Math.max(1,end-peak),0,1),weight=inPart*outPart;return {hp:1-(1-(b.riftEaseHpFloor||.70))*weight,speed:1-(1-(b.riftEaseSpeedFloor||.88))*weight};}
     waveSpeed(w){const b=BALANCE.wave,rift=this.run?.rift?.fx?.enemySpeed||1;return (b.speedBase+Math.min(b.speedCap,w*b.speedGrowth))*(this.run?.challengeSpeed||1)*rift}
     bossVariant(w){if(w<40)return null;return BOSS_VARIANTS[(Math.floor(w/10)-4)%BOSS_VARIANTS.length]||null}
     bossSpec(w){
@@ -3188,10 +3195,10 @@ window.ED_BALANCE = Object.freeze({
       if(type==='sapper'){hpMul=.9;speedMul=.9;r=16;energy=9;color='#6df2ff';}
       const affixes=this.rollEnemyAffixes(type,w);let affixSpeed=1,statusResist=1,coreDamage=1,regen=0;
       for(const id of affixes){const fx=ENEMY_AFFIXES[id].fx;if(fx.speed)affixSpeed*=fx.speed;if(fx.statusResist)statusResist*=fx.statusResist;if(fx.coreDamage)coreDamage*=fx.coreDamage;if(fx.regen)regen+=fx.regen;}
-      const hp=this.waveHp(w)*hpMul;
+      const ease=this.riftEase(w),hp=this.waveHp(w)*hpMul*ease.hp;
       const threatChance=w>=6?(type==='elite'?.52:type==='brute'?.30:type==='runner'?.16:.10):0;
       const threatReady=Math.random()<threatChance;
-      this.run.enemies.push({type,x:1260+r,y:100+Math.random()*520,r,hp,maxHp:hp,speed:this.waveSpeed(w)*speedMul*affixSpeed,slow:0,flash:0,color,energy,burnTime:0,burnDps:0,weakenTime:0,affixes,statusResist,affixCoreDamage:coreDamage,affixRegen:regen,threatReady,threatCharge:threatReady?(type==='elite'?2.8:2.35):0,threatBoost:0,sabotageReady:false,sabotageCharge:0,sabotaged:false});this.run.spawned++;
+      this.run.enemies.push({type,x:1260+r,y:100+Math.random()*520,r,hp,maxHp:hp,speed:this.waveSpeed(w)*speedMul*affixSpeed*ease.speed,slow:0,flash:0,color,energy,burnTime:0,burnDps:0,weakenTime:0,affixes,statusResist,affixCoreDamage:coreDamage,affixRegen:regen,threatReady,threatCharge:threatReady?(type==='elite'?2.8:2.35):0,threatBoost:0,sabotageReady:false,sabotageCharge:0,sabotaged:false});this.run.spawned++;
     }
     update(dt){
       if(!this.inRun||this.paused||!this.run)return;
