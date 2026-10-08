@@ -14493,7 +14493,27 @@ func _integrated_sprite_scale(value):
     # Quantized scaling keeps pixel density consistent between unrelated source assets.
     return clamp(round(float(value) * 7.0) / 8.0,0.25,1.5)
 
+func _litter_decal_sprite(kind:String,parent,pos:Vector2,z_value:int):
+    # flat litter is drawn from the HD pixel decals at the world's texel density
+    # (scale 0.5); flipped by position so neighbouring heaps differ
+    var tex = AtlasTexture.new()
+    tex.atlas = load("res://art/world_hd/ground_decals_hd.png")
+    tex.region = Rect2(int(LITTER_TO_DECAL[kind]) * 96,0,96,64)
+    var sprite = Sprite2D.new()
+    sprite.texture = tex
+    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    sprite.position = pos.round()
+    sprite.scale = Vector2(0.5,0.5)
+    sprite.flip_h = int(abs(pos.x * 3.0 + pos.y)) % 2 == 0
+    sprite.z_index = z_value
+    sprite.set_meta("world_prop_kind",kind)
+    sprite.set_meta("world_prop_scale",0.5)
+    parent.add_child(sprite)
+    return sprite
+
 func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value = 1.0):
+    if LITTER_TO_DECAL.has(str(kind)) and _hd_exists("res://art/world_hd/ground_decals_hd.png"):
+        return _litter_decal_sprite(str(kind),parent,pos,z_value)
     var atlas = load("res://world_props_v19.png")
     if atlas == null:
         return null
@@ -15757,7 +15777,10 @@ func _update_detail_lights(delta):
             target *= 0.12 + _time_night_factor() * 0.88
         light.energy = max(0.0,target)
 
-const GROUND_DECAL_KINDS = ["rubble_a","rubble_b","rubble_c","blood_a","blood_b","blood_dry","papers_a","papers_b","glass","oil"]
+const GROUND_DECAL_KINDS = ["rubble_a","rubble_b","rubble_c","blood_a","blood_b","blood_dry","papers_a","papers_b","glass","oil","planks","tiles"]
+# old 1x litter heaps (noisy white / red speckle blobs) -> HD ground decal cells
+const LITTER_TO_DECAL = {"debris":1,"rubble_papers":0,"broken_tile_pile":11,"wooden_debris":10,
+    "floor_papers":6,"newspapers":7,"newspapers_wide":6,"shattered_glass":8}
 
 func _add_ground_decals(chunk,coord):
     # 1.38: HD pixel decals (tools/wa_ground_decals.py). Pixel art is only ever
@@ -19793,6 +19816,7 @@ func _ensure_world_hd_preloaded():
         paths.append("res://art/world_hd/yard_%s_hd.png" % family)
     paths.append("res://art/world_hd/ground_decals_hd.png")
     paths.append("res://art/world_hd/trees_hd.png")
+    paths.append("res://art/world_hd/fence_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
@@ -22614,15 +22638,21 @@ func _hr_perimeter(chunk,poi_id:String,offset:Vector2i,style:String):
                 _rect(Vector2((a + b) * 0.5,c + 3.0),Vector2(b - a,3.0),Color(0.01,0.012,0.012,0.22),root)
                 _add_static_rect(root,Vector2((a + b) * 0.5,c - 2.0),Vector2(b - a,8.0))
             else:
-                _rect(Vector2(c,(a + b) * 0.5 - 26.0),Vector2(7.0,b - a),Color(0.58,0.57,0.53,1.0),root)
-                _rect(Vector2(c - 2.5,(a + b) * 0.5 - 26.0),Vector2(2.0,b - a),Color(0.70,0.69,0.64,1.0),root)
-                _rect(Vector2(c + 4.5,(a + b) * 0.5),Vector2(3.0,b - a),Color(0.01,0.012,0.012,0.2),root)
+                # PO-2 seen edge-on: the wall stands h = 26 above its base, so the
+                # strip spans base-26 .. base; top face lit, east face in shadow,
+                # panel joints with posts, a stepped shadow on the ground to the east
+                var hh = 26.0
+                var mid = (a + b) * 0.5
+                _rect(Vector2(c + 8.0,mid),Vector2(7.0,b - a),Color(0.01,0.012,0.012,0.14),root)
+                _rect(Vector2(c + 5.5,mid),Vector2(3.0,b - a),Color(0.01,0.012,0.012,0.14),root)
+                _rect(Vector2(c,mid - hh * 0.5),Vector2(9.0,b - a + hh),Color(0.50,0.49,0.45,1.0),root)
+                _rect(Vector2(c - 3.0,mid - hh * 0.5),Vector2(3.0,b - a + hh),Color(0.68,0.67,0.62,1.0),root)
+                _rect(Vector2(c + 3.5,mid - hh * 0.5),Vector2(2.0,b - a + hh),Color(0.36,0.35,0.33,1.0),root)
                 var y = a
-                while y < b:
-                    _rect(Vector2(c,y - 26.0),Vector2(9.0,4.0),Color(0.48,0.47,0.44,1.0),root)
-                    _rect(Vector2(c,y - 30.0),Vector2(1.0,6.0),Color(0.30,0.30,0.30,1.0),root)
-                    y += 30.0
-                _rect(Vector2(c - 1.0,(a + b) * 0.5 - 32.0),Vector2(1.0,b - a),Color(0.62,0.63,0.62,0.9),root)
+                while y <= b:
+                    _rect(Vector2(c,y - hh * 0.5),Vector2(11.0,3.0),Color(0.30,0.30,0.28,1.0),root)
+                    _rect(Vector2(c,y - hh - 1.0),Vector2(11.0,3.0),Color(0.74,0.73,0.68,1.0),root)
+                    y += 32.0
                 _add_static_rect(root,Vector2(c,(a + b) * 0.5 - 8.0),Vector2(10.0,b - a))
         # gate pillars with lamps at the opening
         for g in [384.0 - gap,384.0 + gap]:
@@ -24238,6 +24268,80 @@ func _create_tree(chunk,pos,scale_factor,force = false):
     _add_static_rect(tree,Vector2(0,7),Vector2(12,12))
     return tree
 
+var _fence_mesh_tex = null
+
+func _fence_mesh_texture():
+    if _fence_mesh_tex != null:
+        return _fence_mesh_tex
+    # 6 x 6 chain-link diamonds seen at a steep angle: lit wires on the west
+    # half, shaded wires on the east half
+    var img = Image.create(8,8,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    var lit = Color(0.72,0.75,0.72,0.95)
+    var dark = Color(0.42,0.45,0.43,0.95)
+    for y in range(8):
+        var x1 = y
+        var x2 = 7 - y
+        img.set_pixel(x1,y,lit if x1 < 4 else dark)
+        img.set_pixel(x2,y,lit if x2 < 4 else dark)
+    _fence_mesh_tex = ImageTexture.create_from_image(img)
+    return _fence_mesh_tex
+
+func _fence_side_view(vis,length:float):
+    # local frame: the fence runs along +y from -length/2 to +length/2, base at x 0
+    # (h matches the HD front-view fence: 38 units from cap to ground)
+    var h = 36.0
+    var y0 = -length * 0.5
+    var y1 = length * 0.5
+    # see-through wire shadow on the ground to the east (light from the upper
+    # left) - the strongest cue that the fence stands up
+    var wire_shadow = Sprite2D.new()
+    wire_shadow.texture = _fence_mesh_texture()
+    wire_shadow.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+    wire_shadow.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    wire_shadow.region_enabled = true
+    wire_shadow.region_rect = Rect2(0,0,8,length)
+    wire_shadow.centered = false
+    wire_shadow.position = Vector2(4.0,y0 + 4.0)
+    wire_shadow.scale = Vector2(1.6,1.0)
+    wire_shadow.modulate = Color(0,0,0,0.4)
+    vis.add_child(wire_shadow)
+    vis.move_child(wire_shadow,0)
+    # chain-link band rising h above the base line
+    var mesh = Sprite2D.new()
+    mesh.texture = _fence_mesh_texture()
+    mesh.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+    mesh.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    mesh.region_enabled = true
+    mesh.region_rect = Rect2(0,0,8,length + h - 4.0)
+    mesh.centered = false
+    mesh.position = Vector2(-4.0,y0 - h + 2.0)
+    vis.add_child(mesh)
+    # thin top wire on the lit side only (solid rails read as a pipe)
+    _rect(Vector2(-4.5,(y0 + y1) * 0.5 - h * 0.5),Vector2(1.0,length + h - 2.0),Color(0.74,0.77,0.74,0.8),vis)
+    # posts: a short column each, cap h above its base, dark east face
+    var n = max(1,int(round(length / 31.0)))
+    for i in range(n + 1):
+        var py = y0 + length * float(i) / float(n)
+        _rect(Vector2(0.5,py - h * 0.5),Vector2(5.0,h),Color(0.36,0.39,0.37,1.0),vis)
+        _rect(Vector2(-1.5,py - h * 0.5),Vector2(1.0,h),Color(0.66,0.69,0.66,1.0),vis)
+        _rect(Vector2(2.5,py - h * 0.5),Vector2(1.0,h),Color(0.20,0.22,0.21,1.0),vis)
+        _rect(Vector2(0.5,py - h - 1.0),Vector2(6.0,2.0),Color(0.80,0.82,0.79,1.0),vis)
+        # each post throws a slanted shadow onto the ground, like the gate pillars
+        var post_shadow = Polygon2D.new()
+        post_shadow.polygon = PackedVector2Array([Vector2(1,py - 1),Vector2(3,py + 1),Vector2(h * 0.55 + 2,py + h * 0.22 + 1),Vector2(h * 0.55,py + h * 0.22 - 2)])
+        post_shadow.color = Color(0.01,0.012,0.012,0.3)
+        vis.add_child(post_shadow)
+        vis.move_child(post_shadow,0)
+    # weeds along the foot of the fence
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(length * 131.0)) + 7
+    for i in range(int(length / 10.0)):
+        var wy = rng.randf_range(y0,y1)
+        var wx = rng.randf_range(-4.0,4.0)
+        _rect(Vector2(wx,wy - 2.0),Vector2(1.0,rng.randf_range(3.0,6.0)),Color(0.34,0.40,0.22,0.9),vis)
+        _rect(Vector2(wx + 1.0,wy - 1.0),Vector2(1.0,rng.randf_range(2.0,4.0)),Color(0.44,0.50,0.28,0.9),vis)
+
 func _create_fence(chunk,pos,length,rotation_value = 0.0):
     var fence = Node2D.new()
     fence.position = pos
@@ -24249,7 +24353,48 @@ func _create_fence(chunk,pos,length,rotation_value = 0.0):
     chunk.add_child(fence)
 
     var fence_tex = load("res://fence_segment_v3.png")
-    if fence_tex != null:
+    if abs(sin(float(rotation_value))) > 0.7:
+        # 1.38: a north-south fence is seen edge-on in the 3/4 view. Rotating the
+        # front-view sprite by 90 degrees made it look as if it lay on the ground;
+        # draw it standing instead: post tops, the mesh as a narrow strip rising
+        # above the base line, and its shadow on the ground to the east.
+        var vis = Node2D.new()
+        vis.name = "FenceSide"
+        vis.rotation = -float(rotation_value)
+        fence.add_child(vis)
+        _fence_side_view(vis,length)
+        _add_static_rect(fence,Vector2(0,0),Vector2(length,6))
+        return fence
+    if _hd_exists("res://art/world_hd/fence_hd.png"):
+        # 1.38: HD chain-link (tools/wa_fence_hd.py): one sprite per 31-unit bay,
+        # posts at the joints only (the 1x segments overlapped and doubled them)
+        var hd_tex = load("res://art/world_hd/fence_hd.png")
+        var bays = max(1,int(ceil(length / 31.0)))
+        var bay_w = length / float(bays)
+        for i in range(bays):
+            var bt = AtlasTexture.new()
+            bt.atlas = hd_tex
+            # crop the bay instead of stretching it: pixels stay square
+            bt.region = Rect2(0,0,min(62.0,round(bay_w * 2.0)),80)
+            var bs = Sprite2D.new()
+            bs.texture = bt
+            bs.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+            bs.centered = false
+            bs.scale = Vector2(0.5,0.5)
+            bs.position = Vector2(-length * 0.5 + bay_w * float(i),-29.0)
+            fence.add_child(bs)
+        for i in range(bays + 1):
+            var pt = AtlasTexture.new()
+            pt.atlas = hd_tex
+            pt.region = Rect2(62,0,8,80)
+            var ps = Sprite2D.new()
+            ps.texture = pt
+            ps.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+            ps.centered = false
+            ps.scale = Vector2(0.5,0.5)
+            ps.position = Vector2(round(-length * 0.5 + bay_w * float(i) - 2.0),-29.0)
+            fence.add_child(ps)
+    elif fence_tex != null:
         var segment_width = 31.0
         var count = max(1,int(ceil(length / segment_width)))
         var total_width = float(count) * segment_width

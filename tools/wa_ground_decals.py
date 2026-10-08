@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw
 
 CW, CH = 96, 64
 DECAL_KINDS = ['rubble_a', 'rubble_b', 'rubble_c', 'blood_a', 'blood_b', 'blood_dry',
-               'papers_a', 'papers_b', 'glass', 'oil']
+               'papers_a', 'papers_b', 'glass', 'oil', 'planks', 'tiles']
 
 BRICK = [(122, 58, 44), (138, 70, 52), (104, 50, 40)]
 CONCRETE = [(126, 124, 116), (110, 108, 100), (142, 138, 128)]
@@ -147,12 +147,68 @@ def oil(seed):
     return Image.fromarray(a, 'RGBA')
 
 
+def planks(seed):
+    """a few broken boards lying on each other: lit top edge, dark side,
+    grain lines and nail heads; shadow on the ground under each board."""
+    rng = np.random.default_rng(seed)
+    im = Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    woods = [(132, 96, 62), (118, 86, 56), (146, 110, 72), (100, 74, 50)]
+    for i in range(4):
+        cx, cy = CW / 2 + rng.uniform(-14, 14), CH / 2 + rng.uniform(-8, 8)
+        L, wd = rng.uniform(26, 40), rng.uniform(3.5, 5)
+        # board directions: horizontal, slight slope or diagonal in pixel-clean steps
+        a = [0.0, 0.0, 0.46, -0.46][i % 4] + rng.choice([0.0, 0.0, 0.25, -0.25])
+        ca, sa = math.cos(a), math.sin(a) * 0.7
+        ax, ay = ca * L / 2, sa * L / 2
+        nx, ny = -sa * wd / 2 / max(0.3, ca), wd / 2
+        pts = [(cx - ax + nx * 0, cy - ay - ny), (cx + ax, cy + ay - ny), (cx + ax, cy + ay + ny), (cx - ax, cy - ay + ny)]
+        pts = [(round(x), round(y)) for x, y in pts]
+        c = woods[rng.integers(0, len(woods))]
+        d.polygon([(x + 1, y + 2) for x, y in pts], fill=SHADOW)
+        d.polygon(pts, fill=c + (255,))
+        d.line([pts[0], pts[1]], fill=shade(c, 1.28))
+        d.line([pts[3], pts[2]], fill=shade(c, 0.6))
+        d.line([((pts[0][0] + pts[3][0]) // 2 + 3, (pts[0][1] + pts[3][1]) // 2),
+                ((pts[1][0] + pts[2][0]) // 2 - 3, (pts[1][1] + pts[2][1]) // 2)], fill=shade(c, 0.82))
+        # broken end: two notches
+        ex, ey = pts[1]
+        d.point((ex, ey + 1), fill=(0, 0, 0, 0))
+        d.point((ex - 1, ey + 2), fill=shade(c, 0.7))
+        for t in (0.15, 0.85):
+            px, py = cx - ax + 2 * ax * t, cy - ay + 2 * ay * t
+            d.point((round(px), round(py)), fill=(60, 58, 56, 255))
+    return im
+
+
+def tiles(seed):
+    """broken ceramic / pavement tiles: flat square shards with a lit edge."""
+    rng = np.random.default_rng(seed)
+    im = Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for _ in range(60):
+        x, y = rng.normal(CW / 2, 15), rng.normal(CH / 2 + 2, 7)
+        d.point((x, y), fill=(84, 80, 72, 150))
+    for _ in range(int(rng.integers(9, 13))):
+        cx, cy = rng.normal(CW / 2, 12), rng.normal(CH / 2, 6)
+        s = rng.uniform(3, 6)
+        c = [(178, 176, 166), (160, 158, 150), (150, 162, 160)][rng.integers(0, 3)]
+        pts = [(cx - s, cy - s * 0.6), (cx + s, cy - s * 0.6), (cx + s * rng.uniform(0.3, 1), cy + s * 0.6), (cx - s, cy + s * 0.6)]
+        pts = [(round(x), round(y)) for x, y in pts]
+        d.polygon([(x + 1, y + 2) for x, y in pts], fill=SHADOW)
+        d.polygon(pts, fill=c + (255,))
+        d.line([pts[0], pts[1]], fill=shade(c, 1.2))
+        d.line([pts[2], pts[3]], fill=shade(c, 0.62))
+    return im
+
+
 def build(P):
     makers = {'rubble_a': lambda: rubble(11, 0.6), 'rubble_b': lambda: rubble(12, 0.15),
               'rubble_c': lambda: rubble(13, 0.9), 'blood_a': lambda: blood(21),
               'blood_b': lambda: blood(22), 'blood_dry': lambda: blood(23, True),
               'papers_a': lambda: papers(31), 'papers_b': lambda: papers(32),
-              'glass': lambda: glass(41), 'oil': lambda: oil(51)}
+              'glass': lambda: glass(41), 'oil': lambda: oil(51),
+              'planks': lambda: planks(61), 'tiles': lambda: tiles(71)}
     sheet = Image.new('RGBA', (CW * len(DECAL_KINDS), CH), (0, 0, 0, 0))
     for i, k in enumerate(DECAL_KINDS):
         sheet.alpha_composite(makers[k](), (i * CW, 0))

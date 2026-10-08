@@ -340,9 +340,12 @@ def to_sprite(img, cell=192, colours=40, outline=True, shadow=True):
     a = out
     rgb, al = a[..., :3], a[..., 3]
     # un-premultiply soft edge pixels before hardening alpha
-    solid = al >= 140
-    shad = (al > 18) & ~solid
     lum = rgb.mean(axis=2)
+    # a dense shadow-catcher (thin tall objects at low sun) reaches alpha > 140
+    # but stays pure black: it is a shadow, never solid (was baked opaque black)
+    catcher = (lum < 6) & (al < 250)
+    solid = (al >= 140) & ~catcher
+    shad = (al > 18) & ~solid
     # shadow-catcher pixels are black with partial alpha
     is_shadow = shad & (lum < 40)
     res = np.zeros_like(a)
