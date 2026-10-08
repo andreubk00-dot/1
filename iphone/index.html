@@ -6,7 +6,13 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — iPhone v1.8.16</title>
+  <title>Бесконечные защитники — Android / iPhone v1.8.17</title>
+  <meta name="apple-mobile-web-app-title" content="Защитники" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="application-name" content="Бесконечные защитники" />
+  <meta name="description" content="Бесконечная защита Ядра: защитники, волны, боссы и постоянные улучшения." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
   <style>
 :root{
   --bg:#0b1018;--bg2:#111827;--panel:#151d2b;--panel2:#1c2637;--line:#2a3850;
@@ -1042,7 +1048,7 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
-/* v1.8.16: iPhone save-rescue controls */
+/* v1.8.17: iPhone save-rescue controls */
 #backupScreen{z-index:76}
 .save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
 .save-entry button{min-height:44px;max-width:100%;white-space:normal}
@@ -1057,7 +1063,7 @@ canvas { touch-action:none; }
 .backup-card #backupNotice{min-height:18px;font-size:12px;line-height:1.45}
 @media(max-width:500px){.backup-card .backup-actions{grid-template-columns:1fr}.backup-card{padding:17px}}
 
-/* v1.8.16: fit three defender cards and Pulse on 320px Android/iPhone. */
+/* v1.8.17: fit three defender cards and Pulse on 320px Android/iPhone. */
 @media (max-width:520px) and (orientation:portrait) {
   .hud-bottom { gap:4px; left:6px; right:6px; }
   .hud-bottom .unit-cards { flex:1 1 0; width:auto; min-width:0; gap:3px; }
@@ -1112,6 +1118,7 @@ canvas { touch-action:none; }
             <div class="hero-actions">
               <button class="primary-btn" id="playBtn"><span id="playBtnText">Начать вылазку</span><small id="playBtnSub">Новая бесконечная серия волн</small></button>
               <button class="secondary-btn" id="dailyBtn">🎯 <span id="dailyBtnText">Ежедневные задания</span></button>
+              <button class="secondary-btn" id="installAppBtn" type="button" hidden aria-label="Добавить игру на главный экран">⌂ На главный экран</button>
             </div>
           </div>
           <div class="hero-visual" aria-hidden="true">
@@ -1515,7 +1522,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.16',
+  version: '1.8.17',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1762,7 +1769,7 @@ window.ED_BALANCE = Object.freeze({
 
 
   const BALANCE = window.ED_BALANCE || {
-    version:'fallback-1.8.16', run:{baseCore:100,baseEnergy:74},
+    version:'fallback-1.8.17', run:{baseCore:100,baseEnergy:74},
     wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.115,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
@@ -2169,7 +2176,7 @@ window.ED_BALANCE = Object.freeze({
       };
       this.musicUrls={
         menu:[local('menu_theme.ogg')],
-        combat:['https://cdn.jsdelivr.net/gh/AdamPallus/space_game@main/assets/music/space_battle_bpm130.ogg',local('battle_theme.ogg')],
+        combat:[local('battle_theme.ogg')],
         urgent:[local('battle_theme.ogg')]
       };
       this.samplePools={};this.sampleCursor={};this.sampleBuffers={};this.sampleLoadJobs={};this.sampleFailed={};this.mediaReady=false;this.mediaUnlocked=false;this.musicEls={};this.currentMusic=null;this.currentMusicKey='';this.musicResumeWanted=false;this.pendingMusicKey='';this.mediaSuspended=false;
@@ -2502,7 +2509,7 @@ window.ED_BALANCE = Object.freeze({
 
     saveBackupObject(){
       // The persistent account/collection is backed up; active battle state is not.
-      return {format:'endless-defenders-save',formatVersion:1,createdAt:new Date().toISOString(),gameVersion:'1.8.16',save:structuredClone(this.save)};
+      return {format:'endless-defenders-save',formatVersion:1,createdAt:new Date().toISOString(),gameVersion:'1.8.17',save:structuredClone(this.save)};
     }
     backupMessage(message,failed=false){const el=$('backupNotice');if(el){el.textContent=message;el.style.color=failed?'#ff9daa':'#92f3d5';}}
     openBackup(){
@@ -3330,6 +3337,37 @@ window.ED_BALANCE = Object.freeze({
 document.addEventListener('gesturestart',e=>{
   if(e.target?.closest?.('.battle-frame'))e.preventDefault();
 },{passive:false});
+</script>
+<script>
+(() => {
+  if(window.ED_YANDEX_BUILD)return;
+  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  const ios=()=>/iPhone|iPad|iPod/.test(navigator.userAgent);
+  let installEvent=null;
+  const button=()=>document.getElementById('installAppBtn');
+  const updateButton=()=>{
+    const el=button();if(!el)return;
+    const supported=!!installEvent||ios();
+    el.hidden=standalone()||!supported;
+    if(supported)el.textContent=ios()?'⌂ На экран Домой':'⬇ Установить игру';
+  };
+  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installEvent=event;updateButton();});
+  window.addEventListener('appinstalled',()=>{installEvent=null;updateButton();});
+  document.addEventListener('DOMContentLoaded',()=>{
+    updateButton();
+    button()?.addEventListener('click',async()=>{
+      if(installEvent){const event=installEvent;installEvent=null;
+        try{await event.prompt();await event.userChoice;}catch(err){console.warn('Install declined',err);}updateButton();
+      }else if(ios()){
+        const ru=(document.documentElement.lang||'ru')==='ru';
+        alert(ru?'Safari: нажми «Поделиться» (□↑), затем «На экран Домой» и «Добавить». Перед установкой скачай резервную копию прогресса.':'Safari: tap Share, then Add to Home Screen. Back up your save before installing.');
+      }
+    });
+  });
+  if('serviceWorker' in navigator&&window.isSecureContext){
+    window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js',{scope:'./'}).catch(err=>console.warn('Offline installation unavailable',err));});
+  }
+})();
 </script>
 </body>
 </html>
