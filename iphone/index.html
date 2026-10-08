@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — iPhone v1.8.13</title>
+  <title>Бесконечные защитники — iPhone v1.8.14</title>
   <style>
 :root{
   --bg:#0b1018;--bg2:#111827;--panel:#151d2b;--panel2:#1c2637;--line:#2a3850;
@@ -1042,6 +1042,20 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
+/* v1.8.14: iPhone save-rescue controls */
+#backupScreen{z-index:76}
+.save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
+.save-entry button{min-height:44px;max-width:100%;white-space:normal}
+.backup-card{width:min(580px,96vw)}
+.backup-card .backup-summary{padding:10px 12px;border:1px solid #36516e;background:#11243b;border-radius:12px;font-size:13px;line-height:1.5;margin:10px 0 16px}
+.backup-card .backup-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.backup-card .backup-actions button{font-size:13px;min-height:45px;white-space:normal}
+.backup-card .backup-import-label{display:block;font-size:13px;font-weight:800;margin:18px 0 8px}
+.backup-card input[type=file]{width:100%;max-width:100%;background:#11243b;border:1px solid #3a526b;border-radius:12px;padding:10px;color:#d6e8ff}
+.backup-card textarea{display:block;width:100%;min-height:80px;margin:10px 0;resize:vertical;background:#101e31;color:#d7eaff;border:1px solid #3a526b;border-radius:12px;padding:10px;font-size:12px}
+.backup-card #backupRestoreBtn{width:100%;min-height:44px}
+.backup-card #backupNotice{min-height:18px;font-size:12px;line-height:1.45}
+@media(max-width:500px){.backup-card .backup-actions{grid-template-columns:1fr}.backup-card{padding:17px}}
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
@@ -1207,6 +1221,7 @@ canvas { touch-action:none; }
             <button class="mini-btn" id="achievementBtn">Открыть</button>
           </article>
         </div>
+        <div class="save-entry"><button class="mini-btn" id="backupHomeBtn" type="button">☁ Резервная копия прогресса</button></div>
       </section>
 
       <section id="battleScreen" class="screen battle-screen hidden">
@@ -1426,11 +1441,29 @@ canvas { touch-action:none; }
           <div class="stack-actions">
             <button class="primary-btn compact" id="resumeBtn"><span id="resumeText">Продолжить</span></button>
             <button class="secondary-btn" id="authBtn"><span id="authText">Войти в Яндекс ID — облачные сохранения</span></button>
+            <button class="secondary-btn" id="backupPauseBtn" type="button">☁ Резервная копия прогресса</button>
             <button class="ghost-btn" id="exitRunBtn"><span id="exitRunText">Завершить вылазку</span></button>
           </div>
         </div>
       </section>
 
+
+      <section id="backupScreen" class="screen modal-screen hidden" aria-labelledby="backupTitle">
+        <div class="modal-card backup-card">
+          <div class="modal-head"><div><span class="panel-kicker" id="backupKicker">СОХРАНЕНИЯ</span><h2 id="backupTitle">Резервная копия</h2></div><button id="backupCloseBtn" class="close-btn" type="button" aria-label="Close">✕</button></div>
+          <p id="backupDescription">Сохрани файл на iPhone или в iCloud Drive. Так можно восстановить постоянный прогресс после очистки Safari или перенести его на другое устройство. Текущая волна не переносится.</p>
+          <div class="backup-summary" id="backupSummary">—</div>
+          <div class="backup-actions">
+            <button id="backupDownloadBtn" class="primary-btn compact" type="button">↓ Скачать сохранение</button>
+            <button id="backupCopyBtn" class="secondary-btn" type="button">Копировать код</button>
+          </div>
+          <label class="backup-import-label" for="backupFileInput" id="backupImportLabel">Восстановление из файла JSON</label>
+          <input id="backupFileInput" type="file" accept=".json,application/json" />
+          <textarea id="backupPasteInput" rows="3" spellcheck="false" placeholder="Или вставь код сохранения сюда"></textarea>
+          <button class="secondary-btn" id="backupRestoreBtn" type="button">↻ Восстановить прогресс</button>
+          <p id="backupNotice" role="status" aria-live="polite"></p>
+        </div>
+      </section>
 
       <section id="tutorialScreen" class="screen modal-screen hidden">
         <div class="modal-card">
@@ -1469,7 +1502,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.13',
+  version: '1.8.14',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1716,7 +1749,7 @@ window.ED_BALANCE = Object.freeze({
 
 
   const BALANCE = window.ED_BALANCE || {
-    version:'fallback-1.8.13', run:{baseCore:100,baseEnergy:74},
+    version:'fallback-1.8.14', run:{baseCore:100,baseEnergy:74},
     wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.115,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
@@ -2013,8 +2046,13 @@ window.ED_BALANCE = Object.freeze({
       try { const d = await this.player.getData(['save']); return d?.save ? JSON.parse(d.save) : null; } catch(e){ console.warn('Cloud load',e); return null; }
     }
     async saveCloud(save, flush=false){
-      if (!this.player) return;
-      try { await this.player.setData({save:JSON.stringify(save)}, flush); } catch(e){ console.warn('Cloud save',e); }
+      if (!this.player) return false;
+      try {
+        const payload=JSON.stringify(save);
+        if(new Blob([payload]).size>195000){console.warn('Cloud save exceeds Yandex size limit');return false;}
+        await this.player.setData({save:payload}, flush);
+        return true;
+      } catch(e){ console.warn('Cloud save',e); return false; }
     }
     async rewardAd(onReward){
       if (!this.ysdk?.adv?.showRewardedVideo) { onReward?.(); return true; }
@@ -2335,6 +2373,7 @@ window.ED_BALANCE = Object.freeze({
       await this.processPendingPurchases();
       $('loading').classList.add('hidden'); $('shell').classList.remove('hidden'); this.bridge.loadingReady();
       this.showOfflineReward(offlineSince); this.loop(performance.now());
+      if(this.saveRecovered)setTimeout(()=>this.toast(this.lang==='ru'?'Восстановлена резервная копия прогресса':'Progress recovered from backup'),900);
       setInterval(()=>this.updateTimers(),1000);
       setInterval(()=>this.persist(false),15000);
       window.addEventListener('beforeunload',()=>{this.checkpointPlaytime();this.save.lastSeen=now();this.persist(true);});
@@ -2346,7 +2385,22 @@ window.ED_BALANCE = Object.freeze({
     }
 
     loadLocal(){
-      try{ const raw=localStorage.getItem('endless_defenders_save_v1'); if(raw) this.save=this.normalizeSave(JSON.parse(raw)); }catch(e){}
+      const base='endless_defenders_save_v1', slots=[base,base+'_shadow',base+'_backup'];
+      const valid=[];
+      for(const key of slots){
+        try {
+          const raw=localStorage.getItem(key);
+          if(!raw||raw.length>1000000)continue;
+          const obj=JSON.parse(raw);
+          if(!obj||typeof obj!=='object'||Array.isArray(obj)||!(Number(obj.version)>0)||!('shards' in obj||'bestWave' in obj||'lab' in obj))continue;
+          valid.push({key,save:this.normalizeSave(obj)});
+        }catch(e){console.warn('Save slot is invalid',key);}
+      }
+      valid.sort((a,b)=>(Number(b.save.lastSeen)||0)-(Number(a.save.lastSeen)||0));
+      if(valid.length){
+        this.save=valid[0].save;
+        this.saveRecovered=valid[0].key!==base;
+      }
     }
     normalizeSave(s){
       const out=structuredClone(DEFAULT_SAVE); Object.assign(out,s||{}); const oldVersion=Number(s?.version||0); out.version=21; out.lab=Object.assign(out.lab,s?.lab||{}); out.quests=Object.assign(out.quests,s?.quests||{}); out.weekly=Object.assign(out.weekly,s?.weekly||{}); out.weekly.claimed=Array.isArray(s?.weekly?.claimed)?s.weekly.claimed.slice(0,5):out.weekly.claimed; while(out.weekly.claimed.length<5)out.weekly.claimed.push(false); out.season=Object.assign(structuredClone(DEFAULT_SAVE.season),s?.season||{}); out.season.claimed=Array.isArray(s?.season?.claimed)?s.season.claimed.slice(0,SEASON_REWARDS.length):out.season.claimed; while(out.season.claimed.length<SEASON_REWARDS.length)out.season.claimed.push(false); out.returnTrack=Object.assign(structuredClone(DEFAULT_SAVE.returnTrack),s?.returnTrack||{}); out.returnTrack.claimed=Object.assign({},DEFAULT_SAVE.returnTrack.claimed,s?.returnTrack?.claimed||{}); out.analytics=Object.assign(structuredClone(DEFAULT_SAVE.analytics),s?.analytics||{}); out.analytics.events=Object.assign({},s?.analytics?.events||{}); out.analytics.waves=Object.assign({},s?.analytics?.waves||{});out.analytics.recent=Array.isArray(s?.analytics?.recent)?s.analytics.recent.slice(-80):[];out.analytics.playDays=Array.isArray(s?.analytics?.playDays)?s.analytics.playDays.slice(-60):[];out.analytics.retention=Object.assign({},DEFAULT_SAVE.analytics.retention,s?.analytics?.retention||{}); out.selected=Array.isArray(s?.selected)?s.selected.slice(0,3):out.selected; out.unlocked=Array.isArray(s?.unlocked)?s.unlocked:out.unlocked; out.purchases=Object.assign({},s?.purchases||{}); out.coachSeen=Object.assign({},s?.coachSeen||{}); out.meta=Object.assign(structuredClone(DEFAULT_SAVE.meta),s?.meta||{}); out.meta.spent=Object.assign({},DEFAULT_SAVE.meta.spent,s?.meta?.spent||{}); out.stats=Object.assign({},DEFAULT_SAVE.stats,s?.stats||{}); out.achievements=Object.assign({},s?.achievements||{}); out.bossesDefeated=Object.assign({},s?.bossesDefeated||{}); out.mastery=Object.assign({},s?.mastery||{}); out.talents=Object.assign({},s?.talents||{}); out.blueprints=Object.assign({},s?.blueprints||{}); out.defenderParts=Object.assign({},s?.defenderParts||{}); out.defenderPity=Object.assign({},s?.defenderPity||{}); out.masteryClaims=Object.assign({},s?.masteryClaims||{}); for(const id of Object.keys(DEFENDERS)){const old=out.mastery[id]||{};out.mastery[id]={level:Math.max(1,Math.min(25,old.level||1)),xp:Math.max(0,old.xp||0),stars:Math.max(1,Math.min(5,old.stars||1))};const ts=out.talents[id]||{};const valid=(tier,key)=>!key||((TALENTS[id]?.[tier]||[]).some(x=>x.id===key));out.talents[id]={t10:valid(10,ts.t10)?(ts.t10||null):null,t20:valid(20,ts.t20)?(ts.t20||null):null};out.blueprints[id]=Math.max(0,Math.floor(out.blueprints[id]||0));const contract=DEFENDER_CONTRACTS[id]||null,maxParts=contract?contract.parts:0,maxPity=contract?Math.max(0,contract.pity-1):0;out.defenderParts[id]=contract?Math.max(0,Math.min(maxParts,Math.floor(out.defenderParts[id]||0))):0;out.defenderPity[id]=contract&&out.defenderParts[id]<maxParts?Math.max(0,Math.min(maxPity,Math.floor(out.defenderPity[id]||0))):0;const claims=Array.isArray(out.masteryClaims[id])?out.masteryClaims[id].slice(0,MASTERY_MILESTONES.length):[];while(claims.length<MASTERY_MILESTONES.length)claims.push(false);out.masteryClaims[id]=claims;} out.journey=Object.assign(structuredClone(DEFAULT_SAVE.journey),s?.journey||{}); out.journey.claimed=Array.isArray(s?.journey?.claimed)?s.journey.claimed.slice(0,JOURNEY.length):out.journey.claimed; while(out.journey.claimed.length<JOURNEY.length)out.journey.claimed.push(false); out.commander=Object.assign(structuredClone(DEFAULT_SAVE.commander),s?.commander||{});out.commander.spent=Object.assign({},DEFAULT_SAVE.commander.spent,s?.commander?.spent||{});out.commander.level=Math.max(1,Math.min(30,Math.floor(out.commander.level||1)));out.commander.xp=Math.max(0,Math.floor(out.commander.xp||0));out.commander.points=Math.max(0,Math.floor(out.commander.points||0));if(!COMMANDER_WEAPONS[out.commander.weapon]||out.commander.level<COMMANDER_WEAPONS[out.commander.weapon].level)out.commander.weapon='pulse'; out.launchPath=Object.assign(structuredClone(DEFAULT_SAVE.launchPath),s?.launchPath||{});const oldLaunch=Array.isArray(s?.launchPath?.completed)?s.launchPath.completed.slice():[];out.launchPath.completed=oldVersion<=10&&oldLaunch.length===5?[false,...oldLaunch]:oldLaunch.slice(0,LAUNCH_ORDERS.length);while(out.launchPath.completed.length<LAUNCH_ORDERS.length)out.launchPath.completed.push(false);
@@ -2379,8 +2433,72 @@ window.ED_BALANCE = Object.freeze({
     }
     persist(flush=false){
       this.save.lastSeen=now();
-      try{localStorage.setItem('endless_defenders_save_v1',JSON.stringify(this.save));}catch(e){}
-      clearTimeout(this.saveTimer); this.saveTimer=setTimeout(()=>this.bridge.saveCloud(this.save,flush),flush?0:500);
+      const key='endless_defenders_save_v1';
+      try {
+        const next=JSON.stringify(this.save), previous=localStorage.getItem(key);
+        if(previous&&previous!==next){
+          try{const parsed=JSON.parse(previous);if(parsed&&parsed.version&&typeof parsed==='object')localStorage.setItem(key+'_backup',previous);}catch(_){}
+        }
+        localStorage.setItem(key,next);
+        try{localStorage.setItem(key+'_shadow',next);}catch(_){}
+      }catch(e){ console.warn('Local progress write failed',e); }
+      clearTimeout(this.saveTimer);
+      // 6s debounce stays below Yandex SDK's 100 calls/5 min limit, even in busy runs.
+      this.saveTimer=setTimeout(()=>this.bridge.saveCloud(this.save,flush),flush?0:6000);
+    }
+
+    saveBackupObject(){
+      // The persistent account/collection is backed up; active battle state is not.
+      return {format:'endless-defenders-save',formatVersion:1,createdAt:new Date().toISOString(),gameVersion:'1.8.14',save:structuredClone(this.save)};
+    }
+    backupMessage(message,failed=false){const el=$('backupNotice');if(el){el.textContent=message;el.style.color=failed?'#ff9daa':'#92f3d5';}}
+    openBackup(){
+      if(!this.inRun)this.openModal('backupScreen');
+      else $('backupScreen').classList.remove('hidden');
+      this.backupMessage('');
+      this.renderBackupSummary();
+    }
+    closeBackup(){
+      $('backupScreen').classList.add('hidden');
+      if(this.inRun&&this.pauseOverlay)this.pauseInternal(true);
+    }
+    renderBackupSummary(){
+      const ru=this.lang==='ru',s=this.save;
+      $('backupSummary').textContent=ru?`Рекорд: ${s.bestWave||0} · Осколки: ${s.shards||0} · Кристаллы: ${s.gems||0} · Схема: ${s.version}`:`Best wave: ${s.bestWave||0} · Shards: ${s.shards||0} · Gems: ${s.gems||0} · Save schema: ${s.version}`;
+    }
+    downloadBackup(){
+      try {
+        this.persist(false);
+        const data=JSON.stringify(this.saveBackupObject(),null,2);
+        const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+        const a=document.createElement('a');a.href=url;a.download=`endless-defenders-save-${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),30000);
+        this.backupMessage(this.lang==='ru'?'Файл подготовлен. Проверь «Загрузки» или «Файлы» на iPhone.':'Backup ready. Check Downloads / Files on iPhone.');
+      }catch(e){this.backupMessage(this.lang==='ru'?'Не удалось скачать. Попробуй «Копировать код».':'Download failed. Try Copy code.',true);}
+    }
+    async copyBackup(){
+      try {await navigator.clipboard.writeText(JSON.stringify(this.saveBackupObject()));this.backupMessage(this.lang==='ru'?'Код сохранения скопирован.':'Save code copied.');}
+      catch(e){const area=$('backupPasteInput');area.value=JSON.stringify(this.saveBackupObject());area.focus();area.select();this.backupMessage(this.lang==='ru'?'Выделил код — скопируй его вручную.':'Save code selected; copy it manually.');}
+    }
+    async restoreBackup(){
+      if(this.inRun){this.backupMessage(this.lang==='ru'?'Сначала заверши вылазку; восстанавливать можно в главном меню.':'End the run first; restore from home.',true);return;}
+      try {
+        const f=$('backupFileInput').files?.[0];
+        if(f?.size>1000000)throw new Error('file too large');
+        const input=f?await f.text():$('backupPasteInput').value;
+        if(!input||input.length>1000000)throw new Error('invalid size');
+        const data=JSON.parse(input),source=data?.format==='endless-defenders-save'?data.save:data;
+        if(!source||typeof source!=='object'||Array.isArray(source)||!(Number(source.version)>0)||!('lab' in source)||!('shards' in source))throw new Error('invalid save schema');
+        const candidate=this.normalizeSave(source);
+        const ok=confirm(this.lang==='ru'?'Заменить текущий прогресс данными из резервной копии? Предыдущая копия сохранится во внутреннем резерве.':'Replace current progress with this backup? The previous local save will remain in the fallback slot.');
+        if(!ok)return;
+        this.save=candidate;
+        this.save.lastSeen=now();
+        this.persist(true);this.renderHome();this.applyText();this.renderBackupSummary();
+        $('backupFileInput').value='';$('backupPasteInput').value='';
+        this.backupMessage(this.lang==='ru'?'Прогресс восстановлен и сохранён.':'Progress restored and saved.');
+      }catch(e){console.warn('Backup import failed',e);this.backupMessage(this.lang==='ru'?'Неверный файл сохранения. Прогресс не изменён.':'Invalid save file. Current progress is unchanged.',true);}
     }
 
     bindUI(){
@@ -2400,6 +2518,12 @@ window.ED_BALANCE = Object.freeze({
       $('skillBtn').onclick=()=>this.usePulse(); $('speedBtn').onclick=()=>this.toggleSpeed(); $('commanderModeBtn').onclick=()=>this.activateCommanderMode(); $('relicRerollBtn').onclick=()=>this.rerollRelics();
       $('returnClaimBtn').onclick=()=>this.claimReturnReward(); $('resultContinueBtn').onclick=()=>this.leaveResult(); $('doubleRewardBtn').onclick=()=>this.doubleResult(); $('reviveBtn').onclick=()=>this.reviveRun();
       $('tutorialStartBtn').onclick=()=>{this.save.tutorialDone=true;this.track('tutorial_complete',{secondsFromSession:Math.round((now()-this.sessionActiveAt)/1000)});this.persist();$('tutorialScreen').classList.add('hidden');this.startRun(!!this.pendingChallenge);};
+      $('backupHomeBtn').onclick=()=>this.openBackup();
+      $('backupPauseBtn').onclick=()=>this.openBackup();
+      $('backupCloseBtn').onclick=()=>this.closeBackup();
+      $('backupDownloadBtn').onclick=()=>this.downloadBackup();
+      $('backupCopyBtn').onclick=()=>this.copyBackup();
+      $('backupRestoreBtn').onclick=()=>this.restoreBackup();
       $('authBtn').onclick=async()=>{const ok=await this.bridge.authorize();if(ok){const cloud=await this.bridge.loadCloud();if(cloud)this.mergeCloud(cloud);this.persist(true);this.toast(this.t.authOk);this.renderHome();}else this.toast(this.t.authCancel);};
       this.canvas.addEventListener('contextmenu',e=>e.preventDefault());
       this.canvas.addEventListener('pointerdown',e=>{
@@ -2423,7 +2547,15 @@ window.ED_BALANCE = Object.freeze({
       for(const [id,key] of Object.entries(m)){if($(id)) $(id).innerHTML=this.t[key];}
       if($('resultGradeLabel'))$('resultGradeLabel').textContent=this.lang==='ru'?'ОЦЕНКА ВЫЛАЗКИ':'RUN GRADE';if($('resultKillsLabel'))$('resultKillsLabel').textContent=this.lang==='ru'?'целей':'targets';if($('resultComboLabel'))$('resultComboLabel').textContent=this.lang==='ru'?'макс. комбо':'max combo';if($('resultBossesLabel'))$('resultBossesLabel').textContent=this.lang==='ru'?'боссов':'bosses';if($('bossIntroKicker'))$('bossIntroKicker').textContent=this.lang==='ru'?'ТИТАН РАЗЛОМА':'RIFT TITAN';
       if($('resultManualHitsLabel'))$('resultManualHitsLabel').textContent=this.lang==='ru'?'ручных попаданий':'manual hits'; if($('relicRerollBtn'))$('relicRerollBtn').textContent=`↻ ${this.t.reroll}`;
+      this.updateBackupLabels();
       $('soundBtn').textContent=this.save.sound?'🔊':'🔇'; this.audio.enabled=this.save.sound; this.audio.setVolume(this.save.sfxVolume||0); this.updateSettingsUI();
+    }
+
+    updateBackupLabels(){
+      const ru=this.lang==='ru';
+      const labels={backupHomeBtn:ru?'☁ Резервная копия прогресса':'☁ Save backup',backupPauseBtn:ru?'☁ Резервная копия прогресса':'☁ Save backup',backupKicker:ru?'СОХРАНЕНИЯ':'SAVE DATA',backupTitle:ru?'Резервная копия':'Backup & restore',backupDescription:ru?'Сохрани файл на iPhone или в iCloud Drive. Так можно восстановить постоянный прогресс после очистки Safari или перенести его на другое устройство. Текущая волна не переносится.':'Save a file to iPhone or iCloud Drive. You can restore your persistent progress after Safari clears its data or move it to another device. Current wave is not included.',backupDownloadBtn:ru?'↓ Скачать сохранение':'↓ Download save',backupCopyBtn:ru?'Копировать код':'Copy save code',backupImportLabel:ru?'Восстановление из файла JSON':'Restore from JSON file',backupRestoreBtn:ru?'↻ Восстановить прогресс':'↻ Restore progress'};
+      for(const [id,label] of Object.entries(labels))if($(id))$(id).textContent=label;
+      if($('backupPasteInput'))$('backupPasteInput').placeholder=ru?'Или вставь код сохранения сюда':'Or paste your save code here';
     }
 
     updateSettingsUI(){
