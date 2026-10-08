@@ -34,6 +34,8 @@ jobs:
         run: node tests/balance-v1821.test.cjs
       - name: Verify economy and defender contracts
         run: node tests/economy-v1822.test.cjs
+      - name: Verify long-term economy with rewarded ads
+        run: node tests/economy-progression-v1822.test.cjs
       - name: Run deterministic complete-run simulations
         run: |
           for profile in fresh progressed veteran; do
