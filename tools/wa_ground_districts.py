@@ -44,8 +44,24 @@ X, Y = None, None
 RAGGED = 0.0
 
 
+_IDX = None
+
+
 def noise(seed, cell, oct=4):
-    return fbm(N, N, cell * K, seed, oct, wrap=True)
+    """fbm, domain-warped so patches never follow the axis-aligned noise grid
+    (stepped tones of plain value noise read as square camo blocks)."""
+    global _IDX
+    n = fbm(N, N, cell * K, seed, oct, wrap=True)
+    if cell < 6:
+        return n
+    if _IDX is None:
+        _IDX = np.mgrid[0:N, 0:N]
+    amp = cell * K * 0.6
+    wx = (fbm(N, N, cell * K * 0.7, seed + 7001, 2, wrap=True) - 0.5) * 2 * amp
+    wy = (fbm(N, N, cell * K * 0.7, seed + 7002, 2, wrap=True) - 0.5) * 2 * amp
+    yi = (_IDX[0] + wy).astype(int) % N
+    xi = (_IDX[1] + wx).astype(int) % N
+    return n[yi, xi]
 
 
 def step(n, levels, seed, jit=0.6, cell=2):
@@ -367,7 +383,7 @@ def woodland():
     alb = litter.copy()
     hf = 0.7 * noise(2102, 8, 3)
     mossy = soft(noise(2103, 36, 3), 0.44, 0.62)
-    alb = blend(alb, (64, 82, 46), mossy * 0.8)
+    alb = blend(alb, (72, 78, 46), mossy * 0.55)
     alb = clusters(alb, np.ones((N, N), bool), [(132, 94, 54), (112, 80, 46), (150, 112, 64), (86, 64, 42)], 2105, 0.10)   # needles
     alb = clusters(alb, mossy > 0.5, [(78, 100, 50), (94, 116, 58)], 2106, 0.06)
     # forest track: packed earth, soft edges with litter creeping in
@@ -380,6 +396,15 @@ def woodland():
     hf = hf * (1 - t_soft) + 0.25 * noise(2109, 3, 2) * t_soft
     alb, hf = ruts(alb, hf, rv, rh, (-20, 20), half=5.0, depth=1.2, dark=0.84)
     alb = speckle(alb, track, 0.04, [(124, 112, 94), (72, 60, 44)], 2110)
+    # rain water standing in the ruts, a grass crown, needles blown onto the track
+    pud = track & (hf < -0.7) & (noise(2115, 24, 3) > 0.62)
+    alb[pud] = (66, 74, 76)
+    alb[pud & (noise(2116, 4, 2) > 0.7)] = (96, 106, 110)
+    av, ah, inter = arm_masks(rv, rh)
+    c = (R0 + R1) / 2
+    crown = ((av & (np.abs(X - c) < 7)) | (ah & (np.abs(Y - c) < 7))) & (noise(2117, 18, 2) > 0.4)
+    alb = blades(alb, crown, 2118, 7000, cols=((62, 78, 40), (74, 90, 46), (88, 100, 52)))
+    alb = clusters(alb, track & (noise(2119, 30, 3) > 0.5), [(132, 94, 54), (112, 80, 46)], 2120, 0.03)
     # roots across the track edges
     t = Tex(N, N, seed=2111)
     for _ in range(70):
@@ -599,7 +624,7 @@ def woodland_yard():
     alb = litter.copy()
     hf = 0.6 * noise(6102, 8, 3)
     mossy = soft(noise(6103, 40, 3), 0.42, 0.6)
-    alb = blend(alb, (64, 82, 46), mossy * 0.8)
+    alb = blend(alb, (72, 78, 46), mossy * 0.55)
     # trampled clearing: packed earth in the middle of the yard
     trodden = soft(noise(6104, 110, 2), 0.5, 0.58)
     alb = blend(alb, (94, 80, 60), trodden * 0.85)

@@ -24243,6 +24243,11 @@ func _car_spot_free(chunk,pos) -> bool:
                 var building_rect = Rect2(child.position - size*0.5,size).grow(12.0)
                 if footprint.intersects(building_rect):
                     return false
+        elif bool(child.get_meta("rail_track",false)):
+            # abandoned cars stand beside the line, never parked on the rails
+            var bed = Rect2(0,CHUNK_SIZE * 0.5 - 40.0,CHUNK_SIZE,80.0)
+            if footprint.intersects(bed):
+                return false
         elif bool(child.get_meta("world_car",false)):
             var other = Rect2(child.position - Vector2(40,24),Vector2(80,48))
             if footprint.intersects(other):
