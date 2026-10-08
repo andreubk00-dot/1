@@ -1971,10 +1971,12 @@ func _run_runtime_smoke_tests():
     if door_test_090 != null:
         var leaf_090 = door_test_090.get_meta("front_leaf")
         var was_open_090 = bool(door_test_090.get_meta("door_open",false))
+        # HD leaves are drawn at half scale: compare with the leaf's own base scale
+        var base_090 = float(leaf_090.get_meta("leaf_base_scale",1.0))
         _apply_door_state(door_test_090,true,true)
-        _record_test(leaf_090.scale.x < 0.5,"0.90: открытая дверь на фасаде не открылась")
+        _record_test(leaf_090.scale.x < 0.5 * base_090,"0.90: открытая дверь на фасаде не открылась")
         _apply_door_state(door_test_090,false,true)
-        _record_test(leaf_090.scale.x > 0.95,"0.90: закрытая дверь на фасаде не закрылась")
+        _record_test(leaf_090.scale.x > 0.95 * base_090,"0.90: закрытая дверь на фасаде не закрылась")
         _apply_door_state(door_test_090,was_open_090,true)
         _record_test(not door_test_090.get_meta("door_visual").visible,"0.90: старая плоская дверь всё ещё видна")
     _record_test(_facade_storeys_for(0,Vector2(220,140),"") == 2,"0.90: этажность без id должна быть стабильной")
@@ -14792,10 +14794,13 @@ func _build_tall_facade(facade,sign_text,size,building_id,door_x,fh,profile = ""
                 gate_done = true
             elif row >= 1 and style == 4:
                 _facade_atlas_sprite(facade,"res://facade_features_v1.png",Rect2(4 * 64,0,64,48),Vector2(wx,wy + 1.0),0.7)
-            elif row >= 1 and style == 0 and h % 3 == 0:
+            elif row >= 1 and style == 0 and h % 3 == 0 and not (row == 1 and abs(wx - door_x) < 36.0):
                 _facade_atlas_sprite(facade,"res://facade_features_v1.png",Rect2(0,0,64,48),Vector2(wx,wy - 2.0),0.62)
             else:
-                var window_sprite = _tall_facade_window(facade,style,state,Vector2(wx,wy))
+                # the first-floor opening right over the entrance is a stairwell window
+                # lifted clear of the canopy (a balcony there ran into it)
+                var over_door = row == 1 and abs(wx - door_x) < 36.0
+                var window_sprite = _tall_facade_window(facade,style,state,Vector2(wx,wy - (4.0 if over_door else 0.0)))
                 if is_breach_window and is_instance_valid(window_sprite):
                     window_sprite.set_meta("breach_window_x",float(wx))
                     window_sprite.set_meta("breach_window_style",style)
@@ -15102,7 +15107,8 @@ func _decorate_building_wall_texture(building,sign_text,size):
     var sequence = _building_wall_sequence(sign_text)
     # Native 32x28 game tiles: no fractional stretching, so pixel density remains constant.
     var inner_w = max(64.0,size.x - 24.0)
-    var h_count = max(2,int(ceil(inner_w / 32.0)))
+    # whole tiles only inside the room (ceil ran the band past the side walls)
+    var h_count = max(2,int(floor(inner_w / 32.0)))
     var span_w = float(h_count) * 32.0
     var back_y = -size.y * 0.5 + 17.0
     for i in range(h_count):
@@ -15117,11 +15123,11 @@ func _decorate_building_wall_texture(building,sign_text,size):
     for i in range(v_count):
         var y = -span_h * 0.5 + 16.0 + float(i) * 32.0
         var tile_index = int(sequence[(i + 3) % sequence.size()])
-        _native_arch_sprite(building,_interior_wall_band_texture(tile_index),Vector2(-size.x*0.5+10.0,y),0,PI*0.5)
-        _native_arch_sprite(building,_interior_wall_band_texture(tile_index),Vector2(size.x*0.5-10.0,y),0,-PI*0.5)
+        _native_arch_sprite(building,_interior_wall_band_texture(tile_index),Vector2(-size.x*0.5+14.0,y),0,PI*0.5)
+        _native_arch_sprite(building,_interior_wall_band_texture(tile_index),Vector2(size.x*0.5-14.0,y),0,-PI*0.5)
 
-    _native_arch_sprite(building,_wall_corner_texture(0),Vector2(-size.x*0.5+7.0,-size.y*0.5+7.0),1)
-    _native_arch_sprite(building,_wall_corner_texture(1),Vector2(size.x*0.5-7.0,-size.y*0.5+7.0),1)
+    _native_arch_sprite(building,_wall_corner_texture(0),Vector2(-size.x*0.5+8.0,-size.y*0.5+8.0),1)
+    _native_arch_sprite(building,_wall_corner_texture(1),Vector2(size.x*0.5-8.0,-size.y*0.5+8.0),1)
 
 func _facade_detail_texture(index):
     var atlas = load("res://facade_detail_v2.png")
@@ -15702,16 +15708,18 @@ func _interior_floor_sprite(parent,sign_text,size):
     for y in range(rows):
         for x in range(cols):
             var variant = abs((x * 5 + y * 7 + row * 11 + int(abs(hash(str(sign_text)))))) % 8
+            # the last column / row is cut to the room: whole tiles used to run up
+            # to 31 px past the east and south walls and show outside the building
+            var tw = min(tile_size,inner_w - float(x)*tile_size)
+            var th = min(tile_size,inner_h - float(y)*tile_size)
             var tex = AtlasTexture.new()
             tex.atlas = atlas
-            tex.region = Rect2(variant*32,row*32,32,32)
+            tex.region = Rect2(variant*32,row*32,tw,th)
             var sprite = Sprite2D.new()
             sprite.texture = tex
             sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-            sprite.position = Vector2(
-                -inner_w*0.5 + tile_size*0.5 + float(x)*tile_size,
-                -inner_h*0.5 + tile_size*0.5 + float(y)*tile_size
-            )
+            sprite.centered = false
+            sprite.position = Vector2(-inner_w*0.5 + float(x)*tile_size,-inner_h*0.5 + float(y)*tile_size)
             if ((x+y) % 5) == 0:
                 sprite.modulate = Color(0.96,0.95,0.91,1.0)
             root.add_child(sprite)
@@ -19777,6 +19785,7 @@ func _build_ground(chunk,coord):
     ground_sprite.position = Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5)
     ground_sprite.z_index = -20
     chunk.add_child(ground_sprite)
+    _add_ground_edge_blends(chunk,coord,district_ground)
 
     # Keep the same logical road/sidewalk footprint as previous versions.
     # Only visuals changed, so old bases/AI/navigation assumptions stay intact.
@@ -19788,10 +19797,82 @@ func _build_ground(chunk,coord):
         _add_ground_decals(chunk,coord)
     _decorate_region_ground(chunk,coord,ground_profile)
 
+# District ground meets at chunk borders. Instead of a ruler-straight seam, the
+# softer ground (woodland > rural > military > industrial > city asphalt) creeps
+# into its neighbour in a ragged, pixel-clustered band.
+const GROUND_EDGE_BAND = 44.0
+const GROUND_EDGE_RANK = {"":0,"industrial":1,"military":2,"rural":3,"woodland":4}
+const GROUND_EDGE_SHADER = """shader_type canvas_item;
+uniform int side;          // 0 west, 1 east, 2 north, 3 south (edge of this chunk)
+uniform float texel_per_unit = 2.0;
+uniform float band = 44.0;
+uniform vec4 region;       // band region in texels (x, y, w, h)
+varying vec2 local;        // texel position inside the region
+float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void vertex() { local = VERTEX; }
+void fragment() {
+    vec2 t = floor(local);
+    float d = side == 0 ? t.x : (side == 1 ? region.z - 1.0 - t.x : (side == 2 ? t.y : region.w - 1.0 - t.y));
+    d /= texel_per_unit;
+    vec2 w = floor((t + region.xy) / texel_per_unit);
+    float n = 0.55 * h(floor(w / 11.0)) + 0.3 * h(floor(w / 4.0) + 17.0) + 0.15 * h(floor(w / 2.0) + 41.0);
+    if (n * 1.05 < d / band) discard;
+}"""
+var _ground_edge_shader = null
+
+func _ground_family(coord) -> String:
+    if coord == Vector2i(0,0):
+        return ""
+    var path = _district_ground_path(coord)
+    return "" if path == "" else str(DISTRICT_GROUND.get(RegionCatalog.district_id_for_chunk(coord),""))
+
+func _add_ground_edge_blends(chunk,coord,own_path):
+    var own_rank = int(GROUND_EDGE_RANK.get(_ground_family(coord),0))
+    if _ground_edge_shader == null:
+        _ground_edge_shader = Shader.new()
+        _ground_edge_shader.code = GROUND_EDGE_SHADER
+    var sides = [Vector2i(-1,0),Vector2i(1,0),Vector2i(0,-1),Vector2i(0,1)]
+    for side in range(4):
+        var nb = coord + sides[side]
+        var fam = _ground_family(nb)
+        if int(GROUND_EDGE_RANK.get(fam,0)) <= own_rank:
+            continue
+        var tex = load("res://art/world_hd/ground_%s_hd.png" % fam)
+        if tex == null:
+            continue
+        var k = float(tex.get_width()) / CHUNK_SIZE
+        var b = GROUND_EDGE_BAND * k
+        var full = tex.get_size()
+        var region = [Rect2(0,0,b,full.y),Rect2(full.x - b,0,b,full.y),Rect2(0,0,full.x,b),Rect2(0,full.y - b,full.x,b)][side]
+        var at = [Vector2.ZERO,Vector2(CHUNK_SIZE - GROUND_EDGE_BAND,0),Vector2.ZERO,Vector2(0,CHUNK_SIZE - GROUND_EDGE_BAND)][side]
+        var band = Sprite2D.new()
+        band.texture = tex
+        band.region_enabled = true
+        band.region_rect = region
+        band.centered = false
+        band.position = at
+        band.scale = Vector2(1.0 / k,1.0 / k)
+        band.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        # chunks are y-sorted: at the ground's own z the band (origin at the chunk
+        # edge) would sort under the ground sprite (origin at the chunk centre)
+        band.z_index = -19
+        var mat = ShaderMaterial.new()
+        mat.shader = _ground_edge_shader
+        mat.set_shader_parameter("side",side)
+        mat.set_shader_parameter("texel_per_unit",k)
+        mat.set_shader_parameter("band",GROUND_EDGE_BAND)
+        mat.set_shader_parameter("region",Vector4(region.position.x,region.position.y,region.size.x,region.size.y))
+        band.material = mat
+        band.set_meta("ground_edge_blend",fam)
+        chunk.add_child(band)
+
 func _decorate_region_ground(chunk,coord,profile):
     if bool(profile.get("legacy",false)) or coord == Vector2i(0,0):
         return
     var district_id = str(profile.get("district_id",""))
+    # the HD district grounds carry their own tracks, moss and patches: the old
+    # translucent macro blobs only smeared them (rails and markings stay)
+    var hd_ground = _district_ground_path(coord) != ""
     var rng = RandomNumberGenerator.new()
     rng.seed = int(abs(coord.x*44111 + coord.y*77237 + 82001)) + 1
 
@@ -19802,6 +19883,8 @@ func _decorate_region_ground(chunk,coord,profile):
         _rect(Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5+16),Vector2(CHUNK_SIZE,3),Color(0.20,0.21,0.19,0.78),chunk)
         for x in range(18,CHUNK_SIZE,34):
             _rect(Vector2(x,CHUNK_SIZE*0.5),Vector2(5,44),Color(0.18,0.16,0.13,0.62),chunk)
+    elif hd_ground and district_id != "military_northeast":
+        pass
     elif district_id == "industrial_belt" or district_id == "outer_industrial":
         for i in range(5):
             var p = Vector2(rng.randi_range(70,CHUNK_SIZE-70),rng.randi_range(285,CHUNK_SIZE-90))
@@ -23453,12 +23536,14 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     var breach_window_xs = _breachable_window_xs(sign_text,size,building_id,door_x) if open_interior and settlement_model.is_empty() else []
     _add_segmented_south_wall(building,size,door_x,breach_window_xs)
 
-    _rect(Vector2(0,-size.y*0.48),Vector2(size.x,16),Color("1b1f1e"),building)
-    _rect(Vector2(0,-size.y*0.48+2),Vector2(size.x-6,12),wall_color.lightened(0.12),building)
-    _rect(Vector2(-size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
-    _rect(Vector2(-size.x*0.5+2,0),Vector2(10,size.y-5),wall_color,building)
-    _rect(Vector2(size.x*0.5,0),Vector2(14,size.y),Color("1b1f1e"),building)
-    _rect(Vector2(size.x*0.5-2,0),Vector2(10,size.y-5),wall_color,building)
+    # outer walls are drawn inside the footprint: centred on the edge they stuck
+    # out 7 px and showed as dark strips beside the facade and the lifted roof
+    _rect(Vector2(0,-size.y*0.5 + 8),Vector2(size.x,16),Color("1b1f1e"),building)
+    _rect(Vector2(0,-size.y*0.5 + 10),Vector2(size.x-6,12),wall_color.lightened(0.12),building)
+    _rect(Vector2(-size.x*0.5 + 7,0),Vector2(14,size.y),Color("1b1f1e"),building)
+    _rect(Vector2(-size.x*0.5 + 7,0),Vector2(10,size.y-5),wall_color,building)
+    _rect(Vector2(size.x*0.5 - 7,0),Vector2(14,size.y),Color("1b1f1e"),building)
+    _rect(Vector2(size.x*0.5 - 7,0),Vector2(10,size.y-5),wall_color,building)
     _rect(Vector2(0,size.y*0.5),Vector2(size.x,13),Color("1b1f1e"),building)
     _rect(Vector2(0,size.y*0.5-2),Vector2(size.x-6,8),wall_color.darkened(0.10),building)
 

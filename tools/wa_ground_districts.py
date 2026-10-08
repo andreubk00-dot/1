@@ -26,6 +26,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wa_core import fbm, clamp8, LEAF_ORANGE, Tex
+from pixel_finish import pixel_finish, blocky_noise
 import wa_town
 
 W = 768
@@ -40,14 +41,30 @@ def grid():
 
 
 X, Y = None, None
+RAGGED = 0.0
 
 
 def noise(seed, cell, oct=4):
     return fbm(N, N, cell * K, seed, oct, wrap=True)
 
 
+def step(n, levels, seed, jit=0.6, cell=2):
+    """continuous field -> a few flat tones; the boundaries between tones are
+    broken by blocky jitter so they end in ragged pixel clusters, not contours."""
+    j = (blocky_noise(N, N, cell, seed) - 0.5) * jit / levels
+    return np.clip(np.floor((n + j) * levels), 0, levels - 1) / (levels - 1)
+
+
+def tone(seed, cell, lo, hi, levels=3, oct=3):
+    """stepped multiplicative tone variation (replaces lo + (hi-lo) * noise)."""
+    return lo + (hi - lo) * step(noise(seed, cell, oct), levels, seed + 77, jit=0.3 if cell > 8 else 0.6, cell=3 if cell > 8 else 2)
+
+
 def masks():
-    xx, yy = X, Y
+    # road edges are ragged by a texel or two: soft materials never meet in a ruler line
+    jx = (blocky_noise(N, N, 3, 9001) - 0.5) * 5.0 * RAGGED
+    jy = (blocky_noise(N, N, 3, 9002) - 0.5) * 5.0 * RAGGED
+    xx, yy = X + jx, Y + jy
     road_v = (xx >= R0) & (xx < R1)
     road_h = (yy >= R0) & (yy < R1)
     road = road_v | road_h
@@ -66,17 +83,27 @@ def shade(alb, hf, strength=1.0):
     L = wa_town.LIGHT
     # screen y points south (toward the camera) = +y in the world
     d = (nx * L[0] + ny * L[1] + nz * L[2]) / ln
-    k = 0.62 + 0.46 * np.clip(d, 0, 1)
+    k = 0.62 + 0.46 * step(np.clip(d, 0, 1), 6, 4242, jit=0.4)
     return alb * k[..., None]
 
 
 def speckle(alb, m, density, cols, seed):
+    """pebbles: a lit texel, its body and a shadow texel below-right - pixel
+    stones instead of single-texel salt-and-pepper noise."""
     rng = np.random.default_rng(seed)
-    r = rng.random(m.shape) < density
+    r = m & (rng.random(m.shape) < density * 0.4)
     idx = rng.integers(0, len(cols), m.shape)
+    big = rng.random(m.shape) < 0.35
     for i, c in enumerate(cols):
-        sel = m & r & (idx == i)
-        alb[sel] = c
+        c = np.asarray(c, float)
+        sel = r & (idx == i)
+        ys, xs = np.nonzero(sel)
+        bx = big[ys, xs]
+        alb[(ys + 1) % N, (xs + 1) % N] = alb[(ys + 1) % N, (xs + 1) % N] * 0.62
+        alb[ys[bx], (xs[bx] + 1) % N] = c * 0.86
+        alb[(ys[bx] + 1) % N, xs[bx]] = c * 0.74
+        alb[(ys[bx] + 2) % N, (xs[bx] + 1) % N] = alb[(ys[bx] + 2) % N, (xs[bx] + 1) % N] * 0.62
+        alb[ys, xs] = np.minimum(c * 1.12, 255)
     return alb
 
 
@@ -144,18 +171,22 @@ def cracks(alb, hf, m, seed, n, col, length=(30, 80)):
 def grass_field(seed, base=(46, 58, 34), dry=(86, 82, 50), dirt=(74, 61, 44), dryness=0.5):
     n1, n2, n3 = noise(seed + 1, 96), noise(seed + 2, 20, 3), noise(seed + 3, 160, 2)
     g = np.array(base, float)[None, None, :] * np.ones((N, N, 1))
-    dm = np.clip((n3 - (0.62 - dryness * 0.2)) * 3.2, 0, 1)
+    dm = step(np.clip((n3 - (0.62 - dryness * 0.2)) * 3.2, 0, 1), 3, seed + 31, jit=1.2)
     g = g * (1 - dm[..., None]) + np.array(dry, float) * dm[..., None]
-    soil = np.clip((n1 - 0.6) * 4.0, 0, 1)
+    soil = step(np.clip((n1 - 0.6) * 4.0, 0, 1), 3, seed + 32, jit=1.2)
     g = g * (1 - soil[..., None]) + np.array(dirt, float) * soil[..., None]
-    g *= (0.82 + 0.34 * n2)[..., None]
+    g *= (0.84 + 0.3 * step(n2, 4, seed + 33))[..., None]
     hf = 0.6 * noise(seed + 4, 6, 2) - soil * 0.4
     return g, hf, soil
 
 
 # ------------------------------------------------------------- families ---
+_soft_seed = [500]
+
+
 def soft(n, lo, hi):
-    return np.clip((n - lo) / (hi - lo), 0, 1)
+    _soft_seed[0] += 1
+    return step(np.clip((n - lo) / (hi - lo), 0, 1), 3, _soft_seed[0], jit=1.2)
 
 
 def blend(alb, col, t):
@@ -176,7 +207,7 @@ def ruts(alb, hf, rv, rh, offsets, half=4.0, depth=1.2, dark=0.82):
         th = ah & (np.abs(Y - (c + off)) < half)
         for t, coord in ((tv, X), (th, Y)):
             prof = np.clip(1 - np.abs(coord - (c + off)) / half, 0, 1)
-            k = prof * t
+            k = step(prof, 3, int(off) + 600, jit=0.9) * t
             alb *= (1 - (1 - dark) * k)[..., None]
             hf -= depth * k
     return alb, hf
@@ -185,8 +216,8 @@ def ruts(alb, hf, rv, rh, offsets, half=4.0, depth=1.2, dark=0.82):
 def rural():
     road, walk, plot, rv, rh, dv, dh = masks()
     alb, hf, soil = grass_field(1101, dryness=0.6)
-    earth = np.array((100, 86, 64), float)[None, None, :] * (0.86 + 0.22 * noise(1110, 30, 3))[..., None]
-    earth *= (0.94 + 0.12 * noise(1111, 5, 2))[..., None]
+    earth = np.array((100, 86, 64), float)[None, None, :] * tone(1110, 30, 0.86, 1.08, 4, 3)[..., None]
+    earth *= tone(1111, 5, 0.94, 1.06, 4, 2)[..., None]
     alb[road] = earth[road]
     hf[road] = 0.3 * noise(1112, 4, 2)[road]
     alb, hf = ruts(alb, hf, rv, rh, (-52, -26, 26, 52), half=4.5, depth=1.4, dark=0.8)
@@ -216,7 +247,7 @@ def rural():
 
 def woodland():
     road, walk, plot, rv, rh, dv, dh = masks()
-    litter = np.array((70, 58, 42), float)[None, None, :] * (0.84 + 0.26 * noise(2101, 50, 3))[..., None]
+    litter = np.array((70, 58, 42), float)[None, None, :] * tone(2101, 50, 0.84, 1.1, 4, 3)[..., None]
     alb = litter.copy()
     hf = 0.7 * noise(2102, 8, 3)
     mossy = soft(noise(2103, 36, 3), 0.44, 0.62)
@@ -227,8 +258,8 @@ def woodland():
     d = np.minimum(np.where(rv, dv, 999), np.where(rh, dh, 999))
     tw = 46 + 8 * noise(2107, 40, 2)
     track = road & (d < tw)
-    t_soft = np.clip((tw - d) / 8.0, 0, 1) * road
-    earth = np.array((96, 82, 62), float)[None, None, :] * (0.86 + 0.22 * noise(2108, 20, 3))[..., None]
+    t_soft = step(np.clip((tw - d) / 8.0, 0, 1), 3, 2120, jit=1.2) * road
+    earth = np.array((96, 82, 62), float)[None, None, :] * tone(2108, 20, 0.86, 1.08, 4, 3)[..., None]
     alb = alb * (1 - t_soft[..., None]) + earth * t_soft[..., None]
     hf = hf * (1 - t_soft) + 0.25 * noise(2109, 3, 2) * t_soft
     alb, hf = ruts(alb, hf, rv, rh, (-20, 20), half=5.0, depth=1.2, dark=0.84)
@@ -270,7 +301,7 @@ def woodland():
 def military():
     road, walk, plot, rv, rh, dv, dh = masks()
     alb, hf, soil = grass_field(3101, base=(66, 70, 40), dry=(104, 98, 62), dirt=(88, 78, 56), dryness=0.9)
-    slab = np.array((128, 126, 116), float)[None, None, :] * (0.88 + 0.16 * noise(3102, 30, 3))[..., None]
+    slab = np.array((128, 126, 116), float)[None, None, :] * tone(3102, 30, 0.88, 1.04, 4, 3)[..., None]
     alb[road] = slab[road]
     hf[road] = 0.0
     c = (R0 + R1) / 2
@@ -286,10 +317,10 @@ def military():
     hf[road] += (np.sin(cell) * 0.25)[road]
     alb, hf = cracks(alb, hf, road, 3103, 70, (88, 86, 80))
     alb = clusters(alb, joint, [(84, 100, 50), (98, 112, 58)], 3104, 0.15)
-    alb = speckle(alb, road, 0.03, [(146, 142, 132), (100, 98, 90)], 3105)
+    alb = speckle(alb, road, 0.012, [(146, 142, 132), (100, 98, 90)], 3105)
     gv = soft(noise(3106, 60, 3), 0.55, 0.65)
     gravel_t = np.maximum(walk.astype(float), gv * plot)
-    gcol = np.array((116, 110, 98), float)[None, None, :] * (0.82 + 0.26 * noise(3107, 3, 2))[..., None]
+    gcol = np.array((116, 110, 98), float)[None, None, :] * tone(3107, 3, 0.82, 1.08, 4, 2)[..., None]
     alb = alb * (1 - gravel_t[..., None]) + gcol * gravel_t[..., None]
     hf += 0.4 * noise(3108, 2, 2) * gravel_t
     alb = speckle(alb, gravel_t > 0.5, 0.2, [(150, 146, 134), (84, 80, 72), (124, 116, 100)], 3109)
@@ -301,7 +332,7 @@ def military():
 def industrial():
     road, walk, plot, rv, rh, dv, dh = masks()
     alb, hf, soil = grass_field(4101, base=(58, 62, 40), dry=(92, 86, 58), dirt=(82, 72, 56), dryness=0.8)
-    con = np.array((116, 114, 106), float)[None, None, :] * (0.86 + 0.2 * noise(4102, 28, 3))[..., None]
+    con = np.array((116, 114, 106), float)[None, None, :] * tone(4102, 28, 0.86, 1.06, 4, 3)[..., None]
     alb[road] = con[road]
     hf[road] = 0.0
     pt = soft(noise(4103, 40, 3), 0.68, 0.71) * road
@@ -310,9 +341,9 @@ def industrial():
     alb, hf = cracks(alb, hf, road, 4105, 120, (64, 62, 58))
     oil = soft(noise(4106, 14, 3), 0.78, 0.84) * road
     alb *= (1 - 0.22 * oil)[..., None]
-    alb = speckle(alb, road, 0.03, [(140, 136, 126), (88, 86, 80)], 4107)
+    alb = speckle(alb, road, 0.012, [(140, 136, 126), (88, 86, 80)], 4107)
     lt = np.maximum(walk.astype(float), soft(noise(4108, 80, 3), 0.42, 0.52) * plot)
-    lcol = np.array((100, 94, 84), float)[None, None, :] * (0.82 + 0.26 * noise(4109, 3, 2))[..., None]
+    lcol = np.array((100, 94, 84), float)[None, None, :] * tone(4109, 3, 0.82, 1.08, 4, 2)[..., None]
     alb = alb * (1 - lt[..., None]) + lcol * lt[..., None]
     hf += 0.5 * noise(4110, 2, 2) * lt
     alb = speckle(alb, lt > 0.5, 0.2, [(132, 126, 114), (72, 66, 58), (118, 80, 52)], 4111)
@@ -323,6 +354,7 @@ def industrial():
     return alb, hf
 
 
+PALETTE = {'rural': 30, 'woodland': 30, 'military': 26, 'industrial': 28}
 FAMILIES = {'rural': rural, 'woodland': woodland, 'military': military, 'industrial': industrial}
 
 
@@ -331,10 +363,13 @@ def build_all(P):
     X, Y = grid()
     out = os.path.join(P, 'art', 'world_hd')
     os.makedirs(out, exist_ok=True)
+    global RAGGED
     for name, fn in FAMILIES.items():
+        RAGGED = 1.0 if name in ('rural', 'woodland') else 0.4
         alb, hf = fn()
-        img = shade(alb, hf, 0.9)
-        Image.fromarray(clamp8(img), 'RGB').save(os.path.join(out, 'ground_%s_hd.png' % name))
+        img = Image.fromarray(clamp8(shade(alb, hf, 0.9)), 'RGB')
+        img = pixel_finish(img, colours=PALETTE.get(name, 32), jitter=0.0, wrap=True)
+        img.convert('RGB').save(os.path.join(out, 'ground_%s_hd.png' % name))
         print('ground', name, flush=True)
 
 

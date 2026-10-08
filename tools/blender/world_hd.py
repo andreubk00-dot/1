@@ -1489,6 +1489,10 @@ def build_details(P):
         sheet.alpha_composite(spr, (i * 48 * HD, 0))
         print('detail', kind, flush=True)
     sheet.save(os.path.join(out, 'facade_details_hd.png'))
+    # keep every detail where the game expects the 1x artwork in its cell
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    from hd_align import align_details
+    align_details(P)
 
 
 if __name__ == '__main__':
@@ -1516,3 +1520,7 @@ if __name__ == '__main__':
         build_extras(P)
     if 'details' in parts:
         build_details(P)
+    # every atlas ends as clean pixel art: few flat tones, no soft gradients
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    from pixel_finish import finish_world_hd
+    finish_world_hd(P)
