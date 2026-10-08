@@ -2401,7 +2401,10 @@ window.ED_BALANCE = Object.freeze({
 
     async init(){
       await this.bridge.init();
-      this.lang = ['ru','en'].includes(this.bridge.lang) ? this.bridge.lang : ((navigator.language||'ru').startsWith('ru')?'ru':'en');
+      // Match the platform language at startup; use the recommended fallback groups.
+      const platformLang=(this.bridge.lang||'').slice(0,2).toLowerCase();
+      this.lang=['ru','en'].includes(platformLang)?platformLang
+        :(['be','kk','uk','uz'].includes(platformLang)?'ru':'en');
       this.t = TEXT[this.lang]; document.documentElement.lang=this.lang;
       this.loadLocal();
       const cloud = await this.bridge.loadCloud(); if(cloud) this.mergeCloud(cloud);
