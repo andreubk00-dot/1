@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — Android / iPhone v1.8.17</title>
+  <title>Бесконечные защитники — Android / iPhone v1.8.18</title>
   <meta name="apple-mobile-web-app-title" content="Защитники" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="application-name" content="Бесконечные защитники" />
@@ -1048,7 +1048,7 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
-/* v1.8.17: iPhone save-rescue controls */
+/* v1.8.18: iPhone save-rescue controls */
 #backupScreen{z-index:76}
 .save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
 .save-entry button{min-height:44px;max-width:100%;white-space:normal}
@@ -1063,7 +1063,7 @@ canvas { touch-action:none; }
 .backup-card #backupNotice{min-height:18px;font-size:12px;line-height:1.45}
 @media(max-width:500px){.backup-card .backup-actions{grid-template-columns:1fr}.backup-card{padding:17px}}
 
-/* v1.8.17: fit three defender cards and Pulse on 320px Android/iPhone. */
+/* v1.8.18: fit three defender cards and Pulse on 320px Android/iPhone. */
 @media (max-width:520px) and (orientation:portrait) {
   .hud-bottom { gap:4px; left:6px; right:6px; }
   .hud-bottom .unit-cards { flex:1 1 0; width:auto; min-width:0; gap:3px; }
@@ -1075,6 +1075,8 @@ canvas { touch-action:none; }
   .hud-bottom .skill-btn span { font-size:10px; line-height:1.1; overflow-wrap:anywhere; }
   .hud-bottom .skill-btn small { font-size:9px; }
 }
+
+#mobileUpdateNotice{position:fixed;z-index:100001;top:calc(env(safe-area-inset-top, 0px) + 8px);left:50%;transform:translateX(-50%);max-width:calc(100vw - 18px);width:max-content;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid #67d6ed;border-radius:12px;background:#102535;color:#f4fbff;box-shadow:0 8px 34px #030912cc;font:600 12px/1.35 system-ui,sans-serif}#mobileUpdateNotice[hidden]{display:none!important}#mobileUpdateNotice button{border:0;border-radius:7px;background:#62d3e9;color:#092135;font:800 12px/1 system-ui,sans-serif;padding:9px 11px;min-width:70px;min-height:34px;cursor:pointer}@media(max-width:370px){#mobileUpdateNotice{font-size:11px;padding:7px 8px;gap:6px}}
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
@@ -1522,7 +1524,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.17',
+  version: '1.8.18',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1769,7 +1771,7 @@ window.ED_BALANCE = Object.freeze({
 
 
   const BALANCE = window.ED_BALANCE || {
-    version:'fallback-1.8.17', run:{baseCore:100,baseEnergy:74},
+    version:'fallback-1.8.18', run:{baseCore:100,baseEnergy:74},
     wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.115,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
@@ -2509,7 +2511,7 @@ window.ED_BALANCE = Object.freeze({
 
     saveBackupObject(){
       // The persistent account/collection is backed up; active battle state is not.
-      return {format:'endless-defenders-save',formatVersion:1,createdAt:new Date().toISOString(),gameVersion:'1.8.17',save:structuredClone(this.save)};
+      return {format:'endless-defenders-save',formatVersion:1,createdAt:new Date().toISOString(),gameVersion:'1.8.18',save:structuredClone(this.save)};
     }
     backupMessage(message,failed=false){const el=$('backupNotice');if(el){el.textContent=message;el.style.color=failed?'#ff9daa':'#92f3d5';}}
     openBackup(){
@@ -3341,33 +3343,63 @@ document.addEventListener('gesturestart',e=>{
 <script>
 (() => {
   if(window.ED_YANDEX_BUILD)return;
-  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const ios=()=>/iPhone|iPad|iPod/.test(navigator.userAgent);
-  let installEvent=null;
+  const ru=()=>document.documentElement.lang==='ru';
+  const game=()=>window.__ENDLESS_DEFENDERS__;
   const button=()=>document.getElementById('installAppBtn');
-  const updateButton=()=>{
-    const el=button();if(!el)return;
-    const supported=!!installEvent||ios();
-    el.hidden=standalone()||!supported;
-    if(supported)el.textContent=ios()?'⌂ На экран Домой':'⬇ Установить игру';
-  };
-  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installEvent=event;updateButton();});
-  window.addEventListener('appinstalled',()=>{installEvent=null;updateButton();});
+  const notice=()=>document.getElementById('mobileUpdateNotice');
+  const text=()=>document.getElementById('mobileUpdateCopy');
+  const action=()=>document.getElementById('mobileUpdateApply');
+  let installEvent=null,pendingWorker=null,registration=null,requestReload=false;
+  function updateInstallButton(){
+    const b=button();if(!b)return;const available=!!installEvent||ios();
+    b.hidden=standalone()||!available;
+    if(available)b.textContent=ios()?'⌂ На экран Домой':'⬇ Установить игру';
+  }
+  function displayPending(worker){
+    if(!worker)return;pendingWorker=worker;
+    if(notice())notice().hidden=!!game()?.inRun;
+    if(text())text().textContent=ru()?'Доступна новая версия':'Update available';
+    if(action())action().textContent=ru()?'Обновить':'Update';
+  }
+  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installEvent=event;updateInstallButton();});
+  window.addEventListener('appinstalled',()=>{installEvent=null;updateInstallButton();});
   document.addEventListener('DOMContentLoaded',()=>{
-    updateButton();
+    updateInstallButton();
     button()?.addEventListener('click',async()=>{
-      if(installEvent){const event=installEvent;installEvent=null;
-        try{await event.prompt();await event.userChoice;}catch(err){console.warn('Install declined',err);}updateButton();
-      }else if(ios()){
-        const ru=(document.documentElement.lang||'ru')==='ru';
-        alert(ru?'Safari: нажми «Поделиться» (□↑), затем «На экран Домой» и «Добавить». Перед установкой скачай резервную копию прогресса.':'Safari: tap Share, then Add to Home Screen. Back up your save before installing.');
-      }
+      if(installEvent){const event=installEvent;installEvent=null;try{await event.prompt();await event.userChoice;}catch(err){console.warn('Install failed',err);}updateInstallButton();}
+      else if(ios())alert(ru()?'Safari: «Поделиться» → «На экран Домой» → «Добавить». Сначала экспортируй прогресс: отдельное приложение может не получить сохранение из Safari автоматически.':'Safari: Share → Add to Home Screen. Export and import your save: storage may be separate.');
+    });
+    action()?.addEventListener('click',()=>{
+      const g=game();
+      if(g?.inRun){if(text())text().textContent=ru()?'Заверши бой перед обновлением':'Finish the run first';return;}
+      try{g?.checkpointPlaytime?.();g?.persist?.(true);}catch(err){console.warn('Save failed',err);return;}
+      if(!pendingWorker||pendingWorker.state!=='installed'){if(notice())notice().hidden=true;return;}
+      requestReload=true;pendingWorker.postMessage({type:'ACTIVATE_UPDATE'});
     });
   });
   if('serviceWorker' in navigator&&window.isSecureContext){
-    window.addEventListener('load',()=>{navigator.serviceWorker.register('./service-worker.js',{scope:'./'}).catch(err=>console.warn('Offline installation unavailable',err));});
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(requestReload){requestReload=false;location.reload();}});
+    window.addEventListener('load',async()=>{
+      try{
+        registration=await navigator.serviceWorker.register('./service-worker.js',{scope:'./',updateViaCache:'none'});
+        const detect=w=>{
+          if(!w)return;
+          if(w.state==='installed'&&navigator.serviceWorker.controller)displayPending(w);
+          else w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)displayPending(w);});
+        };
+        if(registration.waiting)displayPending(registration.waiting);
+        registration.addEventListener('updatefound',()=>detect(registration.installing));
+        if(registration.installing)detect(registration.installing);
+        registration.update().catch(()=>{});
+        document.addEventListener('visibilitychange',()=>{if(!document.hidden){registration.update().catch(()=>{});if(pendingWorker)displayPending(pendingWorker);}});
+        setInterval(()=>{if(pendingWorker)displayPending(pendingWorker);},5000);
+      }catch(err){console.warn('Offline installation unavailable',err);}
+    });
   }
 })();
 </script>
+<div id="mobileUpdateNotice" hidden role="status" aria-live="polite"><span id="mobileUpdateCopy">Доступна новая версия</span><button type="button" id="mobileUpdateApply">Обновить</button></div>
 </body>
 </html>
