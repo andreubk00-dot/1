@@ -8,7 +8,7 @@ size and baked like the HD vehicles (same camera, light and pixel finish), into
 
     python3 tools/blender/props_hd.py <project_dir>
 
-Writes art/world_hd/props_hd.png (4 x 2 cells) - order in KINDS, mirrored in
+Writes art/world_hd/props_hd.png (4 x 4 cells) - order in KINDS, mirrored in
 main_script_mod.gd PROP_HD_KINDS.
 """
 import os
@@ -125,15 +125,72 @@ def trash_bin():
     box((-3, 5.2, 4), (2, 0.3, 1.5), mat((200, 196, 180), rough=0.9), bevel=0)  # sticker
 
 
+def woodpile():
+    """split logs stacked between two stakes, a tarred plank roof on top."""
+    import math
+    bark = wood((92, 66, 44))
+    cut = mat((176, 140, 96), rough=0.9, grime=0.2, scale=0.2)
+    for row in range(4):
+        for i in range(7 - (row % 2)):
+            x = -15 + i * 5.0 + (row % 2) * 2.5
+            z = 2.4 + row * 4.4
+            cyl((x, 0, z), 2.3, 10, bark, axis='y', bevel=0.3, verts=10)
+            cyl((x, 5.05, z), 2.0, 0.2, cut, axis='y', bevel=0.05, verts=10)    # cut ends
+    for x in (-19, 19):
+        box((x, 0, 9), (0.8, 0.8, 9.5), bark, bevel=0.1)
+    box((0, 0, 19.6), (21, 6.5, 0.5), mat((40, 40, 42), rough=0.7), bevel=0.2, rot=(0.12, 0, 0))
+
+
+def stump():
+    bark = wood((86, 62, 42))
+    ring = mat((170, 134, 92), rough=0.9, grime=0.2)
+    cyl((0, 0, 0), 5.0, 6.0, bark, bevel=0.5, verts=18)
+    cyl((0, 0, 6.0), 4.4, 0.2, ring, bevel=0.05, verts=18)
+    box((1.5, -0.5, 9.5), (0.5, 0.5, 4.0), wood((130, 96, 62)), bevel=0.1, rot=(0, 0.35, 0))   # axe handle
+    box((0.4, -0.5, 6.6), (2.0, 0.4, 1.0), steel((120, 122, 120)), bevel=0.1)                  # axe head
+    for (x, y, a) in ((-9, 3, 0.4), (8, 4, -0.6)):                                             # split chunks
+        box((x, y, 1.2), (2.2, 1.2, 1.2), ring, bevel=0.3, rot=(0, 0, a))
+
+
+def wheelbarrow():
+    tub = mat((64, 96, 72), rough=0.5, metal=0.4, grime=0.5, dust=0.4)
+    iron = steel((60, 60, 58))
+    box((0, 0, 7), (8, 6, 3), tub, bevel=1.0)
+    box((0, 0, 9.6), (7, 5, 0.3), mat((70, 56, 40), rough=1.0), bevel=0)      # soil inside
+    cyl((11, 0, 4), 3.5, 1.4, mat((30, 30, 30), rough=0.9), axis='y', bevel=0.4)
+    for y in (-4, 4):
+        tube([(9, y, 5), (-8, y, 7), (-16, y, 9)], 0.5, iron)
+        box((-6, y, 2.5), (0.4, 0.4, 2.5), iron, bevel=0)
+
+
+def milk_can():
+    al = mat((170, 174, 172), rough=0.35, metal=0.7, grime=0.4, dust=0.4)
+    for (x, y) in ((-4, 0), (4, 1)):
+        cyl((x, y, 0), 3.4, 9, al, bevel=0.5, verts=20)
+        cyl((x, y, 9), 2.4, 2.4, al, bevel=0.4, verts=20)
+        cyl((x, y, 11.4), 2.8, 0.8, steel((120, 124, 124)), bevel=0.3, verts=20)
+    cyl((-4, 0, 3.5), 3.5, 1.0, mat((150, 120, 60), rough=0.6), bevel=0.1, verts=20)
+
+
+def signpost():
+    post = wood((110, 80, 52))
+    box((0, 0, 14), (0.8, 0.8, 14), post, bevel=0.2)
+    box((4, 0.9, 23), (5.5, 0.3, 1.6), mat((220, 214, 196), rough=0.8), bevel=0.2)          # arrow board
+    box((-3, 0.9, 19), (4.0, 0.3, 1.4), mat((200, 190, 120), rough=0.8), bevel=0.2)
+    box((4, 1.15, 23), (4, 0.05, 0.3), mat((60, 60, 60), rough=0.9), bevel=0)              # lettering
+    box((-3, 1.15, 19), (3, 0.05, 0.3), mat((60, 60, 60), rough=0.9), bevel=0)
+
+
 KINDS = [('crate', crate), ('barrel', barrel), ('workbench', workbench), ('lamp', lamp),
          ('supply_crate', supply_crate), ('gas_can', gas_can), ('cardboard_boxes', cardboard_boxes),
-         ('trash_bin', trash_bin)]
+         ('trash_bin', trash_bin), ('woodpile', woodpile), ('stump', stump), ('wheelbarrow', wheelbarrow),
+         ('milk_can', milk_can), ('signpost', signpost)]
 
 
 def build(P):
     tmp = tempfile.mkdtemp(prefix='ostatok_props_')
     W = CELL * bk.HD
-    sheet = Image.new('RGBA', (4 * W, 2 * W))
+    sheet = Image.new('RGBA', (4 * W, 4 * W))
     for i, (kind, fn) in enumerate(KINDS):
         bk.reset()
         bk.camera(RENDER, 60, 40)

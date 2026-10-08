@@ -15822,7 +15822,8 @@ func _update_detail_lights(delta):
 
 const GROUND_DECAL_KINDS = ["rubble_a","rubble_b","rubble_c","blood_a","blood_b","blood_dry","papers_a","papers_b","glass","oil","planks","tiles"]
 # HD Blender props (tools/blender/props_hd.py): 64-unit cells, 128 texels, drawn at 0.5
-const PROP_HD_KINDS = {"crate":0,"barrel":1,"workbench":2,"lamp":3,"supply_crate":4,"gas_can":5,"cardboard_boxes":6,"trash_bin":7}
+const PROP_HD_KINDS = {"crate":0,"barrel":1,"workbench":2,"lamp":3,"supply_crate":4,"gas_can":5,"cardboard_boxes":6,"trash_bin":7,
+    "woodpile":8,"stump":9,"wheelbarrow":10,"milk_can":11,"signpost":12}
 # old 1x litter heaps (noisy white / red speckle blobs) -> HD ground decal cells
 const LITTER_TO_DECAL = {"debris":1,"rubble_papers":0,"broken_tile_pile":11,"wooden_debris":10,
     "floor_papers":6,"newspapers":7,"newspapers_wide":6,"shattered_glass":8}
@@ -24592,7 +24593,9 @@ func _decorate_street_furniture(chunk,coord):
 # verges of the plants. Visual only, on the verge band beside the kerb.
 const VERGE_SETS = {
     "military":[["road_barrier",0.5],["sandbags",0.45],["traffic_cone",0.4],["supply_crate",0.5],["road_sign",0.5]],
-    "industrial":[["barrel",0.5],["crate",0.5],["cardboard_boxes",0.5],["gas_can",0.5],["trash_bag",0.45],["traffic_cone",0.4]]
+    "industrial":[["barrel",0.5],["crate",0.5],["cardboard_boxes",0.5],["gas_can",0.5],["trash_bag",0.45],["traffic_cone",0.4]],
+    "rural":[["woodpile",0.5],["stump",0.5],["wheelbarrow",0.5],["milk_can",0.5],["signpost",0.5],["crate",0.5]],
+    "woodland":[["woodpile",0.5],["stump",0.5],["stump",0.5],["signpost",0.5]]
 }
 
 func _dress_service_verges(chunk,coord,district_id:String,rng):
@@ -24601,6 +24604,10 @@ func _dress_service_verges(chunk,coord,district_id:String,rng):
         set_key = "military"
     elif district_id.find("industrial") >= 0 or district_id == "rail_corridor":
         set_key = "industrial"
+    elif district_id.find("rural") >= 0 or district_id.find("dacha") >= 0:
+        set_key = "rural"
+    elif district_id.find("woodland") >= 0:
+        set_key = "woodland"
     if set_key == "" or not RegionCatalog.poi_for_chunk(coord).is_empty():
         return
     var kinds = VERGE_SETS[set_key]
