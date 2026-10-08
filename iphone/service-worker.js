@@ -1,5 +1,5 @@
-/* Endless Defenders v1.8.21 offline PWA */
-const CACHE_NAME='ed-mobile-v1.8.21';
+/* Endless Defenders v1.8.22 offline PWA */
+const CACHE_NAME='ed-mobile-v1.8.22';
 const PRECACHE=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png',
 './audio/laserSmall_000.ogg','./audio/laserSmall_001.ogg','./audio/laserSmall_002.ogg','./audio/laserSmall_004.ogg',
 './audio/laserLarge_000.ogg','./audio/laserLarge_001.ogg','./audio/laserLarge_002.ogg','./audio/forceField_000.ogg',
