@@ -25,7 +25,7 @@ Base scenario, no Rift modifiers or run-wide combat buffs; values computed by ca
 
 ## Verification to date
 - All four inline scripts compile syntactically in both builds.
-- Fourteen direct regression checks passed, including first-30-wave identity, boss spawn formula, late HP reduction, x3/x0.5 time scaling, pause, veteran modules, PWA and schema.
+- Seventeen direct regression checks passed, including first-30-wave identity, boss spawn formula, late HP reduction, x3/x0.5 time scaling, pause, veteran modules, PWA and schema.
 - Veteran mechanic tests passed: offering 3 choices after nine, disabling rerolls, rejecting unoffered choice, applying ×1.08 damage exactly once.
 - Regression test source: `tests/balance-v1821.test.cjs` (Node).
 - Updated phone service-worker cache key `ed-mobile-v1.8.21`.
@@ -35,3 +35,10 @@ Full browser test in desktop Chromium and mobile viewport, true Safari/WebKit te
 
 ## Later design tasks
 Measure actual success rates and average playtimes for first boss and each contract; verify resource sinks after stabilizing battle pacing; decide whether to shorten sequential late defender unlocks. No contract prices were modified in this experiment.
+
+## Additional balance pass — Lab progression and simulation
+- Laboratory cost formula remains exactly the same through level 8. From level 9 onward, a 1.18 growth multiplier replaces the original steep growth. Same cost function is used by the Lab purchase, rendered price and the contextual home recommendation.
+- Total costs: damage 381,320 shards; core 296,607; income 129,884; start energy 42,491. The current save schema, purchased levels and all resources are unchanged.
+- Ran real `Game.update` simulation with configured test squads for bosses 10/20/30/40/60/100; all six scenarios cleared. Configurations used prepared upgrades and manual boss attacks, so they do not establish ordinary player completion rates.
+- Extended Node source regression suite: **17 tests passed**, including Lab pricing consistency.
+- No physical phone/Safari end-to-end test, actual player telemetry or long complete run to wave 120 has been verified. Keep the build staged for now.
