@@ -44,6 +44,8 @@ jobs:
         run: node tests/progression-goal-v1824.test.cjs
       - name: Guard recurring economy reward claims and save compatibility
         run: node tests/economy-rewards-v1824.test.cjs
+      - name: Audit calendar reward impact on defender unlocks
+        run: node tests/economy-calendar-v1824.test.cjs
       - name: Run deterministic complete-run simulations
         run: |
           for profile in fresh progressed veteran; do
