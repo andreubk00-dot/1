@@ -20,6 +20,9 @@ const old=w=>BALANCE.wave.hpBase*Math.pow(BALANCE.wave.hpEarlyGrowth,Math.min(29
 test('First 30 waves exactly retain HP',()=>[1,10,20,30].every(w=>Math.abs(old(w)-g.waveHp(w))<1e-8));
 test('Late HP curve monotonically rises',()=>[30,40,50,60,80,100,120].every((w,i,a)=>i===0||g.waveHp(w)>g.waveHp(a[i-1])));
 test('Wave 100 HP is under 1% of old value',()=>g.waveHp(100)<old(100)*.01);
+test('Late boss dampening applied',()=>{const a=g.bossSpec(100);return g.bossHp(100,a)>30000&&g.bossHp(100,a)<40000;});
+test('Spawn path delegates boss HP to dampened formula',()=>html.includes('hp=this.bossHp(w,b)'));
+
 g.inRun=true;g.paused=false;g.rmbBoost=true;g.run.speed=1;let ticks=[],calls=0;g.update=v=>{ticks.push(v);calls++};
 g.stepCombat(.05);test('Holding RMB progresses all timers 3x',()=>Math.abs(ticks.reduce((a,b)=>a+b,0)-.15)<1e-10&&calls>=5);
 g.rmbBoost=false;g.run.speed=.5;ticks=[];g.stepCombat(.05);test('Half speed advances whole simulation at half rate',()=>Math.abs(ticks.reduce((a,b)=>a+b,0)-.025)<1e-10);
