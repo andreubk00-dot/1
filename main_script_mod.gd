@@ -14561,14 +14561,17 @@ func _set_world_prop_sprite_kind(sprite,kind):
     sprite.set_meta("world_prop_kind",kind)
     return true
 
-func _interior_wall_band_texture(index):
-    var atlas = load("res://interior_wall_band_v4.png")
+func _interior_wall_band_texture(index,allow_hd = false):
+    # allow_hd: the caller draws the region at scale 0.5 (HD twin at 2x)
+    var hd = allow_hd and _hd_exists("res://art/world_hd/interior_wall_band_hd.png")
+    var atlas = load("res://art/world_hd/interior_wall_band_hd.png") if hd else load("res://interior_wall_band_v4.png")
     if atlas == null:
         return null
     var safe_index = clamp(int(index),0,7)
+    var k = 2.0 if hd else 1.0
     var tex = AtlasTexture.new()
     tex.atlas = atlas
-    tex.region = Rect2(safe_index * 32,0,32,28)
+    tex.region = Rect2(safe_index * 32 * k,0,32 * k,28 * k)
     return tex
 
 func _exterior_style_index(sign_text):
@@ -15128,7 +15131,9 @@ func _decorate_building_wall_texture(building,sign_text,size):
     for i in range(h_count):
         var x = -span_w * 0.5 + 16.0 + float(i) * 32.0
         var tile_index = int(sequence[i % sequence.size()])
-        _native_arch_sprite(building,_interior_wall_band_texture(tile_index),Vector2(x,back_y),0)
+        var band = _native_arch_sprite(building,_interior_wall_band_texture(tile_index,true),Vector2(x,back_y),0)
+        if band != null and band.texture.get_width() > 40:
+            band.scale = Vector2(0.5,0.5)
 
     # Side walls use the same native tiles rotated by 90 degrees, again without non-integer scaling.
     var inner_h = max(64.0,size.y - 48.0)
@@ -15137,6 +15142,8 @@ func _decorate_building_wall_texture(building,sign_text,size):
     for i in range(v_count):
         var y = -span_h * 0.5 + 16.0 + float(i) * 32.0
         var tile_index = int(sequence[(i + 3) % sequence.size()])
+        if _hd_exists("res://art/world_hd/interior_wall_band_hd.png"):
+            continue
         _native_arch_sprite(building,_interior_wall_band_texture(tile_index),Vector2(-size.x*0.5+14.0,y),0,PI*0.5)
         _native_arch_sprite(building,_interior_wall_band_texture(tile_index),Vector2(size.x*0.5-14.0,y),0,-PI*0.5)
 
@@ -19822,6 +19829,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/world_hd/trees_hd.png")
     paths.append("res://art/world_hd/fence_hd.png")
     paths.append("res://art/world_hd/interior_floor_hd.png")
+    paths.append("res://art/world_hd/interior_wall_band_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
