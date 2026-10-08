@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — Android / iPhone v1.8.23</title>
+  <title>Бесконечные защитники — Android / iPhone v1.8.24</title>
   <meta name="apple-mobile-web-app-title" content="Защитники" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="application-name" content="Бесконечные защитники" />
@@ -1048,7 +1048,7 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
-/* v1.8.23: iPhone save-rescue controls */
+/* v1.8.24: iPhone save-rescue controls */
 #backupScreen{z-index:76}
 .save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
 .save-entry button{min-height:44px;max-width:100%;white-space:normal}
@@ -1063,7 +1063,7 @@ canvas { touch-action:none; }
 .backup-card #backupNotice{min-height:18px;font-size:12px;line-height:1.45}
 @media(max-width:500px){.backup-card .backup-actions{grid-template-columns:1fr}.backup-card{padding:17px}}
 
-/* v1.8.23: fit three defender cards and Pulse on 320px Android/iPhone. */
+/* v1.8.24: fit three defender cards and Pulse on 320px Android/iPhone. */
 @media (max-width:520px) and (orientation:portrait) {
   .hud-bottom { gap:4px; left:6px; right:6px; }
   .hud-bottom .unit-cards { flex:1 1 0; width:auto; min-width:0; gap:3px; }
@@ -1086,13 +1086,27 @@ canvas { touch-action:none; }
 #fullscreenBtn{display:none}
 @media(min-width:800px) and (pointer:fine){.desktop-controls-guide{display:block}#fullscreenBtn{display:inline-grid;place-items:center}}
 
-/* v1.8.23 — UI clarity; preserves the 320px battle-control layout. */
+/* v1.8.24 — UI clarity; preserves the 320px battle-control layout. */
 .hero-card{align-items:center}
 .hero-actions #playBtn{min-height:66px;box-shadow:0 12px 30px rgba(97,211,255,.24);border:1px solid rgba(206,251,255,.45)}
 .hero-actions #playBtn span{font-size:19px;letter-spacing:-.025em}
 .hero-actions #dailyBtn{background:rgba(29,41,60,.65);font-size:12px}
 .next-steps{margin:16px 0 2px;padding:13px 14px;border:1px solid rgba(106,203,247,.25);border-radius:16px;background:rgba(8,19,34,.72);position:relative;z-index:2}
 .next-steps h3{font-size:12px;color:#9cdded;letter-spacing:.07em;text-transform:uppercase;margin:0 0 9px}
+.contract-goal{margin-top:12px;padding:12px;border-radius:12px;background:rgba(38,69,92,.27);border:1px solid rgba(137,183,214,.20)}
+.contract-goal-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px;margin-bottom:9px}
+.contract-goal-head b{font-size:12px;color:#dff3ff}
+.contract-goal-head small{font-size:10px;color:#a7c0d2}
+.contract-goal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 13px}
+.contract-goal-meter{min-width:0}
+.contract-goal-meter span{display:flex;justify-content:space-between;gap:6px;font-size:11px;color:#d0e3f4;margin-bottom:5px}
+.contract-goal-meter strong{white-space:nowrap;font-size:11px;color:#e9f8ff}
+.contract-goal-meter .progress-track{height:5px;background:rgba(255,255,255,.13);border-radius:99px;overflow:hidden}
+.contract-goal-meter .progress-track i{display:block;height:100%;background:#79cde9;border-radius:99px}
+.contract-goal-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:10px}
+.contract-goal-footer small{font-size:11px;color:#a8c8dd;line-height:1.35}
+.contract-goal-footer button{border:1px solid rgba(128,190,221,.45);border-radius:10px;padding:7px 10px;background:#1b4055;color:#e5f5ff;font-size:11px;font-weight:700}
+@media(max-width:390px){.contract-goal{padding:10px}.contract-goal-grid{gap:10px 7px}.contract-goal-meter span{font-size:10px}}
 .next-step{display:flex;align-items:center;gap:10px;padding:7px 0;min-width:0}
 .next-step+.next-step{border-top:1px solid rgba(142,188,218,.14)}
 .next-step-icon{font-size:19px;flex:0 0 24px;text-align:center}
@@ -1590,7 +1604,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.23',
+  version: '1.8.24',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -2874,6 +2888,33 @@ window.ED_BALANCE = Object.freeze({
     closeResourceHelp(){
       $('resourceHelpScreen').classList.add('hidden');if(this._resourceHelpResume&&this.inRun){this.pauseInternal(!!this.pauseOverlay);if(!this.paused)this.bridge.gameplayStart();}this._resourceHelpResume=false;
     }
+    contractGoalData(){
+      const s=this.save,id=Object.keys(DEFENDER_CONTRACTS).find(id=>!s.unlocked.includes(id)&&(!DEFENDER_CONTRACTS[id].requires||s.unlocked.includes(DEFENDER_CONTRACTS[id].requires)));
+      if(!id)return null;
+      const c=DEFENDER_CONTRACTS[id],st=this.defenderContractStatus(id);
+      return {id,name:this.t[DEFENDERS[id].nameKey],ready:st.ready,boss:this.bossSourceName(c.source),
+        nextWave:this.eligibleContractBossWaves(id,1)[0],
+        wave:[Math.min(c.minWave,s.bestWave||0),c.minWave],
+        parts:[Math.min(c.parts,s.defenderParts?.[id]||0),c.parts],
+        shards:[Math.min(c.shards,s.shards||0),c.shards],
+        gems:[Math.min(c.gems,s.gems||0),c.gems]};
+    }
+    renderContractGoal(){
+      const g=this.contractGoalData();if(!g)return '';
+      const ru=this.lang==='ru',rows=[
+        ['☄',ru?'Рекорд волны':'Best wave',g.wave],
+        ['◈',ru?'Фрагменты':'Fragments',g.parts],
+        ['🔶',ru?'Осколки':'Shards',g.shards],
+        ['💎',ru?'Кристаллы':'Crystals',g.gems]
+      ];
+      const meters=rows.map(([icon,label,[have,total]])=>{
+        const pct=total?Math.round(100*have/total):100;
+        return `<div class="contract-goal-meter"><span>${icon} ${label}<strong>${fmt(have)}/${fmt(total)}</strong></span><div class="progress-track"><i style="width:${pct}%"></i></div></div>`;
+      }).join('');
+      const hint=g.ready?(ru?'Все условия выполнены — собери защитника.':'All requirements met — assemble the defender.'):
+        (ru?`Босс: ${g.boss} · первая подходящая волна ${g.nextWave}`:`Boss: ${g.boss} · first eligible wave ${g.nextWave}`);
+      return `<div class="contract-goal" data-contract-goal="${g.id}"><div class="contract-goal-head"><b>◈ ${ru?'ДОЛГОСРОЧНАЯ ЦЕЛЬ':'LONG-TERM GOAL'}: ${g.name}</b><small>${ru?'Контракт защитника':'Defender contract'}</small></div><div class="contract-goal-grid">${meters}</div><div class="contract-goal-footer"><small>${hint}</small><button type="button" data-next-step="modal" data-target="collectionScreen">${ru?'Подробнее':'Details'} →</button></div></div>`;
+    }
     renderNextSteps(){
       const box=$('nextSteps');if(!box)return;const ru=this.lang==='ru',s=this.save,items=[];
       const add=(icon,title,detail,action,target='',defender='')=>items.push({icon,title,detail,action,target,defender});
@@ -2895,7 +2936,7 @@ window.ED_BALANCE = Object.freeze({
       const lab=Object.entries(LABS).find(([k,l])=>{const lv=s.lab[k]||0;return lv<l.max&&s.shards>=this.labUpgradeCost(k,lv);});
       if(lab)add('🧪',ru?'Доступно улучшение Лаборатории':'Laboratory upgrade available',this.t[lab[1].nameKey],'modal','labScreen');
       if(!items.length){const hunt=this.activeFragmentHunt();if(hunt){const c=DEFENDER_CONTRACTS[hunt],name=this.t[DEFENDERS[hunt].nameKey],have=s.defenderParts?.[hunt]||0;add('◈',ru?'Ищи фрагменты: '+name:'Hunt fragments: '+name,ru?`${have}/${c.parts} · ${this.bossSourceName(c.source)}, волна ${c.minWave}+`:`${have}/${c.parts} · ${this.bossSourceName(c.source)}, wave ${c.minWave}+`,'run');}else add('🛡',ru?'Проверь свой отряд':'Review your squad',ru?'Выбери трёх защитников для вылазки.':'Choose three defenders for your run.','modal','collectionScreen');}
-      box.innerHTML=`<h3>${ru?'Что делать дальше':'What to do next'}</h3>`+items.slice(0,2).map(x=>`<div class="next-step"><span class="next-step-icon">${x.icon}</span><div class="next-step-copy"><b>${x.title}</b><small>${x.detail}</small></div><button type="button" data-next-step="${x.action}" data-target="${x.target}" data-defender="${x.defender}">${ru?'Перейти':'Open'} →</button></div>`).join('');
+      box.innerHTML=`<h3>${ru?'Что делать дальше':'What to do next'}</h3>`+items.slice(0,2).map(x=>`<div class="next-step"><span class="next-step-icon">${x.icon}</span><div class="next-step-copy"><b>${x.title}</b><small>${x.detail}</small></div><button type="button" data-next-step="${x.action}" data-target="${x.target}" data-defender="${x.defender}">${ru?'Перейти':'Open'} →</button></div>`).join('')+this.renderContractGoal();
     }
 
     renderHome(){

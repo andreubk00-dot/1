@@ -6,6 +6,7 @@ on:
       - endless-defenders-balance-v1821
       - endless-defenders-economy-v1822
       - endless-defenders-economy-guard-v1823
+      - endless-defenders-progression-v1824
     paths:
       - pc/**
       - iphone/**
@@ -39,6 +40,8 @@ jobs:
         run: node tests/economy-progression-v1822.test.cjs
       - name: Guard against duplicate rewarded ads and false quest prompts
         run: node tests/economy-guard-v1823.test.cjs
+      - name: Verify long-term contract progress display
+        run: node tests/progression-goal-v1824.test.cjs
       - name: Run deterministic complete-run simulations
         run: |
           for profile in fresh progressed veteran; do
