@@ -1,5 +1,0 @@
-OSTATOK 0.57.0 - packaging fix
-
-This clean source package excludes development-only Python tools, Godot cache,
-and generated .png.import files. Godot 4.7.2 will regenerate imports on first open.
-Gameplay/art content is unchanged from 0.57.0 Cohesive Character Overhaul.
