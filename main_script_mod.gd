@@ -20115,6 +20115,28 @@ func _dress_ground_seams(chunk,coord):
                     spr.set_meta("ground_seam_dressing",kind)
             t += rng.randf_range(26.0,58.0)
 
+func _rail_buffer_stop(chunk,pos:Vector2,side:int):
+    # timber-and-steel buffer stop across both rails, red / white striped beam,
+    # seen in 3/4: the beam stands 10 units above the ballast
+    var root = Node2D.new()
+    root.position = pos
+    root.z_index = 5
+    root.z_as_relative = false
+    root.set_meta("rail_buffer_stop",true)
+    chunk.add_child(root)
+    _rect(Vector2(4.0 * side * -1,4),Vector2(10,40),Color(0.01,0.012,0.012,0.25),root)       # shadow
+    for y in [-15.0,15.0]:
+        _rect(Vector2(0,y - 5),Vector2(5,10),Color(0.30,0.28,0.26),root)                    # posts
+        _rect(Vector2(-1.5,y - 5),Vector2(1,10),Color(0.50,0.48,0.44),root)
+    _rect(Vector2(0,-12),Vector2(6,40),Color(0.82,0.80,0.76),root)                          # beam
+    var k = -30.0
+    while k < 10.0:
+        _rect(Vector2(0,k + 2.5),Vector2(6,4),Color(0.72,0.16,0.12),root)
+        k += 8.0
+    _rect(Vector2(-2.5,-12),Vector2(1,40),Color(0.95,0.94,0.90),root)
+    _rect(Vector2(2.5,-12),Vector2(1,40),Color(0.30,0.10,0.08),root)
+    return root
+
 func _decorate_region_ground(chunk,coord,profile):
     if bool(profile.get("legacy",false)) or coord == Vector2i(0,0):
         return
@@ -20142,6 +20164,10 @@ func _decorate_region_ground(chunk,coord,profile):
             track.z_index = -18
             track.set_meta("rail_track",true)
             chunk.add_child(track)
+            # the line ends where the corridor ends: a buffer stop, not a straight cut
+            for side in [-1,1]:
+                if RegionCatalog.district_id_for_chunk(coord + Vector2i(side,0)) != "rail_corridor":
+                    _rail_buffer_stop(chunk,Vector2(10.0 if side < 0 else CHUNK_SIZE - 10.0,CHUNK_SIZE * 0.5),side)
         else:
             _rect(Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5-16),Vector2(CHUNK_SIZE,3),Color(0.20,0.21,0.19,0.78),chunk)
             _rect(Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5+16),Vector2(CHUNK_SIZE,3),Color(0.20,0.21,0.19,0.78),chunk)
