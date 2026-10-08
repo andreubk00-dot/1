@@ -1601,6 +1601,7 @@ window.ED_BALANCE = Object.freeze({
     hpLateGrowth: 1.032,
     hpEndgameGrowth: 1.022,
     hpEndgameStartWave: 60,
+    bossLateDampening: 0.035,
     speedBase: 34,
     speedGrowth: 1.2,
     speedCap: 42,
@@ -1838,7 +1839,7 @@ window.ED_BALANCE = Object.freeze({
 
   const BALANCE = window.ED_BALANCE || {
     version:'fallback-1.8.20', run:{baseCore:100,baseEnergy:74},
-    wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.032,hpEndgameGrowth:1.022,hpEndgameStartWave:60,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
+    wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.032,hpEndgameGrowth:1.022,hpEndgameStartWave:60,bossLateDampening:.035,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,shardDepthBonusStartWave:30,shardDepthBonusPerWave:.012,shardDepthBonusCap:1.90,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
     commander:{heatMax:100,recoverAt:42,coolBase:28,modeDuration:8,modeEnemySlow:.58,modeDamage:1.9,focusDuration:1.8,weakOpen:1.8,weakCooldown:4.6,eliteOrbChance:.45,orbEnergy:16,orbCharge:24,threatRewardEnergy:10,threatRewardCharge:12,precisionWindow:2.1,precisionDamagePerHit:.025,precisionDamageCap:.24},
@@ -3089,6 +3090,7 @@ window.ED_BALANCE = Object.freeze({
     }
     waveEnemyCount(w){const b=BALANCE.wave;if(this.isBossWave(w))return 1;let n=b.baseCount+Math.floor(w*b.countGrowth)+Math.floor(Math.max(0,w-24)*b.post24Growth)+(w%5===0?b.eliteBonusCount:0);if(w>1&&w%10===1)n=Math.max(b.baseCount,Math.floor(n*(b.postBossCountMultiplier||.86)));return n}
     waveHp(w){const b=BALANCE.wave,early=Math.pow(b.hpEarlyGrowth,Math.min(b.hpEarlyCap,Math.max(0,w-1))),late=Math.pow(b.hpLateGrowth,Math.max(0,Math.min(w,b.hpEndgameStartWave||60)-30))*Math.pow(b.hpEndgameGrowth||b.hpLateGrowth,Math.max(0,w-(b.hpEndgameStartWave||60))),rift=this.run?.rift?.fx?.enemyHp||1,first=this.run?.firstRun?(this.isBossWave(w)?(BALANCE.onboarding?.firstBossHpMultiplier||.92):(w<=9?(BALANCE.onboarding?.firstRunHpMultiplier||.86):1)):1,elite=(w%5===0&&!this.isBossWave(w)?(b.eliteWaveHpMultiplier||1.52):1),breather=(w>1&&w%10===1?(b.postBossHpMultiplier||.90):1);return b.hpBase*early*late*elite*breather*(this.run?.challengeHp||1)*rift*first}
+    bossHp(w,b){const v=b.variant||{},softening=1/(1+Math.max(0,w-40)*(BALANCE.wave.bossLateDampening||0));return this.waveHp(w)*b.hp*(v.hp||1)*(1+Math.max(0,w-30)*.012)*softening;}
     waveSpeed(w){const b=BALANCE.wave,rift=this.run?.rift?.fx?.enemySpeed||1;return (b.speedBase+Math.min(b.speedCap,w*b.speedGrowth))*(this.run?.challengeSpeed||1)*rift}
     bossVariant(w){if(w<40)return null;return BOSS_VARIANTS[(Math.floor(w/10)-4)%BOSS_VARIANTS.length]||null}
     bossSpec(w){
@@ -3149,7 +3151,7 @@ window.ED_BALANCE = Object.freeze({
     spawnEnemy(){
       const w=this.run.wave,bossWave=this.isBossWave(w);
       if(bossWave&&this.run.spawned===0){
-        const b=this.bossSpec(w),v=b.variant||{},hp=this.waveHp(w)*b.hp*(v.hp||1)*(1+Math.max(0,w-30)*.012);
+        const b=this.bossSpec(w),v=b.variant||{},hp=this.bossHp(w,b);
         const e={type:'boss',boss:{...b},x:1325,y:360,r:b.r,hp,maxHp:hp,speed:this.waveSpeed(w)*b.speed*(v.speed||1),slow:0,flash:0,color:b.color,energy:Math.round(b.energy*(v.energy||1)),burnTime:0,burnDps:0,weakenTime:0,bossTimer:3.8*(v.abilityRate||1),phase:0,weakCooldown:(b.id==='aegis'&&(this.save.bossesDefeated?.aegis||0)===0?(BALANCE.polish?.firstAegisWeakDelay||1.15):2.6),weakOpen:0,weakAngle:Math.random()*Math.PI*2,armorDisabled:0,regenSuppressed:0};
         this.run.enemies.push(e);this.run.boss=e;this.run.spawned++;this.run.bossIntro=true;this.run.screenFlash=.35;this.run.shake=.22;
         this.showBossIntro(b);this.audio.bossIntro(b.id);this.spawnBurst(1190,360,b.color,42);this.spawnRing(1190,360,b.color,50,190,.7);return;
@@ -3322,7 +3324,7 @@ window.ED_BALANCE = Object.freeze({
       $('relicChoices').innerHTML=choices.map(id=>{const r=RELICS[id],tx=this.run.veteranMode?(VETERAN_RELICS[id][this.lang]||VETERAN_RELICS[id].ru):(r[this.lang]||r.ru),rar=r.rarity||'common',rl=this.lang==='ru'?(rar==='epic'?'ЭПИЧЕСКИЙ':rar==='rare'?'РЕДКИЙ':'ОБЫЧНЫЙ'):(rar==='epic'?'EPIC':rar==='rare'?'RARE':'COMMON');return `<button class="relic-choice" data-relic="${id}" data-rarity="${rar}"><span class="relic-rarity">${rl}</span><span class="relic-icon">${r.icon}</span><h3>${tx[0]}</h3><p>${tx[1]}</p><small>${this.lang==='ru'?'ВЫБРАТЬ':'SELECT'}</small></button>`}).join('');
       document.querySelectorAll('[data-relic]').forEach(b=>b.onclick=()=>this.chooseRelic(b.dataset.relic));if($('relicRerollBtn')){$('relicRerollBtn').disabled=(this.run.rerolls||0)<=0||this.run.veteranMode;$('relicRerollBtn').textContent=`↻ ${this.t.reroll} · ${this.t.rerolls}: ${this.run.rerolls||0}`;}$('relicScreen').classList.remove('hidden');
     }
-    rerollRelics(){if(!this.run||(this.run.rerolls||0)<=0)return;this.run.rerolls--;this.audio.reward();this.presentRelicChoice(true);}
+    rerollRelics(){if(!this.run||this.run.veteranMode||(this.run.rerolls||0)<=0)return;this.run.rerolls--;this.audio.reward();this.presentRelicChoice(true);}
     chooseRelic(id){
       if(!this.run||!RELICS[id]||!this.run.currentRelicChoices?.includes(id))return;const m=this.run.mods,veteran=!!this.run.veteranMode;
       if(veteran){if(id==='overclock')m.rate*=1.06;else if(id==='warhead')m.damage*=1.08;else if(id==='capacitor')m.waveReward*=1.12;}else{if(id==='overclock')m.rate*=1.18;if(id==='warhead')m.damage*=1.25;if(id==='capacitor')m.waveReward*=1.25;if(id==='resonance')m.skillCd*=.75;if(id==='cryo')m.slowBonus*=1.35;if(id==='chain')m.chainBonus+=1;if(id==='blast')m.splash*=1.45;if(id==='scavenger')m.shardBonus*=1.20;if(id==='shield')m.coreGuard*=.72;}
