@@ -19672,6 +19672,7 @@ func _load_chunk(coord):
     else:
         _build_procedural_chunk(chunk,coord)
         _decorate_street_furniture(chunk,coord)
+    _dress_ground_seams(chunk,coord)
 
     _spawn_saved_drops_for_chunk(chunk,coord)
     # Static bodies become queryable after the physics server synchronizes.
@@ -19841,19 +19842,27 @@ bool paved(vec2 lp) {
     if (mode == 2) return true;
     return on_road(lp) || (on_walk(lp) && !soft_verges);
 }
-// true where the ground across edge s reaches this point
+bool soft_lp(vec2 lp) { return soft_verges && !paved(lp); }
+// true where the ground across edge s reaches this point. Like hand-drawn
+// transition tiles (Project Zomboid, Stardew Valley, Godot terrains) the border
+// is ONE clean line: it meanders slowly (domain-warped, never along the chunk
+// grid) and, for grass and forest floor, ends in small tufts sticking out.
 bool reaches(vec2 lp, int s) {
     float d = edge_dist(lp, s);
     vec2 wp = world_origin + lp;
+    float along = s < 2 ? wp.y : wp.x;
     if (paved(lp)) {
-        float along = s < 2 ? wp.y : wp.x;
-        float e = 4.0 + 20.0 * vn(vec2(along / 30.0, 3.1 + float(s))) + 7.0 * vn(vec2(along / 6.0, 9.7));
+        // a paving joint straight across the road, chipped along its length
+        float e = 22.0 + 4.0 * (vn(vec2(along / 9.0, 3.1 + float(s))) - 0.5);
         if (d < e) return true;
-        // broken-off pieces just past the worn edge
-        return d < e + 14.0 && vn(wp / 4.0) > 0.74 && vn(wp / 15.0 + 5.0) > 0.45;
+        return d < e + 9.0 && vn(wp / 3.5) > 0.8;
     }
-    float m = 0.62 * vn(wp / 34.0) + 0.38 * vn(wp / 10.0 + 7.0);
-    return m > 0.06 + 0.94 * d / band;
+    float line = 34.0 + 52.0 * (vn(vec2(along / 150.0, 1.7 + float(s))) - 0.5)
+        + 10.0 * (vn(vec2(along / 26.0, 5.3)) - 0.5);
+    // tufts: short spikes past the edge, two texels wide
+    float tuft = h(vec2(floor(along * texel_per_unit / 2.0), 7.0 + float(s)));
+    float spike = tuft > 0.62 ? 1.5 + 4.5 * h(vec2(floor(along * texel_per_unit / 2.0), 2.0)) : 0.0;
+    return d < line + (soft_lp(lp) ? spike : 0.0);
 }
 bool shown(vec2 lp) {
     if (mode == 0) return reaches(lp, side);
@@ -19867,11 +19876,26 @@ void fragment() {
     vec2 t = floor(local);
     float px = 1.0 / texel_per_unit;
     vec2 lp = origin + (t + 0.5) * px;
-    if (!shown(lp)) discard;
-    bool rim = !shown(lp + vec2(px, 0.0)) || !shown(lp - vec2(px, 0.0)) || !shown(lp + vec2(0.0, px)) || !shown(lp - vec2(0.0, px));
-    vec4 c = texture(TEXTURE, UV);
-    if (rim) c.rgb *= paved(lp) ? 0.58 : 0.8;
-    COLOR = c;
+    bool on = shown(lp);
+    if (!on) {
+        // the raised edge casts a short shadow down-right onto the lower ground
+        if (shown(lp - vec2(px, px) * 2.0) || shown(lp - vec2(0.0, px) * 2.0)) {
+            COLOR = vec4(0.0, 0.0, 0.0, paved(lp) ? 0.32 : 0.26);
+        } else {
+            discard;
+        }
+    } else {
+        vec4 c = texture(TEXTURE, UV);
+        // lit lip on the top-left side of the edge, dark crack on paving
+        bool lip = !shown(lp - vec2(px, 0.0)) || !shown(lp - vec2(0.0, px));
+        bool rim = lip || !shown(lp + vec2(px, 0.0)) || !shown(lp + vec2(0.0, px));
+        if (paved(lp)) {
+            if (rim) c.rgb *= 0.6;
+        } else if (lip) {
+            c.rgb = min(c.rgb * 1.18 + 0.03, vec3(1.0));
+        }
+        COLOR = c;
+    }
 }"""
 var _ground_edge_shader = null
 
@@ -19921,6 +19945,72 @@ func _add_ground_edge_blends(chunk,coord,own_path):
         band.material = mat
         band.set_meta("ground_edge_blend",fam)
         chunk.add_child(band)
+
+# --- seam dressing --------------------------------------------------------
+# As in Project Zomboid / Stardew Valley, a terrain border is finished with
+# vegetation: bushes, tall grass, weeds and fallen branches sit along the
+# meandering edge drawn by GROUND_EDGE_SHADER, so the eye reads a field or
+# forest edge instead of a texture seam. Visual only, never on roads, pavements
+# or buildings. The edge line repeats the shader's maths on the CPU.
+func _seam_h(p:Vector2) -> float:
+    var v = sin(p.dot(Vector2(127.1,311.7))) * 43758.5453
+    return v - floor(v)
+
+func _seam_vn(p:Vector2) -> float:
+    var i = p.floor()
+    var f = p - i
+    f = f * f * (Vector2(3,3) - 2.0 * f)
+    var a = lerp(_seam_h(i),_seam_h(i + Vector2(1,0)),f.x)
+    var b = lerp(_seam_h(i + Vector2(0,1)),_seam_h(i + Vector2(1,1)),f.x)
+    return lerp(a,b,f.y)
+
+func _seam_line(along:float,s:int) -> float:
+    return 34.0 + 52.0 * (_seam_vn(Vector2(along / 150.0,1.7 + float(s))) - 0.5) + 10.0 * (_seam_vn(Vector2(along / 26.0,5.3)) - 0.5)
+
+func _dress_ground_seams(chunk,coord):
+    var own_rank = int(GROUND_EDGE_RANK.get(_ground_family(coord),0))
+    if not RegionCatalog.poi_for_chunk(coord).is_empty():
+        return
+    var blocked = []
+    for child in chunk.get_children():
+        if child.has_meta("world_building"):
+            var sz:Vector2 = child.get_meta("building_size",Vector2.ZERO)
+            var fh = float(child.get_meta("facade_height",0.0))
+            var r = Rect2(child.position - sz * 0.5 - Vector2(0,fh),sz + Vector2(0,fh + 14.0))
+            blocked.append(r.grow(10.0))
+    var sides = [Vector2i(-1,0),Vector2i(1,0),Vector2i(0,-1),Vector2i(0,1)]
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 73856093 + coord.y * 19349663)) + 5
+    var origin = Vector2(coord) * CHUNK_SIZE
+    for s in range(4):
+        var fam = _ground_family(coord + sides[s])
+        if int(GROUND_EDGE_RANK.get(fam,0)) <= own_rank or not (fam == "rural" or fam == "woodland"):
+            continue
+        var kinds = [2,3,4,4,7,6,3] if fam == "woodland" else [3,4,4,7,3,1,0]
+        var t = rng.randf_range(10.0,40.0)
+        while t < CHUNK_SIZE - 10.0:
+            var along_world = (origin.y if s < 2 else origin.x) + t
+            var d = _seam_line(along_world,s) + rng.randf_range(-6.0,4.0)
+            var lp = Vector2.ZERO
+            match s:
+                0: lp = Vector2(d,t)
+                1: lp = Vector2(CHUNK_SIZE - d,t)
+                2: lp = Vector2(t,d)
+                3: lp = Vector2(t,CHUNK_SIZE - d)
+            var on_street = (lp.x >= 268.0 and lp.x < 500.0) or (lp.y >= 268.0 and lp.y < 500.0)
+            var free = not on_street
+            for r in blocked:
+                if r.has_point(lp):
+                    free = false
+                    break
+            if free:
+                var kind = kinds[rng.randi_range(0,kinds.size() - 1)]
+                var spr = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),lp,rng.randf_range(0.42,0.56))
+                if spr != null:
+                    spr.offset = Vector2(0,-24)
+                    spr.flip_h = rng.randf() < 0.5
+                    spr.set_meta("ground_seam_dressing",kind)
+            t += rng.randf_range(26.0,58.0)
 
 func _decorate_region_ground(chunk,coord,profile):
     if bool(profile.get("legacy",false)) or coord == Vector2i(0,0):
