@@ -19741,9 +19741,8 @@ const DISTRICT_GROUND = {
 }
 
 func _district_ground_path(coord) -> String:
-    var family = str(DISTRICT_GROUND.get(RegionCatalog.district_id_for_chunk(coord),""))
-    if family == "":
-        return ""
+    # city districts (and the starting crossroads) use the HD city ground
+    var family = str(DISTRICT_GROUND.get(RegionCatalog.district_id_for_chunk(coord),"city"))
     var path = "res://art/world_hd/ground_%s_hd.png" % family
     return path if _hd_exists(path) else ""
 
@@ -19764,7 +19763,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/vehicles/vehicles_hd_v1.png")
     paths.append("res://art/high_risk/hr_props_v1.png")
     paths.append("res://settlement_props_v1.png")
-    for family in ["rural","woodland","military","industrial"]:
+    for family in ["city","rural","woodland","military","industrial"]:
         paths.append("res://art/world_hd/ground_%s_hd.png" % family)
     for family in ["rural","woodland","military","industrial","city"]:
         paths.append("res://art/world_hd/yard_%s_hd.png" % family)
@@ -19776,7 +19775,7 @@ func _ensure_world_hd_preloaded():
 func _build_ground(chunk,coord):
     _ensure_world_hd_preloaded()
     var ground_sprite = Sprite2D.new()
-    var district_ground = _district_ground_path(coord) if coord != Vector2i(0,0) else ""
+    var district_ground = _district_ground_path(coord)
     if district_ground != "":
         ground_sprite.texture = load(district_ground)
         ground_sprite.scale = Vector2(0.5,0.5)
@@ -19807,7 +19806,7 @@ func _build_ground(chunk,coord):
 #     industrial > city) runs into its neighbour in large organic lobes with a
 #     dark rim, like grass or gravel spreading over a lot.
 const GROUND_EDGE_BAND = 96.0
-const GROUND_EDGE_RANK = {"":0,"industrial":1,"military":2,"rural":3,"woodland":4}
+const GROUND_EDGE_RANK = {"":0,"city":0,"industrial":1,"military":2,"rural":3,"woodland":4}
 const GROUND_EDGE_SHADER = """shader_type canvas_item;
 // mode 0: district band - a strip of the neighbour's ground drawn over this
 //         chunk's edge, seam style chosen by the road layout under it;
@@ -19848,7 +19847,7 @@ bool reaches(vec2 lp, int s) {
     vec2 wp = world_origin + lp;
     if (paved(lp)) {
         float along = s < 2 ? wp.y : wp.x;
-        float e = 6.0 + 12.0 * vn(vec2(along / 26.0, 3.1 + float(s))) + 5.0 * vn(vec2(along / 7.0, 9.7));
+        float e = 4.0 + 20.0 * vn(vec2(along / 30.0, 3.1 + float(s))) + 7.0 * vn(vec2(along / 6.0, 9.7));
         if (d < e) return true;
         // broken-off pieces just past the worn edge
         return d < e + 14.0 && vn(wp / 4.0) > 0.74 && vn(wp / 15.0 + 5.0) > 0.45;
@@ -19877,10 +19876,8 @@ void fragment() {
 var _ground_edge_shader = null
 
 func _ground_family(coord) -> String:
-    if coord == Vector2i(0,0):
-        return ""
     var path = _district_ground_path(coord)
-    return "" if path == "" else str(DISTRICT_GROUND.get(RegionCatalog.district_id_for_chunk(coord),""))
+    return "" if path == "" else str(DISTRICT_GROUND.get(RegionCatalog.district_id_for_chunk(coord),"city"))
 
 func _add_ground_edge_blends(chunk,coord,own_path):
     var own_rank = int(GROUND_EDGE_RANK.get(_ground_family(coord),0))
@@ -20038,9 +20035,7 @@ func _build_showcase_chunk(chunk,coord):
     # 0.79 surface storytelling: these decals remain below actors/props and do not affect navigation.
     _street_detail_sprite(chunk,0,Vector2(500,390),-0.06,0.90,-4)
     _street_detail_sprite(chunk,1,Vector2(330,420),0.10,0.78,-4)
-    _street_detail_sprite(chunk,2,Vector2(382,306),0.0,1.00,-4)
     _street_detail_sprite(chunk,3,Vector2(470,292),0.0,0.72,-4)
-    _street_detail_sprite(chunk,4,Vector2(555,445),-0.18,0.82,-4)
     _street_detail_sprite(chunk,5,Vector2(245,315),0.08,0.74,-3)
     # 0.80 weather-reactive wet asphalt and authored evacuation aftermath cluster.
     _wet_surface_sprite(chunk,0,Vector2(382,330),-0.02,1.10,-5,0.48)
@@ -20169,13 +20164,15 @@ func _decorate_zone_street_art(chunk,zone,coord):
     # 0.79 zone-aware surface wear. Decals are intentionally sparse and low-z so they
     # add environmental history without competing with loot or infected silhouettes.
     if zone != "woodland":
-        var detail_indices = [0,1,3,4,5]
+        # zebra fragments (2) and pale hex patches (4) are not scattered any more:
+        # crossings and repairs are part of the ground art, loose copies looked stray
+        var detail_indices = [0,1,3,5]
         if zone == "commercial":
-            detail_indices = [0,2,3,5]
+            detail_indices = [0,3,5]
         elif zone == "industrial":
-            detail_indices = [1,3,4,0]
+            detail_indices = [1,3,0]
         elif zone == "military":
-            detail_indices = [3,4,1]
+            detail_indices = [3,1]
         for i in range(2):
             var detail_index = detail_indices[rng.randi_range(0,detail_indices.size()-1)]
             var detail_pos = Vector2(rng.randi_range(245,555),rng.randi_range(320,520))
@@ -21379,7 +21376,7 @@ func _settlement_clutter(chunk,coord,cell_data:Dictionary,style:String):
         if abs(p.x - 384.0) < 60.0 and abs(p.y - 384.0) < 60.0:
             continue                                   # keep the square tidy-ish
         if i < 6:
-            var detail = [1,0,4,1,3,4][i]
+            var detail = [1,0,3,1,3,0][i]
             _street_detail_sprite(chunk,detail,p,rng.randf_range(-0.3,0.3) if detail != 0 else 0.0,rng.randf_range(0.6,0.85),-3)
         else:
             var litter = _world_prop_sprite(SETTLEMENT_LITTER[rng.randi_range(0,6)],chunk,p,1,rng.randf_range(0.42,0.6))

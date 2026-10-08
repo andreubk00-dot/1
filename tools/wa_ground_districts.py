@@ -354,6 +354,91 @@ def industrial():
     return alb, hf
 
 
+def city():
+    """urban crossroads in the layout and palette of ground_chunk_v12: worn
+    asphalt with repairs, faded zebra crossings, stop lines and a dashed centre
+    line, granite kerbs with leaf litter in the gutter, concrete tile pavements
+    with broken tiles and weeds, autumn lawns."""
+    road, walk, plot, rv, rh, dv, dh = masks()
+    av, ah, inter = arm_masks(rv, rh)
+    # lawns
+    alb, hf, soil = grass_field(9201, base=(46, 60, 32), dry=(70, 72, 40), dirt=(64, 56, 42), dryness=0.15)
+    alb = blades(alb, plot & (soil < 0.5), 9202, 90000, cols=((52, 68, 34), (62, 80, 40), (74, 92, 46)))
+    # asphalt
+    asp = np.array((58, 59, 60), float)[None, None, :] * tone(9203, 30, 0.9, 1.08, 4, 3)[..., None]
+    alb[road] = asp[road]
+    hf[road] = 0.0
+    # wheel-polished lanes: slightly darker bands along each arm
+    c = (R0 + R1) / 2
+    for off in (-52, -26, 26, 52):
+        lane = (av & (np.abs(X - (c + off)) < 7)) | (ah & (np.abs(Y - (c + off)) < 7))
+        alb[lane] *= 0.94
+    # rectangular repairs with crisp edges
+    rng = np.random.default_rng(9204)
+    for _ in range(14):
+        x0, y0 = rng.uniform(R0, R1 - 30), rng.uniform(0, W - 30)
+        if rng.random() < 0.5:
+            x0, y0 = y0, x0
+        w, h = rng.uniform(10, 30), rng.uniform(8, 22)
+        m = road & (X >= x0) & (X < x0 + w) & (Y >= y0) & (Y < y0 + h)
+        alb[m] = np.array((48, 49, 51), float) * rng.uniform(0.96, 1.04)
+        edge = m & ~((X >= x0 + 0.6) & (X < x0 + w - 0.6) & (Y >= y0 + 0.6) & (Y < y0 + h - 0.6))
+        alb[edge] = (40, 40, 42)
+    alb, hf = cracks(alb, hf, road, 9205, 150, (36, 36, 38))
+    oil = soft(noise(9206, 12, 3), 0.8, 0.85) * road
+    alb *= (1 - 0.18 * oil)[..., None]
+    alb = speckle(alb, road, 0.012, [(92, 92, 90), (40, 40, 42)], 9207)
+    # markings (worn: paint missing in clusters)
+    paint = np.array((178, 176, 164), float)
+    wear = (noise(9208, 7, 2) > 0.3) & (noise(9217, 2, 1) > 0.12)
+    marks = np.zeros((N, N), bool)
+    # zebra crossings on every arm just outside the junction
+    for a, b in ((253, 279), (489, 515)):
+        zv = av & (Y >= a) & (Y < b) & (((X - R0 - 4) % 14) < 8) & (X > R0 + 3) & (X < R1 - 3)
+        zh = ah & (X >= a) & (X < b) & (((Y - R0 - 4) % 14) < 8) & (Y > R0 + 3) & (Y < R1 - 3)
+        marks |= zv | zh
+    # stop lines on the inbound half, dashed centre line
+    marks |= av & (np.abs(Y - 247) < 1.0) & (X > R0 + 3) & (X < c)
+    marks |= av & (np.abs(Y - 521) < 1.0) & (X > c) & (X < R1 - 3)
+    marks |= ah & (np.abs(X - 247) < 1.0) & (Y > c) & (Y < R1 - 3)
+    marks |= ah & (np.abs(X - 521) < 1.0) & (Y > R0 + 3) & (Y < c)
+    dash_v = av & (np.abs(X - c) < 1.0) & ((Y % 24) < 10) & ((Y < 240) | (Y > 528))
+    dash_h = ah & (np.abs(Y - c) < 1.0) & ((X % 24) < 10) & ((X < 240) | (X > 528))
+    marks |= dash_v | dash_h
+    marks &= wear
+    alb[marks] = paint * tone(9209, 6, 0.9, 1.0, 3, 2)[marks][..., None]
+    # kerbs: granite edge stones along the carriageway, shadow on the road side
+    edge_d = np.minimum(np.minimum(np.abs(X - R0), np.abs(X - R1)), np.minimum(np.abs(Y - R0), np.abs(Y - R1)))
+    kerb = walk & (edge_d < 2.0)
+    alb[kerb] = (128, 126, 118)
+    kerb_lit = walk & (edge_d < 0.6)
+    alb[kerb_lit] = (150, 148, 140)
+    gutter = road & ~inter & (edge_d < 4.0)
+    alb[gutter] *= 0.82
+    alb = leaves(alb, gutter, 0.08, 9210)
+    # pavements: concrete tiles with grout, per-tile tone, broken / missing tiles
+    tile = 12.0
+    tx, ty = np.floor(X / tile), np.floor(Y / tile)
+    tid = (tx * 92821 + ty * 68917) % 997
+    ttone = 0.9 + 0.12 * ((tid * 7919) % 13) / 12.0
+    pav = np.array((98, 94, 82), float)[None, None, :] * ttone[..., None]
+    sw = walk & ~kerb
+    alb[sw] = pav[sw]
+    grout = sw & (((X % tile) < 0.6) | ((Y % tile) < 0.6))
+    alb[grout] = (70, 68, 60)
+    broken = sw & (((tid * 31) % 97) < 4)
+    alb[broken] = (74, 64, 50)
+    alb = speckle(alb, broken, 0.25, [(110, 104, 90), (60, 52, 42)], 9211)
+    alb = blades(alb, grout & (noise(9212, 18, 2) > 0.62), 9213, 9000, cols=((62, 80, 40), (76, 94, 46)))
+    alb = speckle(alb, sw, 0.01, [(120, 116, 104), (70, 66, 58)], 9214)
+    # lawn kerb: low dark edge where the lawn meets the pavement
+    lawn_edge = plot & ((np.abs(X - SW0) < 1.0) | (np.abs(X - SW1) < 1.0) | (np.abs(Y - SW0) < 1.0) | (np.abs(Y - SW1) < 1.0))
+    alb[lawn_edge] = (52, 52, 46)
+    alb = leaves(alb, plot, 0.02, 9215)
+    alb = leaves(alb, sw, 0.004, 9216)
+    return alb, hf
+
+
 # ---------------------------------------------------------------- yards ---
 # Compound yards (POI / settlement / High Risk cells): the same materials with
 # no public road cross. Multi-chunk compounds tile them seamlessly, and their
@@ -462,7 +547,7 @@ YARDS = {'rural': rural_yard, 'woodland': woodland_yard, 'military': military_ya
 
 
 PALETTE = {'rural': 30, 'woodland': 30, 'military': 26, 'industrial': 28, 'city': 22}
-FAMILIES = {'rural': rural, 'woodland': woodland, 'military': military, 'industrial': industrial}
+FAMILIES = {'city': city, 'rural': rural, 'woodland': woodland, 'military': military, 'industrial': industrial}
 
 
 def build_all(P):
@@ -472,7 +557,7 @@ def build_all(P):
     os.makedirs(out, exist_ok=True)
     global RAGGED
     for name, fn in FAMILIES.items():
-        RAGGED = 1.0 if name in ('rural', 'woodland') else 0.4
+        RAGGED = 1.0 if name in ('rural', 'woodland') else (0.0 if name == 'city' else 0.4)
         alb, hf = fn()
         img = Image.fromarray(clamp8(shade(alb, hf, 0.9)), 'RGB')
         img = pixel_finish(img, colours=PALETTE.get(name, 32), jitter=0.0, wrap=True)
