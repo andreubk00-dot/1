@@ -1,0 +1,57 @@
+name: Endless Defenders v1.8.21 Balance QA
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - endless-defenders-balance-v1821
+    paths:
+      - pc/**
+      - iphone/**
+      - tests/**
+      - .github/workflows/balance-qa.yml
+  pull_request:
+    branches:
+      - endless-defenders-iphone-v1810
+
+permissions:
+  contents: read
+
+jobs:
+  balance-and-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test runner
+        run: npm install --no-save --no-package-lock playwright@1.58.2
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium webkit
+      - name: Run balancing regression suite
+        run: node tests/balance-v1821.test.cjs
+      - name: Run deterministic complete-run simulations
+        run: |
+          for profile in fresh progressed veteran; do
+            for seed in 12345 42 8675309 444 99173; do
+              node tests/simulate-runs.cjs "$profile" "$seed" 1
+            done
+          done
+      - name: Serve both static builds
+        run: |
+          nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory pc > /tmp/pc-http.log 2>&1 &
+          nohup python3 -m http.server 4174 --bind 127.0.0.1 --directory iphone > /tmp/phone-http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && curl -fsS http://127.0.0.1:4174/ >/dev/null && break
+            sleep 1
+          done
+      - name: Test PC and mobile UX in Chromium and WebKit
+        run: node tests/browser-smoke.cjs
+      - name: Upload browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: balance-browser-screenshots
+          path: screenshots/
+          if-no-files-found: ignore
