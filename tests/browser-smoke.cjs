@@ -29,6 +29,23 @@ async function smoke(profile){
   assert(await page.locator('#resourceHelpScreen').isVisible(),'Resource dialog failed to open');
   await page.locator('#resourceHelpClose').click();
   assert(!(await page.locator('#resourceHelpScreen').isVisible()),'Resource dialog failed to close');
+  // Verify the full contract UI on both desktop and mobile before combat.
+  const contract=await page.evaluate(()=>{
+    const g=window.__ENDLESS_DEFENDERS__;
+    g.save.bestWave=120;
+    g.save.defenderPity.volt=2;
+    g.openModal('collectionScreen');
+    const panels=[...document.querySelectorAll('.contract-hunt-forecast')].map(el=>el.textContent);
+    const voltRow=[...document.querySelectorAll('.defender-row')].find(el=>el.textContent.includes('Вольт'));
+    const forecast=g.eligibleContractBossWaves('volt');
+    return {panels:panels.length,forecast,hasVoltGuide:!!voltRow?.querySelector('.contract-hunt-forecast'),
+      voltText:voltRow?.querySelector('.contract-hunt-forecast')?.textContent||''};
+  });
+  assert(contract.panels>=5,'Missing contract hunting guides');
+  assert.deepEqual(contract.forecast,[100,130,160],'Incorrect eligible Volt bosses');
+  assert(contract.hasVoltGuide&&contract.voltText.includes('100')&&contract.voltText.includes('130'),
+    'Volt contract guide missing future boss waves');
+  await page.evaluate(()=>window.__ENDLESS_DEFENDERS__.closeModal('collectionScreen'));
   const result=await page.evaluate(()=>{
     const g=window.__ENDLESS_DEFENDERS__;g.save.tutorialDone=true;
     g.audio.enabled=false;g.startRun(false);
