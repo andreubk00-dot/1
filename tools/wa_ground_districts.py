@@ -354,7 +354,114 @@ def industrial():
     return alb, hf
 
 
-PALETTE = {'rural': 30, 'woodland': 30, 'military': 26, 'industrial': 28}
+# ---------------------------------------------------------------- yards ---
+# Compound yards (POI / settlement / High Risk cells): the same materials with
+# no public road cross. Multi-chunk compounds tile them seamlessly, and their
+# outer edges blend into the district with the runtime edge shader.
+def rural_yard():
+    alb, hf, soil = grass_field(5101, dryness=0.5)
+    # worn footpaths between the plots
+    n = noise(5102, 90, 3)
+    path = (np.abs(n - 0.5) < 0.018) | (np.abs(noise(5103, 120, 2) - 0.5) < 0.014)
+    alb = blend(alb, (98, 84, 62), path * 1.0)
+    hf -= path * 0.3
+    garden = soft(noise(5104, 70, 3), 0.7, 0.76)
+    alb = blend(alb, (82, 66, 48), garden * 0.9)
+    alb = blades(alb, ~path & (garden < 0.5), 5105, 120000)
+    alb = speckle(alb, path, 0.05, [(132, 122, 104), (78, 66, 50)], 5106)
+    alb = clusters(alb, ~path & (garden < 0.5), [(186, 170, 80), (206, 204, 190)], 5107, 0.0005)
+    alb = leaves(alb, np.ones((N, N), bool), 0.003, 5108)
+    return alb, hf
+
+
+def woodland_yard():
+    litter = np.array((72, 60, 44), float)[None, None, :] * tone(6101, 50, 0.84, 1.1, 4, 3)[..., None]
+    alb = litter.copy()
+    hf = 0.6 * noise(6102, 8, 3)
+    mossy = soft(noise(6103, 40, 3), 0.42, 0.6)
+    alb = blend(alb, (64, 82, 46), mossy * 0.8)
+    # trampled clearing: packed earth in the middle of the yard
+    trodden = soft(noise(6104, 110, 2), 0.5, 0.58)
+    alb = blend(alb, (94, 80, 60), trodden * 0.85)
+    alb = clusters(alb, trodden < 0.5, [(132, 94, 54), (112, 80, 46), (150, 112, 64), (86, 64, 42)], 6105, 0.08)
+    alb = clusters(alb, mossy > 0.5, [(78, 100, 50), (94, 116, 58)], 6106, 0.05)
+    alb = speckle(alb, trodden > 0.5, 0.04, [(124, 112, 94), (72, 60, 44)], 6107)
+    alb = blades(alb, (mossy > 0.5) & (trodden < 0.5), 6108, 40000)
+    alb = leaves(alb, np.ones((N, N), bool), 0.007, 6109)
+    return alb, hf
+
+
+def _slabs(alb, hf, m, sx, sy, joint_col, seed):
+    jx = ((X % sx) < 0.8) | ((Y % sy) < 0.8)
+    joint = m & jx
+    alb[joint] = joint_col
+    hf[joint] -= 0.5
+    cell = np.floor(X / sx) * 7 + np.floor(Y / sy) * 13
+    alb[m] *= (1.0 + 0.035 * np.sin(cell * 1.7 + seed))[m][..., None]
+    return alb, hf, joint
+
+
+def military_yard():
+    slab = np.array((124, 122, 112), float)[None, None, :] * tone(7101, 30, 0.88, 1.04, 4, 3)[..., None]
+    alb = slab.copy()
+    hf = np.zeros((N, N))
+    allm = np.ones((N, N), bool)
+    alb, hf, joint = _slabs(alb, hf, allm, 48.0, 48.0, (84, 82, 76), 0.3)
+    alb, hf = cracks(alb, hf, allm, 7102, 90, (88, 86, 80))
+    alb = clusters(alb, joint, [(84, 100, 50), (98, 112, 58)], 7103, 0.15)
+    gv = soft(noise(7104, 70, 3), 0.6, 0.68)
+    gcol = np.array((116, 110, 98), float)[None, None, :] * tone(7105, 3, 0.82, 1.08, 4, 2)[..., None]
+    alb = alb * (1 - gv[..., None]) + gcol * gv[..., None]
+    alb = speckle(alb, gv > 0.5, 0.2, [(150, 146, 134), (84, 80, 72), (124, 116, 100)], 7106)
+    alb = speckle(alb, gv < 0.5, 0.012, [(146, 142, 132), (100, 98, 90)], 7107)
+    alb = leaves(alb, gv > 0.5, 0.002, 7108)
+    return alb, hf
+
+
+def industrial_yard():
+    con = np.array((112, 110, 102), float)[None, None, :] * tone(8101, 28, 0.86, 1.06, 4, 3)[..., None]
+    alb = con.copy()
+    hf = np.zeros((N, N))
+    allm = np.ones((N, N), bool)
+    alb, hf, joint = _slabs(alb, hf, allm, 64.0, 64.0, (78, 76, 70), 1.1)
+    pt = soft(noise(8102, 40, 3), 0.66, 0.7)
+    alb = blend(alb, (86, 86, 82), pt * 0.7)
+    alb, hf = cracks(alb, hf, allm, 8103, 140, (64, 62, 58))
+    oil = soft(noise(8104, 14, 3), 0.78, 0.84)
+    alb *= (1 - 0.22 * oil)[..., None]
+    lt = soft(noise(8105, 90, 3), 0.6, 0.68)
+    lcol = np.array((100, 94, 84), float)[None, None, :] * tone(8106, 3, 0.82, 1.08, 4, 2)[..., None]
+    alb = alb * (1 - lt[..., None]) + lcol * lt[..., None]
+    alb = speckle(alb, lt > 0.5, 0.2, [(132, 126, 114), (72, 66, 58), (118, 80, 52)], 8107)
+    alb = speckle(alb, lt < 0.5, 0.012, [(140, 136, 126), (88, 86, 80)], 8108)
+    alb = blades(alb, (lt > 0.5) & (noise(8109, 20, 2) > 0.7), 8110, 20000)
+    alb = clusters(alb, joint, [(84, 100, 50)], 8111, 0.08)
+    return alb, hf
+
+
+def city_yard():
+    # worn courtyard asphalt in the palette of ground_chunk_v12's carriageway
+    asp = np.array((60, 61, 62), float)[None, None, :] * tone(9101, 26, 0.9, 1.08, 4, 3)[..., None]
+    alb = asp.copy()
+    hf = np.zeros((N, N))
+    allm = np.ones((N, N), bool)
+    patch = soft(noise(9102, 34, 3), 0.66, 0.7)
+    alb = blend(alb, (48, 49, 50), patch * 0.8)
+    alb, hf = cracks(alb, hf, allm, 9103, 160, (38, 38, 40))
+    worn = soft(noise(9104, 60, 3), 0.7, 0.76)
+    alb = blend(alb, (84, 80, 70), worn * 0.7)
+    alb = speckle(alb, allm, 0.01, [(92, 92, 90), (44, 44, 46)], 9105)
+    seams = (np.abs(noise(9106, 50, 2) - 0.5) < 0.01)
+    alb = blades(alb, seams, 9107, 9000)
+    alb = leaves(alb, allm, 0.002, 9108)
+    return alb, hf
+
+
+YARDS = {'rural': rural_yard, 'woodland': woodland_yard, 'military': military_yard,
+         'industrial': industrial_yard, 'city': city_yard}
+
+
+PALETTE = {'rural': 30, 'woodland': 30, 'military': 26, 'industrial': 28, 'city': 22}
 FAMILIES = {'rural': rural, 'woodland': woodland, 'military': military, 'industrial': industrial}
 
 
@@ -371,6 +478,12 @@ def build_all(P):
         img = pixel_finish(img, colours=PALETTE.get(name, 32), jitter=0.0, wrap=True)
         img.convert('RGB').save(os.path.join(out, 'ground_%s_hd.png' % name))
         print('ground', name, flush=True)
+    for name, fn in YARDS.items():
+        alb, hf = fn()
+        img = Image.fromarray(clamp8(shade(alb, hf, 0.9)), 'RGB')
+        img = pixel_finish(img, colours=PALETTE.get(name, 28), jitter=0.0, wrap=True)
+        img.convert('RGB').save(os.path.join(out, 'yard_%s_hd.png' % name))
+        print('yard', name, flush=True)
 
 
 if __name__ == '__main__':

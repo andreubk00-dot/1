@@ -19766,6 +19766,8 @@ func _ensure_world_hd_preloaded():
     paths.append("res://settlement_props_v1.png")
     for family in ["rural","woodland","military","industrial"]:
         paths.append("res://art/world_hd/ground_%s_hd.png" % family)
+    for family in ["rural","woodland","military","industrial","city"]:
+        paths.append("res://art/world_hd/yard_%s_hd.png" % family)
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
@@ -19797,26 +19799,80 @@ func _build_ground(chunk,coord):
         _add_ground_decals(chunk,coord)
     _decorate_region_ground(chunk,coord,ground_profile)
 
-# District ground meets at chunk borders. Instead of a ruler-straight seam, the
-# softer ground (woodland > rural > military > industrial > city asphalt) creeps
-# into its neighbour in a ragged, pixel-clustered band.
-const GROUND_EDGE_BAND = 44.0
+# District ground meets at chunk borders. The seam follows what lies on the
+# ground instead of a straight chunk line or random dither:
+#   * carriageway: the surface changes at a jagged worn edge with a dark crack
+#     line and a few broken-off pieces, the way a paved road really ends;
+#   * verges and plots: the softer ground (woodland > rural > military >
+#     industrial > city) runs into its neighbour in large organic lobes with a
+#     dark rim, like grass or gravel spreading over a lot.
+const GROUND_EDGE_BAND = 96.0
 const GROUND_EDGE_RANK = {"":0,"industrial":1,"military":2,"rural":3,"woodland":4}
 const GROUND_EDGE_SHADER = """shader_type canvas_item;
-uniform int side;          // 0 west, 1 east, 2 north, 3 south (edge of this chunk)
+// mode 0: district band - a strip of the neighbour's ground drawn over this
+//         chunk's edge, seam style chosen by the road layout under it;
+// mode 1/2: compound yard covering the chunk - near its outer edges (flags in
+//         'outer': W, E, N, S) it gives way to the district ground beneath,
+//         organically (1, grass / forest yards) or at a worn paved edge (2).
+uniform int mode = 0;
+uniform int side;              // mode 0: 0 west, 1 east, 2 north, 3 south
+uniform vec4 outer = vec4(0.0);
 uniform float texel_per_unit = 2.0;
-uniform float band = 44.0;
-uniform vec4 region;       // band region in texels (x, y, w, h)
-varying vec2 local;        // texel position inside the region
-float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+uniform float band = 96.0;     // world units
+uniform vec2 origin;           // sprite origin, chunk-local world units
+uniform vec2 world_origin;     // chunk origin, world units (noise variety)
+uniform bool soft_verges = true;
+varying vec2 local;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y);
+}
+float edge_dist(vec2 lp, int s) {
+    return s == 0 ? lp.x : (s == 1 ? 768.0 - lp.x : (s == 2 ? lp.y : 768.0 - lp.y));
+}
+bool on_road(vec2 lp) {
+    return (lp.x >= 299.0 && lp.x < 469.0) || (lp.y >= 299.0 && lp.y < 469.0);
+}
+bool on_walk(vec2 lp) {
+    return ((lp.x >= 274.0 && lp.x < 494.0) || (lp.y >= 274.0 && lp.y < 494.0)) && !on_road(lp);
+}
+bool paved(vec2 lp) {
+    if (mode == 1) return false;
+    if (mode == 2) return true;
+    return on_road(lp) || (on_walk(lp) && !soft_verges);
+}
+// true where the ground across edge s reaches this point
+bool reaches(vec2 lp, int s) {
+    float d = edge_dist(lp, s);
+    vec2 wp = world_origin + lp;
+    if (paved(lp)) {
+        float along = s < 2 ? wp.y : wp.x;
+        float e = 6.0 + 12.0 * vn(vec2(along / 26.0, 3.1 + float(s))) + 5.0 * vn(vec2(along / 7.0, 9.7));
+        if (d < e) return true;
+        // broken-off pieces just past the worn edge
+        return d < e + 14.0 && vn(wp / 4.0) > 0.74 && vn(wp / 15.0 + 5.0) > 0.45;
+    }
+    float m = 0.62 * vn(wp / 34.0) + 0.38 * vn(wp / 10.0 + 7.0);
+    return m > 0.06 + 0.94 * d / band;
+}
+bool shown(vec2 lp) {
+    if (mode == 0) return reaches(lp, side);
+    for (int s = 0; s < 4; s++) {
+        if (outer[s] > 0.5 && reaches(lp, s)) return false;
+    }
+    return true;
+}
 void vertex() { local = VERTEX; }
 void fragment() {
     vec2 t = floor(local);
-    float d = side == 0 ? t.x : (side == 1 ? region.z - 1.0 - t.x : (side == 2 ? t.y : region.w - 1.0 - t.y));
-    d /= texel_per_unit;
-    vec2 w = floor((t + region.xy) / texel_per_unit);
-    float n = 0.55 * h(floor(w / 11.0)) + 0.3 * h(floor(w / 4.0) + 17.0) + 0.15 * h(floor(w / 2.0) + 41.0);
-    if (n * 1.05 < d / band) discard;
+    float px = 1.0 / texel_per_unit;
+    vec2 lp = origin + (t + 0.5) * px;
+    if (!shown(lp)) discard;
+    bool rim = !shown(lp + vec2(px, 0.0)) || !shown(lp - vec2(px, 0.0)) || !shown(lp + vec2(0.0, px)) || !shown(lp - vec2(0.0, px));
+    vec4 c = texture(TEXTURE, UV);
+    if (rim) c.rgb *= paved(lp) ? 0.58 : 0.8;
+    COLOR = c;
 }"""
 var _ground_edge_shader = null
 
@@ -19861,7 +19917,10 @@ func _add_ground_edge_blends(chunk,coord,own_path):
         mat.set_shader_parameter("side",side)
         mat.set_shader_parameter("texel_per_unit",k)
         mat.set_shader_parameter("band",GROUND_EDGE_BAND)
-        mat.set_shader_parameter("region",Vector4(region.position.x,region.position.y,region.size.x,region.size.y))
+        mat.set_shader_parameter("origin",at)
+        mat.set_shader_parameter("world_origin",Vector2(coord) * CHUNK_SIZE)
+        # grass / forest verges spread organically; gravel and concrete ones are paved
+        mat.set_shader_parameter("soft_verges",fam == "rural" or fam == "woodland")
         band.material = mat
         band.set_meta("ground_edge_blend",fam)
         chunk.add_child(band)
@@ -20213,6 +20272,55 @@ func _tree_position_forbidden(chunk,pos):
                     return true
     return _tree_blocks_door_swing(chunk,pos)
 
+func _yard_family(g:String) -> String:
+    if g.begins_with("hunting") or g.begins_with("forest"):
+        return "woodland"
+    if g.begins_with("dacha") or g == "settlement_civic":
+        return "rural"
+    if g.begins_with("mil") or g == "settlement_military":
+        return "military"
+    if g.begins_with("rail") or g.begins_with("factory") or g.begins_with("vector") or g == "service_yard" or g == "garage_lanes" or g == "settlement_industrial":
+        return "industrial"
+    return "city"
+
+func _compound_yard_sprite(chunk,coord,g:String,path:String):
+    var tex = load(path)
+    var k = float(tex.get_width()) / CHUNK_SIZE
+    var yard = Sprite2D.new()
+    yard.name = "CompoundSurface"
+    yard.texture = tex
+    yard.centered = false
+    yard.scale = Vector2(1.0 / k,1.0 / k)
+    yard.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    yard.z_index = -8
+    if g.begins_with("vector"):
+        yard.modulate = Color(0.78,0.8,0.8)
+    elif g.begins_with("hospital") or g.begins_with("quarantine") or g == "settlement_medical":
+        yard.modulate = Color(1.08,1.1,1.08)
+    # outer edges: neighbours that are not part of the same compound
+    var poi_id = str(RegionCatalog.poi_for_chunk(coord).get("id",""))
+    var outer = Vector4.ZERO
+    var sides = [Vector2i(-1,0),Vector2i(1,0),Vector2i(0,-1),Vector2i(0,1)]
+    for s in range(4):
+        if str(RegionCatalog.poi_for_chunk(coord + sides[s]).get("id","")) != poi_id:
+            outer[s] = 1.0
+    if outer != Vector4.ZERO:
+        if _ground_edge_shader == null:
+            _ground_edge_shader = Shader.new()
+            _ground_edge_shader.code = GROUND_EDGE_SHADER
+        var fam = _yard_family(g)
+        var mat = ShaderMaterial.new()
+        mat.shader = _ground_edge_shader
+        mat.set_shader_parameter("mode",1 if fam == "rural" or fam == "woodland" else 2)
+        mat.set_shader_parameter("outer",outer)
+        mat.set_shader_parameter("texel_per_unit",k)
+        mat.set_shader_parameter("band",72.0)
+        mat.set_shader_parameter("origin",Vector2.ZERO)
+        mat.set_shader_parameter("world_origin",Vector2(coord) * CHUNK_SIZE)
+        yard.material = mat
+    chunk.add_child(yard)
+    return yard
+
 func _decorate_major_poi_ground(chunk,ground_kind,coord=Vector2i.ZERO):
     # 0.85: physical language for multi-chunk compounds.  These marks live below
     # gameplay actors/buildings and make adjacent POI cells read as one facility.
@@ -20240,18 +20348,25 @@ func _decorate_major_poi_ground(chunk,ground_kind,coord=Vector2i.ZERO):
         surface = Color(0.185,0.183,0.175,1.0)
     elif g == "settlement_medical":
         surface = Color(0.250,0.258,0.244,1.0)
-    var mask = _rect(Vector2(384,384),Vector2(CHUNK_SIZE,CHUNK_SIZE),surface,chunk)
-    mask.z_index = -8
-    var yard_texture = Sprite2D.new()
-    yard_texture.name = "CompoundSurface"
-    yard_texture.texture = CompoundSurface.texture(surface,g.begins_with("dacha") or g.begins_with("hunting") or g == "settlement_civic")
-    yard_texture.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
-    yard_texture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    yard_texture.region_enabled = true
-    yard_texture.region_rect = Rect2(0,0,CHUNK_SIZE,CHUNK_SIZE)
-    yard_texture.position = Vector2(CHUNK_SIZE,CHUNK_SIZE) * 0.5
-    yard_texture.z_index = -8
-    chunk.add_child(yard_texture)
+    var yard_path = "res://art/world_hd/yard_%s_hd.png" % _yard_family(g)
+    var hd_yard = _hd_exists(yard_path)
+    if hd_yard:
+        # 1.38: compound yards use the pixel ground of their material and give
+        # way to the surrounding district at the compound's outer edges.
+        _compound_yard_sprite(chunk,coord,g,yard_path)
+    else:
+        var mask = _rect(Vector2(384,384),Vector2(CHUNK_SIZE,CHUNK_SIZE),surface,chunk)
+        mask.z_index = -8
+        var yard_texture = Sprite2D.new()
+        yard_texture.name = "CompoundSurface"
+        yard_texture.texture = CompoundSurface.texture(surface,g.begins_with("dacha") or g.begins_with("hunting") or g == "settlement_civic")
+        yard_texture.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+        yard_texture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        yard_texture.region_enabled = true
+        yard_texture.region_rect = Rect2(0,0,CHUNK_SIZE,CHUNK_SIZE)
+        yard_texture.position = Vector2(CHUNK_SIZE,CHUNK_SIZE) * 0.5
+        yard_texture.z_index = -8
+        chunk.add_child(yard_texture)
     chunk.set_meta("poi_masks_public_road",true)
     chunk.set_meta("poi_surface_opaque",true)
 
@@ -20259,18 +20374,19 @@ func _decorate_major_poi_ground(chunk,ground_kind,coord=Vector2i.ZERO):
     # textured so the fix does not become one flat painted rectangle. The seed is
     # sector-specific, preventing an obvious repeated dirt pattern across a multi-
     # chunk facility. These are visual-only stains below gameplay props.
-    var surface_rng = RandomNumberGenerator.new()
-    surface_rng.seed = int(abs(coord.x * 6700417 + coord.y * 15485863 + int(g.hash()))) + 113
-    var dirt = Color(0.07,0.075,0.065,0.09)
-    if g.begins_with("dacha") or g.begins_with("hunting"):
-        dirt = Color(0.11,0.095,0.055,0.11)
-    elif g.begins_with("hospital") or g.begins_with("quarantine"):
-        dirt = Color(0.07,0.085,0.075,0.075)
-    elif g.begins_with("vector"):
-        dirt = Color(0.03,0.035,0.032,0.14)
-    for i in range(14):
-        var stain_pos = Vector2(surface_rng.randf_range(28.0,CHUNK_SIZE-28.0),surface_rng.randf_range(28.0,CHUNK_SIZE-28.0))
-        _ellipse(stain_pos,surface_rng.randf_range(10.0,34.0),surface_rng.randf_range(3.0,9.0),dirt,chunk)
+    if not hd_yard:
+        var surface_rng = RandomNumberGenerator.new()
+        surface_rng.seed = int(abs(coord.x * 6700417 + coord.y * 15485863 + int(g.hash()))) + 113
+        var dirt = Color(0.07,0.075,0.065,0.09)
+        if g.begins_with("dacha") or g.begins_with("hunting"):
+            dirt = Color(0.11,0.095,0.055,0.11)
+        elif g.begins_with("hospital") or g.begins_with("quarantine"):
+            dirt = Color(0.07,0.085,0.075,0.075)
+        elif g.begins_with("vector"):
+            dirt = Color(0.03,0.035,0.032,0.14)
+        for i in range(14):
+            var stain_pos = Vector2(surface_rng.randf_range(28.0,CHUNK_SIZE-28.0),surface_rng.randf_range(28.0,CHUNK_SIZE-28.0))
+            _ellipse(stain_pos,surface_rng.randf_range(10.0,34.0),surface_rng.randf_range(3.0,9.0),dirt,chunk)
 
     match g:
         "garage_lanes":
@@ -21538,9 +21654,20 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
     var offset = cell_data.get("settlement_offset",Vector2i.ZERO)
     var mats = SETTLEMENT_GROUND_TEX.get(style,SETTLEMENT_GROUND_TEX["perron"])
     var origin = chunk.global_position
-    _settlement_tex(layer,mats[1],Rect2(0,0,CHUNK_SIZE,CHUNK_SIZE),origin)
-    _settlement_tex(layer,mats[0],Rect2(336,0,96,CHUNK_SIZE),origin,true)
-    _settlement_tex(layer,mats[0],Rect2(0,336,CHUNK_SIZE,96),origin)
+    # the town floor stops at the wall line on the outer sides (outside it the
+    # compound yard blends into the district); streets run on through the gates
+    var walls = cell_data.get("perimeter",{})
+    var x0 = SETTLEMENT_WALL_X_W if walls.has("w") else 0.0
+    var x1 = SETTLEMENT_WALL_X_E if walls.has("e") else float(CHUNK_SIZE)
+    var y0 = SETTLEMENT_WALL_Y_N if walls.has("n") else 0.0
+    var y1 = SETTLEMENT_WALL_Y_S if walls.has("s") else float(CHUNK_SIZE)
+    _settlement_tex(layer,mats[1],Rect2(x0,y0,x1 - x0,y1 - y0),origin)
+    var sy0 = y0 if walls.has("n") and not bool(walls["n"]) else 0.0
+    var sy1 = y1 if walls.has("s") and not bool(walls["s"]) else float(CHUNK_SIZE)
+    var sx0 = x0 if walls.has("w") and not bool(walls["w"]) else 0.0
+    var sx1 = x1 if walls.has("e") and not bool(walls["e"]) else float(CHUNK_SIZE)
+    _settlement_tex(layer,mats[0],Rect2(336,sy0,96,sy1 - sy0),origin,true)
+    _settlement_tex(layer,mats[0],Rect2(sx0,336,sx1 - sx0,96),origin)
     _settlement_street_marks(layer,style,rng,idx)
     _settlement_road_decals(layer,cell_data,style,rng)
     # town square on the central crossing
@@ -22133,10 +22260,18 @@ func _hr_ground(chunk,coord,site:Dictionary,cell:Dictionary,offset:Vector2i,rng)
     layer.z_index = -7
     chunk.add_child(layer)
     var origin = chunk.global_position
-    _settlement_tex(layer,str(mats[0]),Rect2(0,0,CHUNK_SIZE,CHUNK_SIZE),origin)
+    # the site surface stops at the PO-2 line on the outer sides: outside the
+    # fence the compound yard (blending into the district) shows, so the site no
+    # longer ends in a straight chunk-edge seam a few pixels past its fence
+    var fp = PoiCatalog.footprint(str(RegionCatalog.poi_for_chunk(coord).get("id","")))
+    var x0 = 12.0 if not fp.has(offset + Vector2i(-1,0)) else 0.0
+    var x1 = 756.0 if not fp.has(offset + Vector2i(1,0)) else float(CHUNK_SIZE)
+    var y0 = 14.0 if not fp.has(offset + Vector2i(0,-1)) else 0.0
+    var y1 = 754.0 if not fp.has(offset + Vector2i(0,1)) else float(CHUNK_SIZE)
+    _settlement_tex(layer,str(mats[0]),Rect2(x0,y0,x1 - x0,y1 - y0),origin)
     # kerbed service road along the open yard edge of every sector
-    _settlement_tex(layer,str(mats[1]),Rect2(0,458,CHUNK_SIZE,16),origin)
-    _rect(Vector2(384,458),Vector2(CHUNK_SIZE,2),Color(0.62,0.62,0.58,0.5),layer)
+    _settlement_tex(layer,str(mats[1]),Rect2(x0,458,x1 - x0,16),origin)
+    _rect(Vector2((x0 + x1) * 0.5,458),Vector2(x1 - x0,2),Color(0.62,0.62,0.58,0.5),layer)
     var lawn = cell.get("lawn",Rect2())
     if typeof(lawn) == TYPE_RECT2 and lawn.size != Vector2.ZERO:
         _rect(lawn.get_center() + Vector2(1,2),lawn.size + Vector2(2,2),Color(0.02,0.02,0.02,0.3),layer)
