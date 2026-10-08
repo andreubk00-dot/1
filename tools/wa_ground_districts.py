@@ -271,6 +271,64 @@ def potholes(alb, hf, m, seed, n, water=(70, 78, 80)):
     return alb, hf
 
 
+def road_paint(alb, rv, rh, col, centre_dash=(12.0, 10.0), edge_lines=False, wear=0.38):
+    """faded road markings: dashed centre line, optional solid edge lines."""
+    av, ah, inter = arm_masks(rv, rh)
+    c = (R0 + R1) / 2
+    worn = (noise(9501, 4, 2) > wear) & (noise(9502, 2, 1) > 0.18)
+    d, g = centre_dash
+    paint = (av & (np.abs(X - c) < 0.9) & ((Y % (d + g)) < d)) | (ah & (np.abs(Y - c) < 0.9) & ((X % (d + g)) < d))
+    if edge_lines:
+        for e in (R0 + 8.0, R1 - 8.0):
+            paint |= (av & (np.abs(X - e) < 0.8)) | (ah & (np.abs(Y - e) < 0.8))
+    m = paint & worn
+    alb[m] = alb[m] * 0.35 + np.array(col, float) * 0.65
+    return alb
+
+
+def manholes(alb, hf, rv, rh, seed, n=2):
+    """cast-iron covers on the carriageway: dark rim, lit top-left arc, grid."""
+    av, ah, inter = arm_masks(rv, rh)
+    rng = np.random.default_rng(seed)
+    c = (R0 + R1) / 2
+    spots = []
+    for _ in range(n):
+        if rng.random() < 0.5:
+            spots.append((c + rng.choice([-30, 30]), rng.choice([rng.uniform(40, 230), rng.uniform(540, 730)])))
+        else:
+            spots.append((rng.choice([rng.uniform(40, 230), rng.uniform(540, 730)]), c + rng.choice([-30, 30])))
+    for (cx, cy) in spots:
+        d = np.sqrt((X - cx) ** 2 + ((Y - cy) / 0.8) ** 2)
+        lid = d < 4.5
+        alb[lid] = (64, 62, 60)
+        grid = lid & (d < 3.6) & (((np.floor(X * 2) + np.floor(Y * 2)) % 3) == 0)
+        alb[grid] = (44, 42, 40)
+        rim = (d >= 4.5) & (d < 5.4)
+        alb[rim] = (36, 34, 32)
+        lit = rim & (X < cx) & (Y < cy)
+        alb[lit] = (110, 106, 100)
+        hf[lid] -= 0.2
+    return alb, hf
+
+
+def drains(alb, rv, rh, seed, step=150.0):
+    """storm-drain grates in the gutter along the kerbs."""
+    av, ah, inter = arm_masks(rv, rh)
+    rng = np.random.default_rng(seed)
+    off = rng.uniform(0, step)
+    for edge, side in ((R0, 1), (R1, -1)):
+        gx = edge + side * 3.0
+        for t in np.arange(off, W, step):
+            if R0 - 10 < t < R1 + 10:
+                continue
+            for (mask, u, v) in ((av, X, Y), (ah, Y, X)):
+                g = mask & (np.abs(u - gx) < 2.5) & (np.abs(v - t) < 5.0)
+                alb[g] = (40, 40, 40)
+                bars = g & ((np.floor(v * 2) % 2) == 0)
+                alb[bars] = (78, 76, 72)
+    return alb
+
+
 def rural():
     road, walk, plot, rv, rh, dv, dh = masks()
     alb, hf, soil = grass_field(1101, dryness=0.6)
@@ -387,7 +445,10 @@ def military():
     hf += 0.4 * noise(3108, 2, 2) * gravel_t
     alb = speckle(alb, gravel_t > 0.5, 0.2, [(150, 146, 134), (84, 80, 72), (124, 116, 100)], 3109)
     alb = blades(alb, plot & (gravel_t < 0.5), 3110, 60000, cols=((96, 92, 56), (110, 104, 62), (124, 116, 70)))
+    alb = road_paint(alb, rv, rh, (214, 210, 196), (14.0, 12.0), edge_lines=True, wear=0.45)
+    alb, hf = manholes(alb, hf, rv, rh, 3114, 2)
     alb, hf, gutter = kerbs(alb, hf, road, walk, (146, 144, 134), 14.0, 3)
+    alb = drains(alb, rv, rh, 3115)
     alb = clusters(alb, gutter, [(150, 104, 54), (84, 100, 50)], 3113, 0.05)
     alb = leaves(alb, plot, 0.002, 3111)
     return alb, hf
@@ -417,7 +478,10 @@ def industrial():
     pud = soft(noise(4112, 40, 3), 0.76, 0.8) * (lt > 0.5)
     alb = blend(alb, (60, 66, 68), pud * 0.8)
     alb = blades(alb, (plot & (lt < 0.5)) | ((lt > 0.5) & (noise(4113, 20, 2) > 0.68)), 4114, 50000)
+    alb = road_paint(alb, rv, rh, (206, 168, 52), (10.0, 10.0), edge_lines=False, wear=0.4)
+    alb, hf = manholes(alb, hf, rv, rh, 4118, 3)
     alb, hf, gutter = kerbs(alb, hf, road, walk, (138, 136, 128), 12.0, 4)
+    alb = drains(alb, rv, rh, 4119)
     alb = clusters(alb, gutter, [(150, 104, 54), (60, 58, 52)], 4117, 0.05)
     alb = leaves(alb, plot | walk, 0.003, 4115)
     return alb, hf

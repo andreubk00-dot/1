@@ -24584,7 +24584,46 @@ func _decorate_street_furniture(chunk,coord):
         _street_furniture_sprite(kinds[rng.randi_range(0,kinds.size() - 1)],chunk,slot,5)
         placed += 1
     chunk.set_meta("street_furniture_count",placed)
+    _dress_service_verges(chunk,coord,district_id,rng)
     _scatter_vegetation(chunk,coord,district_id)
+
+# 1.38: military and industrial streets are working roads: concrete blocks,
+# sandbags and cones at the checkpoints, drums, crates and boxes left on the
+# verges of the plants. Visual only, on the verge band beside the kerb.
+const VERGE_SETS = {
+    "military":[["road_barrier",0.5],["sandbags",0.45],["traffic_cone",0.4],["supply_crate",0.5],["road_sign",0.5]],
+    "industrial":[["barrel",0.5],["crate",0.5],["cardboard_boxes",0.5],["gas_can",0.5],["trash_bag",0.45],["traffic_cone",0.4]]
+}
+
+func _dress_service_verges(chunk,coord,district_id:String,rng):
+    var set_key = ""
+    if district_id.find("military") >= 0:
+        set_key = "military"
+    elif district_id.find("industrial") >= 0 or district_id == "rail_corridor":
+        set_key = "industrial"
+    if set_key == "" or not RegionCatalog.poi_for_chunk(coord).is_empty():
+        return
+    var kinds = VERGE_SETS[set_key]
+    var lines = [[Vector2(284,0),Vector2(0,1)],[Vector2(486,0),Vector2(0,1)],[Vector2(0,284),Vector2(1,0)],[Vector2(0,486),Vector2(1,0)]]
+    var count = 0
+    for li in range(lines.size()):
+        var base:Vector2 = lines[li][0]
+        var dir:Vector2 = lines[li][1]
+        for k in range(rng.randi_range(1,2)):
+            var t = rng.randf_range(30.0,250.0) if rng.randf() < 0.5 else rng.randf_range(520.0,740.0)
+            var p = base + dir * t
+            if _tree_blocks_door_swing(chunk,p) or _tree_overlaps_building(chunk,p):
+                continue
+            # a small group: main object plus one or two companions along the verge
+            var group = rng.randi_range(1,3)
+            for g in range(group):
+                var item = kinds[rng.randi_range(0,kinds.size() - 1)]
+                var q = p + dir * (float(g) * 14.0) + Vector2(dir.y,dir.x) * rng.randf_range(-3.0,3.0)
+                var spr = _world_prop_sprite(str(item[0]),chunk,q,4,float(item[1]))
+                if spr != null:
+                    spr.set_meta("service_verge",set_key)
+                    count += 1
+    chunk.set_meta("service_verge_props",count)
 
 func _create_lamp(chunk,pos):
     var lamp = Node2D.new()
@@ -24595,14 +24634,16 @@ func _create_lamp(chunk,pos):
     chunk.add_child(lamp)
 
     _world_prop_sprite("lamp",lamp,Vector2(0,-10),0,1.0)
-    _ellipse(Vector2(0,-31),1.5,1.2,Color(0.98,0.78,0.40,0.88),lamp)
+    # the HD lamp hangs its head on an arm to the east
+    var head = Vector2(5,-29) if _hd_exists("res://art/world_hd/props_hd.png") else Vector2(0,-31)
+    _ellipse(head,1.5,1.2,Color(0.98,0.78,0.40,0.88),lamp)
 
     var light = PointLight2D.new()
     light.texture = _make_base_radial_texture()
     light.texture_scale = 1.58
     light.energy = 0.0
     light.color = Color(1.0,0.73,0.38)
-    light.position = Vector2(0,-22)
+    light.position = head + Vector2(0,7)
     light.z_index = 1
     light.set_meta("night_energy",0.74)
     light.set_meta("broken",abs(int(pos.x*13.0 + pos.y*7.0)) % 5 == 0)
