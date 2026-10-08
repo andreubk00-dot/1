@@ -19792,6 +19792,7 @@ func _ensure_world_hd_preloaded():
     for family in ["rural","woodland","military","industrial","city"]:
         paths.append("res://art/world_hd/yard_%s_hd.png" % family)
     paths.append("res://art/world_hd/ground_decals_hd.png")
+    paths.append("res://art/world_hd/trees_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
@@ -24206,18 +24207,29 @@ func _create_tree(chunk,pos,scale_factor,force = false):
     tree.set_meta("world_tree",true)
     chunk.add_child(tree)
 
-    var tree_tex = load("res://tree_v3.png")
+    var hd_trees = _hd_exists("res://art/world_hd/trees_hd.png")
+    var tree_tex = load("res://art/world_hd/trees_hd.png") if hd_trees else load("res://tree_v3.png")
     if tree_tex != null:
         var sprite = Sprite2D.new()
         var tree_variant = _tree_variant_for(chunk,pos)
         var tree_atlas_tex = AtlasTexture.new()
         tree_atlas_tex.atlas = tree_tex
-        tree_atlas_tex.region = Rect2(tree_variant * 88,0,88,136)
-        sprite.texture = tree_atlas_tex
         tree.set_meta("tree_variant",tree_variant)
         sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-        sprite.position = Vector2(0,-43)
-        sprite.scale = Vector2(0.75,0.75)
+        if hd_trees:
+            # 1.38: HD pixel trees (tools/wa_trees_hd.py), 2 texels per world
+            # unit like the rest of the world; two individuals per species
+            var world_pos = (chunk.position if chunk != null else Vector2.ZERO) + pos
+            var alt = int(abs(int(world_pos.x) * 7 + int(world_pos.y) * 13)) % 2
+            tree_atlas_tex.region = Rect2((tree_variant + 3 * alt) * 132,0,132,204)
+            sprite.position = Vector2(0,-38.5)
+            sprite.scale = Vector2(0.5,0.5)
+            sprite.flip_h = int(abs(world_pos.x + world_pos.y)) % 3 == 0
+        else:
+            tree_atlas_tex.region = Rect2(tree_variant * 88,0,88,136)
+            sprite.position = Vector2(0,-43)
+            sprite.scale = Vector2(0.75,0.75)
+        sprite.texture = tree_atlas_tex
         sprite.z_index = 0
         tree.add_child(sprite)
     else:
