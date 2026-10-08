@@ -37,7 +37,7 @@ test('Disallowed relic IDs cannot bypass offered choices',()=>g.run.relics.lengt
 g.chooseRelic('warhead');
 test('Repeatable late relic grants reduced stat bonus',()=>g.run.mods.damage===1.08&&g.run.relics.length===9);
 const sw=fs.readFileSync(path.join(__dirname,'..','iphone','service-worker.js'),'utf8');
-test('PWA cache version advances with balanced build',()=>sw.includes('ed-mobile-v1.8.21'));
+test('PWA cache version advances with balanced build',()=>sw.includes('ed-mobile-v1.8.22'));
 test('Save schema retained unchanged',()=>html.includes('out.version=21')&&mobile.includes('out.version=21'));
 test('Early Lab prices remain unchanged through level eight',()=>Object.entries({damage:[55,1.55],core:[50,1.52],income:[75,1.62],start:[45,1.50]}).every(([k,[base,growth]])=>Array.from({length:9},(_,level)=>{g.save.lab[k]=level;return g.labUpgradeCost(k)===Math.floor(base*Math.pow(growth,level))}).every(Boolean)));
 test('All Lab late costs grow monotonically',()=>Object.keys(g.save.lab).every(k=>Array.from({length:20},(_,i)=>g.labUpgradeCost(k,i+1)>g.labUpgradeCost(k,i)).every(Boolean)));
