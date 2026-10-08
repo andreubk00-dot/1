@@ -15706,7 +15706,10 @@ func _decorate_interior_trim(root,inner_w,inner_h):
     return trim
 
 func _interior_floor_sprite(parent,sign_text,size):
-    var atlas = load("res://interior_floor_tiles_v5.png")
+    # 1.38: HD floor (tools/wa_interior_floor_hd.py), same layout at 2x
+    var hd_floor = _hd_exists("res://art/world_hd/interior_floor_hd.png")
+    var atlas = load("res://art/world_hd/interior_floor_hd.png") if hd_floor else load("res://interior_floor_tiles_v5.png")
+    var fk = 2.0 if hd_floor else 1.0
     if atlas == null:
         return null
     var root = Node2D.new()
@@ -15730,11 +15733,12 @@ func _interior_floor_sprite(parent,sign_text,size):
             var th = min(tile_size,inner_h - float(y)*tile_size)
             var tex = AtlasTexture.new()
             tex.atlas = atlas
-            tex.region = Rect2(variant*32,row*32,tw,th)
+            tex.region = Rect2(variant*32*fk,row*32*fk,tw*fk,th*fk)
             var sprite = Sprite2D.new()
             sprite.texture = tex
             sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
             sprite.centered = false
+            sprite.scale = Vector2(1.0 / fk,1.0 / fk)
             sprite.position = Vector2(-inner_w*0.5 + float(x)*tile_size,-inner_h*0.5 + float(y)*tile_size)
             if ((x+y) % 5) == 0:
                 sprite.modulate = Color(0.96,0.95,0.91,1.0)
@@ -19817,6 +19821,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/world_hd/ground_decals_hd.png")
     paths.append("res://art/world_hd/trees_hd.png")
     paths.append("res://art/world_hd/fence_hd.png")
+    paths.append("res://art/world_hd/interior_floor_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
@@ -21635,6 +21640,60 @@ func _settlement_wall_h(chunk,row:int,y:float,gate:bool,x_from:float = 0.0,x_to:
         _ellipse(Vector2((x0 + x1) * 0.5,y + 5.0),(x1 - x0) * 0.5,3.0,Color(0.01,0.012,0.012,0.20),root)
         _add_static_rect(root,Vector2((x0 + x1) * 0.5,y - 2.0),Vector2(x1 - x0,10.0))
 
+# Edge-on walls / fences for the 3/4 view. A north-south wall of height h
+# stands on the line x and occupies screen y-h .. y on screen: lit top, a body
+# strip of its thickness, dark east face, joints or posts with caps, and a
+# stepped shadow plus slanted post shadows on the ground to the east.
+# keys: h, w (thickness), top, body, dark, joint (step, 0 none), jcol, posts, wire
+const SETTLEMENT_WALL_EDGE = [
+    {"h":28.0,"w":8.0,"top":Color("8a6844"),"body":Color("6b4c31"),"dark":Color("3f2c1d"),"joint":12.0,"jcol":Color("4c3524"),"posts":48.0,"wire":false},
+    {"h":30.0,"w":12.0,"top":Color("b4b2a8"),"body":Color("8e8c84"),"dark":Color("5c5b56"),"joint":32.0,"jcol":Color("4a4a46"),"posts":0.0,"wire":true},
+    {"h":30.0,"w":8.0,"top":Color("9aa2a4"),"body":Color("6f7678"),"dark":Color("454b4d"),"joint":8.0,"jcol":Color("565c5e"),"posts":40.0,"wire":false},
+    {"h":24.0,"w":6.0,"top":Color("c9cfc4"),"body":Color("7f8a80"),"dark":Color("4e5850"),"joint":0.0,"jcol":Color("3e4842"),"posts":24.0,"wire":false}
+]
+
+func _edge_wall(root,x:float,y0:float,y1:float,spec:Dictionary):
+    var h = float(spec["h"])
+    var w = float(spec["w"])
+    var mid = (y0 + y1) * 0.5
+    var length = y1 - y0
+    # shadow on the ground to the east, two flat steps
+    var sw = clamp(h * 0.45,4.0,14.0)
+    _rect(Vector2(x + w * 0.5 + sw * 0.5,mid),Vector2(sw,length),Color(0.01,0.012,0.012,0.16),root)
+    _rect(Vector2(x + w * 0.5 + sw * 0.25,mid),Vector2(sw * 0.5,length),Color(0.01,0.012,0.012,0.14),root)
+    # body: lit west edge, mid tone, dark east face
+    _rect(Vector2(x,mid - h * 0.5),Vector2(w,length + h),spec["body"],root)
+    _rect(Vector2(x - w * 0.5 + 1.0,mid - h * 0.5),Vector2(2.0,length + h),spec["top"],root)
+    _rect(Vector2(x + w * 0.5 - 1.0,mid - h * 0.5),Vector2(2.0,length + h),spec["dark"],root)
+    var step = float(spec["joint"])
+    if step > 0.0:
+        var y = y0 - h + step
+        while y < y1:
+            _rect(Vector2(x,y),Vector2(w,1.0),spec["jcol"],root)
+            y += step
+    var post_step = float(spec["posts"])
+    if post_step > 0.0:
+        var py = y0
+        while py <= y1 + 0.5:
+            _rect(Vector2(x,py - h * 0.5),Vector2(w + 2.0,h),spec["dark"],root)
+            _rect(Vector2(x - w * 0.5,py - h * 0.5),Vector2(1.0,h),spec["top"],root)
+            _rect(Vector2(x,py - h - 1.0),Vector2(w + 3.0,2.0),spec["top"].lightened(0.15),root)
+            var sh = Polygon2D.new()
+            sh.polygon = PackedVector2Array([Vector2(x + 1,py - 1),Vector2(x + 3,py + 1),Vector2(x + h * 0.55 + 2,py + h * 0.22 + 1),Vector2(x + h * 0.55,py + h * 0.22 - 2)])
+            sh.color = Color(0.01,0.012,0.012,0.26)
+            root.add_child(sh)
+            root.move_child(sh,0)
+            py += post_step
+    # top cap along the whole run
+    _rect(Vector2(x,mid - h),Vector2(w + 1.0,2.0),spec["top"].lightened(0.1),root)
+    if bool(spec["wire"]):
+        # barbed wire on top: a coil seen edge-on
+        var wy = y0 - h - 3.0
+        while wy < y1 - h:
+            _rect(Vector2(x - 1.0,wy),Vector2(1.0,2.0),Color(0.62,0.63,0.60,0.95),root)
+            _rect(Vector2(x + 1.0,wy + 2.0),Vector2(1.0,2.0),Color(0.40,0.41,0.40,0.95),root)
+            wy += 4.0
+
 func _settlement_wall_v(chunk,row:int,x:float,gate:bool,y_from:float = 0.0,y_to:float = CHUNK_SIZE):
     var spans = [[y_from,y_to]]
     if gate:
@@ -21647,12 +21706,9 @@ func _settlement_wall_v(chunk,row:int,x:float,gate:bool,y_from:float = 0.0,y_to:
     for span in spans:
         var y0 = float(span[0])
         var y1 = float(span[1])
-        var y = y0
-        while y < y1 - 0.5:
-            var h = min(64.0,y1 - y)
-            _facade_atlas_sprite(root,"res://settlement_walls_v1.png",Rect2(128,row * 128,40,h * 2.0),Vector2(x,y + h * 0.5 - 20.0),0.5)
-            y += 64.0
-        _rect(Vector2(x + 7.0,(y0 + y1) * 0.5),Vector2(4.0,y1 - y0),Color(0.01,0.012,0.012,0.18),root)
+        # 1.38: the wall is seen edge-on (the old top-view strip read as a floor)
+        var spec = SETTLEMENT_WALL_EDGE[clamp(row,0,SETTLEMENT_WALL_EDGE.size() - 1)]
+        _edge_wall(root,x,y0,y1,spec)
         _add_static_rect(root,Vector2(x,(y0 + y1) * 0.5 - 8.0),Vector2(12.0,y1 - y0))
 
 func _settlement_gate_post(chunk,row:int,pos:Vector2):
@@ -22094,11 +22150,10 @@ func _settlement_yard_fences(chunk,cell_data:Dictionary,style:String):
                         xx += step
                 _rect(Vector2((x0 + x1) * 0.5,edge_y + 1),Vector2(x1 - x0,2),Color(0,0,0,0.22),root)
         for edge_x in [r.position.x,r.end.x]:
-            _rect(Vector2(edge_x,r.get_center().y),Vector2(2 if style != "rubezh" else 4,r.size.y),col.darkened(0.1),root)
-            var yy = r.position.y
-            while yy < r.end.y:
-                _rect(Vector2(edge_x,yy),Vector2(3,3),post,root)
-                yy += 16.0
+            # low yard fence seen edge-on: it stands h above its line
+            _edge_wall(root,edge_x,r.position.y,r.end.y,{"h":h + 2.0,"w":3.0 if style != "rubezh" else 5.0,
+                "top":col.lightened(0.18),"body":col,"dark":post,"joint":0.0,"jcol":post,
+                "posts":16.0 if style != "rubezh" else 24.0,"wire":false})
 
 
 # -----------------------------------------------------------------------------
