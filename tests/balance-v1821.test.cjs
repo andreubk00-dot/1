@@ -43,4 +43,8 @@ test('Early Lab prices remain unchanged through level eight',()=>Object.entries(
 test('All Lab late costs grow monotonically',()=>Object.keys(g.save.lab).every(k=>Array.from({length:20},(_,i)=>g.labUpgradeCost(k,i+1)>g.labUpgradeCost(k,i)).every(Boolean)));
 test('Lab price uses one function for UI, tips and purchase',()=>html.includes('const lv=this.save.lab[k]||0,cost=this.labUpgradeCost(k,lv)')&&html.includes('s.shards>=this.labUpgradeCost(k,lv)')&&html.includes('const lv=this.save.lab[k],cost=this.labUpgradeCost(k,lv)'));
 
+test('Battle upgrade cost unchanged through level nine',()=>Array.from({length:9},(_,i)=>g.unitUpgradeCost({level:i+1})===Math.floor(BALANCE.economy.unitUpgradeBase*Math.pow(BALANCE.economy.unitUpgradeGrowth,i))).every(Boolean));
+test('Battle upgrade cost grows more gently past pivot',()=>g.unitUpgradeCost({level:20})<Math.floor(BALANCE.economy.unitUpgradeBase*Math.pow(BALANCE.economy.unitUpgradeGrowth,19)));
+test('Later upgrade damage multiplies without altering early levels',()=>Math.abs(g.unitDamageMultiplier(8)-(1+7*.42))<1e-10&&g.unitDamageMultiplier(20)>g.unitDamageMultiplier(10));
+test('Progression range is capped and non-decreasing',()=>{g.save.lab.damage=0;g.save.mastery.sentinel={level:1,stars:1,xp:0};const early=g.masteryBonuses('sentinel').range;g.save.lab.damage=30;g.save.mastery.sentinel={level:25,stars:5,xp:0};const late=g.masteryBonuses('sentinel').range;return early===1&&late>early&&late<=1.85;});
 console.log(checks+' balance checks passed');
