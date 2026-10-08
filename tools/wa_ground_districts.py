@@ -213,6 +213,64 @@ def ruts(alb, hf, rv, rh, offsets, half=4.0, depth=1.2, dark=0.82):
     return alb, hf
 
 
+def kerbs(alb, hf, road, walk, col=(150, 148, 140), seg=12.0, seed=0):
+    """kerb stones between carriageway and verge (4 units): lit top, a darker
+    face toward the road, joints every seg units, a few broken / missing
+    stones, then a dark gutter shadow on the road."""
+    dx = np.minimum(np.abs(X - R0), np.abs(X - R1))
+    dy = np.minimum(np.abs(Y - R0), np.abs(Y - R1))
+    edge_d = np.minimum(dx, dy)
+    along = np.where(dx < dy, Y, X)
+    kerb = walk & (edge_d < 4.0)
+    stone = np.floor(along / seg)
+    tone_k = 0.92 + 0.1 * ((stone * 7919 + seed) % 11) / 10.0
+    missing = ((stone * 131 + seed) % 29) == 0
+    k = kerb & ~missing
+    base = np.array(col, float)
+    alb[k] = base * tone_k[k][..., None]
+    alb[k & (edge_d >= 2.6)] = base * 1.14                     # lit top edge (verge side)
+    alb[k & (edge_d < 1.2)] = base * 0.66                      # face toward the road
+    alb[k & ((along % seg) < 0.6)] = base * 0.55               # joints
+    hf[k] += 1.2
+    alb[kerb & missing] *= 0.62
+    # gutter only along the kerbs themselves: arms, not across the junction
+    av = (X >= R0) & (X < R1) & ~((Y >= R0) & (Y < R1))
+    ah = (Y >= R0) & (Y < R1) & ~((X >= R0) & (X < R1))
+    gutter = (av & (dx < 3.0)) | (ah & (dy < 3.0))
+    near = ((av & (dx >= 3.0) & (dx < 5.0)) | (ah & (dy >= 3.0) & (dy < 5.0)))
+    alb[gutter] *= 0.66
+    alb[near] *= 0.86
+    return alb, hf, gutter
+
+
+def wheel_tracks(alb, hf, road, rv, rh, offsets=(-50, -24, 24, 50), half=4.0, k=0.9):
+    """worn wheel paths: broken, blotchy darkening, never a clean stripe."""
+    av, ah, inter = arm_masks(rv, rh)
+    c = (R0 + R1) / 2
+    blotch = (noise(9401, 10, 3) > 0.42) & (noise(9402, 3, 2) > 0.3)
+    for off in offsets:
+        wob = 1.5 * (noise(9403 + off, 40, 2) - 0.5)
+        t = (av & (np.abs(X - (c + off) - wob * 4) < half)) | (ah & (np.abs(Y - (c + off) - wob * 4) < half))
+        alb[t & blotch] *= k
+    return alb, hf
+
+
+def potholes(alb, hf, m, seed, n, water=(70, 78, 80)):
+    rng = np.random.default_rng(seed)
+    ys, xs = np.nonzero(m)
+    for _ in range(n):
+        i = rng.integers(0, len(xs))
+        cx, cy = X[ys[i], xs[i]], Y[ys[i], xs[i]]
+        rx, ry = rng.uniform(5, 11), rng.uniform(3, 6)
+        d = ((X - cx) / rx) ** 2 + ((Y - cy) / ry) ** 2
+        hole = m & (d < 1.0)
+        alb[hole & (d > 0.55)] *= 0.62
+        alb[hole & (d <= 0.55)] = water
+        alb[m & (d >= 1.0) & (d < 1.35) & (Y < cy)] *= 0.8
+        hf[hole] -= 1.0
+    return alb, hf
+
+
 def rural():
     road, walk, plot, rv, rh, dv, dh = masks()
     alb, hf, soil = grass_field(1101, dryness=0.6)
@@ -301,23 +359,27 @@ def woodland():
 def military():
     road, walk, plot, rv, rh, dv, dh = masks()
     alb, hf, soil = grass_field(3101, base=(66, 70, 40), dry=(104, 98, 62), dirt=(88, 78, 56), dryness=0.9)
-    slab = np.array((128, 126, 116), float)[None, None, :] * tone(3102, 30, 0.88, 1.04, 4, 3)[..., None]
+    slab = np.array((122, 120, 110), float)[None, None, :] * tone(3102, 30, 0.9, 1.04, 4, 3)[..., None]
     alb[road] = slab[road]
     hf[road] = 0.0
     c = (R0 + R1) / 2
-    sx, sy = 60.0, 28.0
-    lx, ly = np.abs(X - c), np.abs(Y - c)
-    jv = rv & ((((Y + 7) % sx) < 0.8) | ((lx % sy) < 0.8))
-    jh = rh & ((((X + 7) % sx) < 0.8) | ((ly % sy) < 0.8))
-    joint = jv | jh
-    alb[joint] = (84, 82, 76)
-    hf[joint] -= 0.5
-    cell = np.floor((Y + 7) / sx) * 7 + np.floor(lx / sy) * 13 + np.floor((X + 7) / sx) * 3
-    alb[road] *= (1.0 + 0.035 * np.sin(cell * 1.7))[road][..., None]
-    hf[road] += (np.sin(cell) * 0.25)[road]
-    alb, hf = cracks(alb, hf, road, 3103, 70, (88, 86, 80))
-    alb = clusters(alb, joint, [(84, 100, 50), (98, 112, 58)], 3104, 0.15)
+    av, ah, inter = arm_masks(rv, rh)
+    # precast road slabs: only the transverse joints and one centre joint show,
+    # thin and worn through in places (a full joint grid read as a tiled floor)
+    sx = 60.0
+    worn = noise(3109, 6, 2) > 0.42
+    jv = av & ((((Y + 7) % sx) < 0.6) | (np.abs(X - c) < 0.4))
+    jh = ah & ((((X + 7) % sx) < 0.6) | (np.abs(Y - c) < 0.4))
+    joint = (jv | jh) & worn
+    alb[joint] *= 0.8
+    hf[joint] -= 0.3
+    cell = np.where(av, np.floor((Y + 7) / sx) * 7 + (X > c) * 3, np.floor((X + 7) / sx) * 5 + (Y > c) * 11)
+    alb[road] *= (1.0 + 0.025 * np.sin(cell * 1.7))[road][..., None]
+    alb, hf = wheel_tracks(alb, hf, road, rv, rh, k=0.9)
+    alb, hf = cracks(alb, hf, road, 3103, 50, (92, 90, 84))
+    alb = clusters(alb, joint, [(84, 100, 50), (98, 112, 58)], 3104, 0.25)
     alb = speckle(alb, road, 0.012, [(146, 142, 132), (100, 98, 90)], 3105)
+    alb, hf = potholes(alb, hf, road & ~inter, 3112, 5)
     gv = soft(noise(3106, 60, 3), 0.55, 0.65)
     gravel_t = np.maximum(walk.astype(float), gv * plot)
     gcol = np.array((116, 110, 98), float)[None, None, :] * tone(3107, 3, 0.82, 1.08, 4, 2)[..., None]
@@ -325,6 +387,8 @@ def military():
     hf += 0.4 * noise(3108, 2, 2) * gravel_t
     alb = speckle(alb, gravel_t > 0.5, 0.2, [(150, 146, 134), (84, 80, 72), (124, 116, 100)], 3109)
     alb = blades(alb, plot & (gravel_t < 0.5), 3110, 60000, cols=((96, 92, 56), (110, 104, 62), (124, 116, 70)))
+    alb, hf, gutter = kerbs(alb, hf, road, walk, (146, 144, 134), 14.0, 3)
+    alb = clusters(alb, gutter, [(150, 104, 54), (84, 100, 50)], 3113, 0.05)
     alb = leaves(alb, plot, 0.002, 3111)
     return alb, hf
 
@@ -342,6 +406,9 @@ def industrial():
     oil = soft(noise(4106, 14, 3), 0.78, 0.84) * road
     alb *= (1 - 0.22 * oil)[..., None]
     alb = speckle(alb, road, 0.012, [(140, 136, 126), (88, 86, 80)], 4107)
+    alb, hf = wheel_tracks(alb, hf, road, rv, rh, k=0.88)
+    av, ah, inter = arm_masks(rv, rh)
+    alb, hf = potholes(alb, hf, road & ~inter, 4116, 6)
     lt = np.maximum(walk.astype(float), soft(noise(4108, 80, 3), 0.42, 0.52) * plot)
     lcol = np.array((100, 94, 84), float)[None, None, :] * tone(4109, 3, 0.82, 1.08, 4, 2)[..., None]
     alb = alb * (1 - lt[..., None]) + lcol * lt[..., None]
@@ -350,6 +417,8 @@ def industrial():
     pud = soft(noise(4112, 40, 3), 0.76, 0.8) * (lt > 0.5)
     alb = blend(alb, (60, 66, 68), pud * 0.8)
     alb = blades(alb, (plot & (lt < 0.5)) | ((lt > 0.5) & (noise(4113, 20, 2) > 0.68)), 4114, 50000)
+    alb, hf, gutter = kerbs(alb, hf, road, walk, (138, 136, 128), 12.0, 4)
+    alb = clusters(alb, gutter, [(150, 104, 54), (60, 58, 52)], 4117, 0.05)
     alb = leaves(alb, plot | walk, 0.003, 4115)
     return alb, hf
 
@@ -477,9 +546,11 @@ def woodland_yard():
 
 
 def _slabs(alb, hf, m, sx, sy, joint_col, seed):
-    jx = ((X % sx) < 0.8) | ((Y % sy) < 0.8)
-    joint = m & jx
-    alb[joint] = joint_col
+    # thin, partly worn-through joints with a slight per-slab tone: a hard full
+    # grid read as floor tiles
+    jx = ((X % sx) < 0.6) | ((Y % sy) < 0.6)
+    joint = m & jx & (noise(9301 + int(seed * 10), 6, 2) > 0.4)
+    alb[joint] = alb[joint] * 0.55 + np.array(joint_col, float) * 0.45
     hf[joint] -= 0.5
     cell = np.floor(X / sx) * 7 + np.floor(Y / sy) * 13
     alb[m] *= (1.0 + 0.035 * np.sin(cell * 1.7 + seed))[m][..., None]
