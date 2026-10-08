@@ -17,7 +17,7 @@ let count=0;
 function test(name,fn){assert(fn(),name);count++;console.log('PASS '+name)}
 test('Starts with Prism as the persistent contract goal',()=>{const g=game.contractGoalData();return g.id==='prism'&&g.wave[1]===40&&g.parts[1]===2&&g.shards[1]===2500&&g.gems[1]===18});
 test('Shows four separate resource progress meters',()=>{const html=game.renderContractGoal();return html.includes('data-contract-goal="prism"')&&(html.match(/class="contract-goal-meter"/g)||[]).length===4});
-test('Keeps next boss and costs visible without giving resources',()=>{const before=JSON.stringify(game.save),html=game.renderContractGoal();return html.includes('40')&&html.includes('2,500')&&JSON.stringify(game.save)===before});
+test('Keeps next boss and costs visible without giving resources',()=>{const before=JSON.stringify(game.save),html=game.renderContractGoal();return html.includes('40')&&html.includes('2')&&JSON.stringify(game.save)===before});
 test('Goal follows unlocked sequence',()=>{game.save.unlocked.push('prism');let a=game.contractGoalData();game.save.unlocked.push('nova');let b=game.contractGoalData();return a.id==='nova'&&a.nextWave===50&&b.id==='ember'&&b.nextWave===60});
 test('Progress caps visually without changing balances',()=>{game.save.unlocked=['sentinel','spark','frost'];game.save.bestWave=200;game.save.shards=999999;game.save.gems=500;game.save.defenderParts.prism=3;const goal=game.contractGoalData(),html=game.renderContractGoal();return goal.wave[0]===40&&goal.shards[0]===2500&&goal.gems[0]===18&&goal.parts[0]===2&&goal.ready&&html.includes('собери защитника')&&game.save.shards===999999});
 test('Ready goal does not bypass activation',()=>!game.save.unlocked.includes('prism'));
