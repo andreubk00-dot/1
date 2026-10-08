@@ -38,7 +38,7 @@ for(const id of ids){
  income[id]={depth,xp,shards:Math.floor((depth*e.runShardPerWave+Math.sqrt(kills)*e.runShardKillSqrt)*bonus),
   gems:Math.floor(depth/10)*e.bossGemReward+Math.floor(depth/e.runGemEvery)+(depth>=e.runGemWaveThreshold?1:0)};
 }
-function simulate(seed,{ads=0,regular=false,runsPerDay=4}={}){
+function simulate(seed,{ads=0,regular=false,runsPerDay=4,chestsPerDay=1,offlineMinutes=0}={}){
  let rng=seed>>>0;
  const random=()=>((rng=(Math.imul(rng,1664525)+1013904223)>>>0)/4294967296);
  let shards=0,gems=0,runs=0,dayNow=-1,weekNow=-1,monthNow='',adsToday=0;
@@ -61,8 +61,11 @@ function simulate(seed,{ads=0,regular=false,runsPerDay=4}={}){
   shards+=ret.loginShardBase+streakCap*ret.loginShardPerStreak;
   gems+=streak%7===0?ret.loginGemWeekly:ret.loginGemNormal;
   monthXp+=e.dailyLoginSeasonXp;
-  shards+=ret.chestShardBase+Math.floor(random()*(ret.chestShardRandom+1))+Math.min(streak,ret.chestStreakCap);
-  if(random()<ret.chestGemChance)gems++;
+  for(let chest=0;chest<chestsPerDay;chest++){
+   shards+=ret.chestShardBase+Math.floor(random()*(ret.chestShardRandom+1))+Math.min(streak,ret.chestStreakCap);
+   if(random()<ret.chestGemChance)gems++;
+  }
+  shards+=Math.floor(Math.min(offlineMinutes,ret.offlineCapMinutes)*ret.offlineShardPerMinute);
   for(const milestone of [3,7,14])if(cycle>=milestone&&!returnClaims[milestone]){
    const r=RETURN_REWARDS[milestone];returnClaims[milestone]=true;
    shards+=r.shards||0;gems+=r.gems||0;
@@ -106,11 +109,13 @@ function sample(options){
   stageMedians:Object.fromEntries(ids.map(id=>[id,sort(v.map(x=>x.stages[id]))[1000]]))};
 }
 const baseline=sample({}),adOnly=sample({ads:2}),regular=sample({regular:true}),
- regularAds=sample({regular:true,ads:2}),frequent=sample({regular:true,ads:2,runsPerDay:8});
+ regularAds=sample({regular:true,ads:2}),frequent=sample({regular:true,ads:2,runsPerDay:8}),
+ highClaim=sample({regular:true,ads:2,runsPerDay:8,chestsPerDay:4,offlineMinutes:240});
 assert(baseline.median>=70&&baseline.median<=100,'Baseline contract model drifted');
 assert(adOnly.median>=55&&adOnly.median<baseline.median,'Ad-only progression drifted');
 assert(regular.median<=baseline.median,'Free recurring bonus has no effect');
 assert(regularAds.median<=adOnly.median,'Combined bonus has no effect');
 assert(regularAds.median>=45,'Recurring+rewarded progression trivialized contracts');
-console.log('PASS calendar economy '+JSON.stringify({baseline,adOnly,regular,regularAds,frequent}));
-console.log('ASSUMPTIONS: all kills/full-depth clears; maximal quest/challenge claims in calendar mode; no lab spending, Rift, mastery, achievements, offline income or failures.');
+assert(highClaim.median>=45,'Four daily chests plus full offline accrual trivialize contracts');
+console.log('PASS calendar economy '+JSON.stringify({baseline,adOnly,regular,regularAds,frequent,highClaim}));
+console.log('ASSUMPTIONS: all kills/full-depth clears; maximal quest/challenge claims in calendar mode; no lab spending, Rift, mastery, achievements or failures. Only highClaim includes 4 daily chests and the 240-minute offline cap.');
