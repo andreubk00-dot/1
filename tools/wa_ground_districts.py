@@ -449,7 +449,7 @@ def military():
     alb, hf = manholes(alb, hf, rv, rh, 3114, 2)
     alb, hf, gutter = kerbs(alb, hf, road, walk, (146, 144, 134), 14.0, 3)
     alb = drains(alb, rv, rh, 3115)
-    alb = clusters(alb, gutter, [(150, 104, 54), (84, 100, 50)], 3113, 0.05)
+    alb = clusters(alb, gutter & (noise(3116, 22, 3) > 0.55), [(150, 104, 54), (84, 100, 50)], 3113, 0.06)
     alb = leaves(alb, plot, 0.002, 3111)
     return alb, hf
 
@@ -482,7 +482,7 @@ def industrial():
     alb, hf = manholes(alb, hf, rv, rh, 4118, 3)
     alb, hf, gutter = kerbs(alb, hf, road, walk, (138, 136, 128), 12.0, 4)
     alb = drains(alb, rv, rh, 4119)
-    alb = clusters(alb, gutter, [(150, 104, 54), (60, 58, 52)], 4117, 0.05)
+    alb = clusters(alb, gutter & (noise(4120, 22, 3) > 0.55), [(150, 104, 54), (60, 58, 52)], 4117, 0.06)
     alb = leaves(alb, plot | walk, 0.003, 4115)
     return alb, hf
 
@@ -501,29 +501,23 @@ def city():
     asp = np.array((58, 59, 60), float)[None, None, :] * tone(9203, 30, 0.9, 1.08, 4, 3)[..., None]
     alb[road] = asp[road]
     hf[road] = 0.0
-    # wheel-polished lanes: slightly darker bands along each arm
     c = (R0 + R1) / 2
-    for off in (-52, -26, 26, 52):
-        lane = (av & (np.abs(X - (c + off)) < 7)) | (ah & (np.abs(Y - (c + off)) < 7))
-        alb[lane] *= 0.94
-    # rectangular repairs with crisp edges
-    rng = np.random.default_rng(9204)
-    for _ in range(14):
-        x0, y0 = rng.uniform(R0, R1 - 30), rng.uniform(0, W - 30)
-        if rng.random() < 0.5:
-            x0, y0 = y0, x0
-        w, h = rng.uniform(10, 30), rng.uniform(8, 22)
-        m = road & (X >= x0) & (X < x0 + w) & (Y >= y0) & (Y < y0 + h)
-        alb[m] = np.array((48, 49, 51), float) * rng.uniform(0.96, 1.04)
-        edge = m & ~((X >= x0 + 0.6) & (X < x0 + w - 0.6) & (Y >= y0 + 0.6) & (Y < y0 + h - 0.6))
-        alb[edge] = (40, 40, 42)
+    # wheel-polished lanes: blotchy, wobbling, never a clean stripe
+    alb, hf = wheel_tracks(alb, hf, road, rv, rh, (-52, -26, 26, 52), half=5.0, k=0.93)
+    # asphalt repairs: irregular blobs with a crisp, slightly darker seam
+    # (rectangles read as foreign squares on the road)
+    pn = noise(9204, 26, 3)
+    patch = road & (pn > 0.7)
+    alb[patch] = alb[patch] * 0.86
+    seam = patch & ~(np.roll(patch, 1, 0) & np.roll(patch, -1, 0) & np.roll(patch, 1, 1) & np.roll(patch, -1, 1))
+    alb[seam] = (40, 40, 42)
     alb, hf = cracks(alb, hf, road, 9205, 150, (36, 36, 38))
     oil = soft(noise(9206, 12, 3), 0.8, 0.85) * road
     alb *= (1 - 0.18 * oil)[..., None]
     alb = speckle(alb, road, 0.012, [(92, 92, 90), (40, 40, 42)], 9207)
     # markings (worn: paint missing in clusters)
     paint = np.array((178, 176, 164), float)
-    wear = (noise(9208, 7, 2) > 0.3) & (noise(9217, 2, 1) > 0.12)
+    wear = (noise(9208, 9, 2) > 0.22) & (noise(9217, 2, 1) > 0.08)
     marks = np.zeros((N, N), bool)
     # zebra crossings on every arm just outside the junction
     for a, b in ((253, 279), (489, 515)):
@@ -540,15 +534,23 @@ def city():
     marks |= dash_v | dash_h
     marks &= wear
     alb[marks] = paint * tone(9209, 6, 0.9, 1.0, 3, 2)[marks][..., None]
+    alb, hf = manholes(alb, hf, rv, rh, 9218, 2)
+    alb = drains(alb, rv, rh, 9219)
     # kerbs: granite edge stones along the carriageway, shadow on the road side
     edge_d = np.minimum(np.minimum(np.abs(X - R0), np.abs(X - R1)), np.minimum(np.abs(Y - R0), np.abs(Y - R1)))
     kerb = walk & (edge_d < 2.0)
     alb[kerb] = (128, 126, 118)
     kerb_lit = walk & (edge_d < 0.6)
     alb[kerb_lit] = (150, 148, 140)
-    gutter = road & ~inter & (edge_d < 4.0)
+    # gutter only beside a real kerb (per arm), never across the junction or the
+    # crossing arm; leaves gather there in irregular drifts, not a dotted line
+    gdx = np.minimum(np.abs(X - R0), np.abs(X - R1))
+    gdy = np.minimum(np.abs(Y - R0), np.abs(Y - R1))
+    gutter = (av & (gdx < 4.0)) | (ah & (gdy < 4.0))
     alb[gutter] *= 0.82
-    alb = leaves(alb, gutter, 0.08, 9210)
+    drift = (av & (gdx < 3.0 + 5.0 * noise(9220, 14, 2))) | (ah & (gdy < 3.0 + 5.0 * noise(9221, 14, 2)))
+    drift &= noise(9222, 22, 3) > 0.52
+    alb = leaves(alb, drift, 0.09, 9210)
     # pavements: concrete tiles with grout, per-tile tone, broken / missing tiles
     tile = 12.0
     tx, ty = np.floor(X / tile), np.floor(Y / tile)
