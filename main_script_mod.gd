@@ -14493,6 +14493,28 @@ func _integrated_sprite_scale(value):
     # Quantized scaling keeps pixel density consistent between unrelated source assets.
     return clamp(round(float(value) * 7.0) / 8.0,0.25,1.5)
 
+func _hd_prop_sprite(kind:String,parent,pos:Vector2,z_value:int,scale_value:float):
+    # the 1x prop stood centred on pos; the HD cell is bottom-anchored, so keep
+    # the old ground line (bottom of the 1x sprite) and real-size the model
+    var old_region = _world_prop_region(kind)
+    var old_bottom = pos.y + old_region.size.y * _integrated_sprite_scale(scale_value) * 0.5
+    var idx = int(PROP_HD_KINDS[kind])
+    var tex = AtlasTexture.new()
+    tex.atlas = load("res://art/world_hd/props_hd.png")
+    tex.region = Rect2((idx % 4) * 128,int(idx / 4) * 128,128,128)
+    var sprite = Sprite2D.new()
+    sprite.texture = tex
+    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    sprite.scale = Vector2(0.5,0.5)
+    sprite.position = Vector2(round(pos.x),round(old_bottom - 31.0))
+    sprite.flip_h = kind != "lamp" and int(abs(pos.x * 5.0 + pos.y * 3.0)) % 2 == 0
+    sprite.z_index = z_value
+    sprite.set_meta("world_prop_kind",kind)
+    sprite.set_meta("world_prop_scale",0.5)
+    sprite.set_meta("world_prop_hd",true)
+    parent.add_child(sprite)
+    return sprite
+
 func _litter_decal_sprite(kind:String,parent,pos:Vector2,z_value:int):
     # flat litter is drawn from the HD pixel decals at the world's texel density
     # (scale 0.5); flipped by position so neighbouring heaps differ
@@ -14514,6 +14536,8 @@ func _litter_decal_sprite(kind:String,parent,pos:Vector2,z_value:int):
 func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value = 1.0):
     if LITTER_TO_DECAL.has(str(kind)) and _hd_exists("res://art/world_hd/ground_decals_hd.png"):
         return _litter_decal_sprite(str(kind),parent,pos,z_value)
+    if PROP_HD_KINDS.has(str(kind)) and _hd_exists("res://art/world_hd/props_hd.png"):
+        return _hd_prop_sprite(str(kind),parent,pos,z_value,scale_value)
     var atlas = load("res://world_props_v19.png")
     if atlas == null:
         return null
@@ -15789,6 +15813,8 @@ func _update_detail_lights(delta):
         light.energy = max(0.0,target)
 
 const GROUND_DECAL_KINDS = ["rubble_a","rubble_b","rubble_c","blood_a","blood_b","blood_dry","papers_a","papers_b","glass","oil","planks","tiles"]
+# HD Blender props (tools/blender/props_hd.py): 64-unit cells, 128 texels, drawn at 0.5
+const PROP_HD_KINDS = {"crate":0,"barrel":1,"workbench":2,"lamp":3,"supply_crate":4,"gas_can":5,"cardboard_boxes":6,"trash_bin":7}
 # old 1x litter heaps (noisy white / red speckle blobs) -> HD ground decal cells
 const LITTER_TO_DECAL = {"debris":1,"rubble_papers":0,"broken_tile_pile":11,"wooden_debris":10,
     "floor_papers":6,"newspapers":7,"newspapers_wide":6,"shattered_glass":8}
@@ -19830,6 +19856,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/world_hd/fence_hd.png")
     paths.append("res://art/world_hd/interior_floor_hd.png")
     paths.append("res://art/world_hd/interior_wall_band_hd.png")
+    paths.append("res://art/world_hd/props_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
