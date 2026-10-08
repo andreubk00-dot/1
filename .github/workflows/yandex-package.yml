@@ -1,0 +1,31 @@
+name: Package Endless Defenders for Yandex Games
+on:
+  workflow_dispatch:
+  push:
+    branches: [endless-defenders-yandex-v1815]
+    paths:
+      - index.html
+      - audio/**
+      - tests/**
+      - scripts/**
+      - .github/workflows/yandex-package.yml
+jobs:
+  validate-and-zip:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test advertising and game reward flow
+        run: node tests/yandex-ads.test.cjs
+      - name: Assemble submission ZIP
+        run: python3 scripts/package_yandex.py
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: endless-defenders-yandex-v1.8.20
+          path: dist/endless-defenders-yandex-v1.8.20.zip
+          if-no-files-found: error
