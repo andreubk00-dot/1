@@ -11,7 +11,7 @@ const items=Object.entries(DEFENDER_CONTRACTS),expected={prism:[2500,18,2,3],nov
 test('All permanent prices and fragment counts untouched',()=>items.every(([id,c])=>[c.shards,c.gems,c.parts,c.pity].every((v,i)=>v===expected[id][i])));
 test('Unlock order still chained',()=>items.map(([id,c])=>c.requires).join(',')===',prism,nova,ember,volt');
 test('Eligible boss forecast matches the 30-wave cycle',()=>JSON.stringify(items.map(([id])=>g.eligibleContractBossWaves(id)))===JSON.stringify([[40,70,100],[50,80,110],[60,90,120],[100,130,160],[120,150,180]]));
-test('No fragments from wrong boss',()=>{g.rollDefenderFragment('leech',50);return g.save.defenderParts.prism===0;});
+test('No fragments from wrong boss',()=>{g.rollDefenderFragment('leech',50);return (g.save.defenderParts.prism||0)===0;});
 test('Pity guarantees prism by six eligible wins',()=>{for(let i=0;i<6;i++)g.rollDefenderFragment('aegis',40);return g.save.defenderParts.prism===2;});
 test('Late pity guarantees five volt fragments in 20 eligible wins',()=>{g.save.unlocked.push('prism','nova','ember');for(let i=0;i<20;i++)g.rollDefenderFragment('aegis',100);return g.save.defenderParts.volt===5;});
 test('Late pity guarantees six chrono fragments in 30 eligible wins',()=>{g.save.unlocked.push('volt');for(let i=0;i<30;i++)g.rollDefenderFragment('singularity',120);return g.save.defenderParts.chrono===6;});
