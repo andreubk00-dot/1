@@ -2868,7 +2868,7 @@ window.ED_BALANCE = Object.freeze({
       if(promoteId)add('★',ru?'Можно повысить звезду':'Star promotion available',this.t[DEFENDERS[promoteId].nameKey],'modal','collectionScreen');
       const talentId=s.unlocked.find(id=>{const m=this.masteryState(id),t=this.talentState(id);return (m.level>=10&&!t.t10)||(m.level>=20&&!t.t20);});
       if(talentId)add('⎇',ru?'Выбери талант':'Choose a talent',this.t[DEFENDERS[talentId].nameKey],'talents','',talentId);
-      const lab=Object.entries(LABS).find(([k,l])=>{const lv=s.lab[k]||0;return lv<l.max&&s.shards>=Math.floor(l.base*Math.pow(l.growth,lv));});
+      const lab=Object.entries(LABS).find(([k,l])=>{const lv=s.lab[k]||0;return lv<l.max&&s.shards>=this.labUpgradeCost(k,lv);});
       if(lab)add('🧪',ru?'Доступно улучшение Лаборатории':'Laboratory upgrade available',this.t[lab[1].nameKey],'modal','labScreen');
       if(!items.length){const hunt=this.activeFragmentHunt();if(hunt){const c=DEFENDER_CONTRACTS[hunt],name=this.t[DEFENDERS[hunt].nameKey],have=s.defenderParts?.[hunt]||0;add('◈',ru?'Ищи фрагменты: '+name:'Hunt fragments: '+name,ru?`${have}/${c.parts} · ${this.bossSourceName(c.source)}, волна ${c.minWave}+`:`${have}/${c.parts} · ${this.bossSourceName(c.source)}, wave ${c.minWave}+`,'run');}else add('🛡',ru?'Проверь свой отряд':'Review your squad',ru?'Выбери трёх защитников для вылазки.':'Choose three defenders for your run.','modal','collectionScreen');}
       box.innerHTML=`<h3>${ru?'Что делать дальше':'What to do next'}</h3>`+items.slice(0,2).map(x=>`<div class="next-step"><span class="next-step-icon">${x.icon}</span><div class="next-step-copy"><b>${x.title}</b><small>${x.detail}</small></div><button type="button" data-next-step="${x.action}" data-target="${x.target}" data-defender="${x.defender}">${ru?'Перейти':'Open'} →</button></div>`).join('');
@@ -3016,10 +3016,10 @@ window.ED_BALANCE = Object.freeze({
     claimJourney(i){const j=JOURNEY[i];if(!j||this.save.journey.claimed[i]||!j.test(this.save))return;this.save.journey.claimed[i]=true;this.track('rookie_goal',{index:i});this.save.shards+=j.reward.shards||0;this.save.gems+=j.reward.gems||0;const reward=[j.reward.shards?`+${j.reward.shards} 🔶`:'',j.reward.gems?`+${j.reward.gems} 💎`:''].filter(Boolean).join('   ');this.celebrateReward(reward,j.icon);if(this.save.journey.claimed.every(Boolean)&&!this.save.journey.bonusClaimed){this.save.journey.bonusClaimed=true;this.save.gems+=6;setTimeout(()=>this.celebrateReward('+6 💎','💎'),1350);setTimeout(()=>this.toast(this.t.journeyCompleteBonus),1500);}this.persist(true);this.renderHome();this.renderJourney();}
 
     renderLab(){
-      $('labList').innerHTML=Object.entries(LABS).map(([k,l])=>{const lv=this.save.lab[k]||0,cost=Math.floor(l.base*Math.pow(l.growth,lv)),max=lv>=l.max,can=this.save.shards>=cost&&!max;return `<div class="upgrade-row"><div><h4>${l.icon} ${this.t[l.nameKey]} <span class="tag">${this.t.lvl} ${lv}/${l.max}</span></h4><p>${this.t[l.descKey]}</p></div><button class="buy-upgrade ${can?'can-buy':''}" data-lab="${k}" ${max||!can?'disabled':''}>${max?this.t.max:`🔶 ${fmt(cost)}${can?"":` · ${this.lang==="ru"?"Не хватает":"Need"} ${fmt(cost-this.save.shards)}`}`}</button></div>`}).join('');
+      $('labList').innerHTML=Object.entries(LABS).map(([k,l])=>{const lv=this.save.lab[k]||0,cost=this.labUpgradeCost(k,lv),max=lv>=l.max,can=this.save.shards>=cost&&!max;return `<div class="upgrade-row"><div><h4>${l.icon} ${this.t[l.nameKey]} <span class="tag">${this.t.lvl} ${lv}/${l.max}</span></h4><p>${this.t[l.descKey]}</p></div><button class="buy-upgrade ${can?'can-buy':''}" data-lab="${k}" ${max||!can?'disabled':''}>${max?this.t.max:`🔶 ${fmt(cost)}${can?"":` · ${this.lang==="ru"?"Не хватает":"Need"} ${fmt(cost-this.save.shards)}`}`}</button></div>`}).join('');
       document.querySelectorAll('[data-lab]').forEach(b=>b.onclick=()=>this.buyLab(b.dataset.lab));
     }
-    buyLab(k){const l=LABS[k],lv=this.save.lab[k],cost=Math.floor(l.base*Math.pow(l.growth,lv));if(lv>=l.max||this.save.shards<cost)return;const first=Object.values(this.save.lab||{}).reduce((a,v)=>a+(v||0),0)===0;this.save.shards-=cost;this.save.lab[k]++;if(first)this.track('first_lab_upgrade',{type:k,cost});this.audio.upgrade();this.persist();this.renderHome();}
+    buyLab(k){const l=LABS[k];if(!l)return;const lv=this.save.lab[k],cost=this.labUpgradeCost(k,lv);if(lv>=l.max||this.save.shards<cost)return;const first=Object.values(this.save.lab||{}).reduce((a,v)=>a+(v||0),0)===0;this.save.shards-=cost;this.save.lab[k]++;if(first)this.track('first_lab_upgrade',{type:k,cost});this.audio.upgrade();this.persist();this.renderHome();}
 
     questDefs(){return [{key:'waves',goal:12,reward:2,text:this.t.questWaves.replace('{n}',12)},{key:'upgrades',goal:8,reward:2,text:this.t.questUpgrades.replace('{n}',8)},{key:'skills',goal:3,reward:1,text:this.t.questSkills.replace('{n}',3)}];}
     renderQuests(){
@@ -3108,6 +3108,13 @@ window.ED_BALANCE = Object.freeze({
     renderUnitCards(){
       $('unitCards').innerHTML=this.run.units.map((u,i)=>{const d=DEFENDERS[u.id],cost=this.unitUpgradeCost(u);const rar=d.rarity||'common';return `<button class="unit-card" data-unit="${i}" data-rarity="${rar}"><div class="unit-name" style="color:${d.color}"><i class="unit-rarity-dot"></i>${d.icon} ${this.t[d.nameKey]}</div><div class="unit-level">${this.t.lvl} ${u.level} · ${this.t.masteryLevel} ${this.masteryState(u.id).level}</div><div class="unit-cost">⚡ ${fmt(cost)}</div></button>`}).join('');
       document.querySelectorAll('[data-unit]').forEach(b=>b.onclick=()=>this.upgradeUnit(+b.dataset.unit));
+    }
+    // Early Lab levels retain their prices; after level 8, softer growth keeps
+    // late progression achievable without altering saves or earned resources.
+    labUpgradeCost(k,level=this.save.lab[k]||0){
+      const l=LABS[k];if(!l)return Infinity;
+      const lv=Math.max(0,Math.floor(level)),pivot=Math.min(lv,8);
+      return Math.floor(l.base*Math.pow(l.growth,pivot)*Math.pow(1.18,Math.max(0,lv-8)));
     }
     unitUpgradeCost(u){return Math.floor(BALANCE.economy.unitUpgradeBase*Math.pow(BALANCE.economy.unitUpgradeGrowth,u.level-1));}
     upgradeUnit(i){const u=this.run?.units[i];if(!u)return;const c=this.unitUpgradeCost(u);if(this.run.energy<c)return;this.run.energy-=c;u.level++;this.run.upgrades++;this.save.quests.upgrades++;this.save.stats.upgrades++;if(this.run.upgrades===1)this.track('first_upgrade',{wave:this.run.wave,unit:u.id});this.checkFieldOrders();this.checkAchievements();this.audio.upgrade();this.renderUnitCards();this.updateBattleHud();this.persist();}
