@@ -942,7 +942,7 @@ button,.buy-upgrade,.season-claim,.return-milestone button,.mastery-reward-row b
 
 
 
-/* v1.8.10 CC0 audio hotfix: reliable GitHub/CDN mirrors + preload/unlock/retry */
+/* v1.8.11 CC0 audio hotfix: reliable GitHub/CDN mirrors + preload/unlock/retry */
 .battle-frame.boss-intro-live .boss-hud,
 .battle-frame.boss-intro-live .boss-objective,
 .battle-frame.boss-intro-live .rift-hud,
@@ -1463,7 +1463,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.10',
+  version: '1.8.11',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1710,7 +1710,7 @@ window.ED_BALANCE = Object.freeze({
 
 
   const BALANCE = window.ED_BALANCE || {
-    version:'fallback-1.8.10', run:{baseCore:100,baseEnergy:74},
+    version:'fallback-1.8.11', run:{baseCore:100,baseEnergy:74},
     wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.115,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
@@ -2050,42 +2050,38 @@ window.ED_BALANCE = Object.freeze({
   /*
     AUDIO ASSET SOURCES — all CC0 / public domain, commercial use permitted, attribution not required:
     - Kenney, "Sci-Fi Sounds" (laserSmall, laserLarge, explosionCrunch, forceField, thrusterFire), CC0.
-      Verified runtime mirror: blal1/neon-protocol, with jsDelivr + raw.githubusercontent.com fallback.
+      Audio samples bundled at ./audio/ on the same origin.
     - MintoDog, "Racing Game Menu", "Space Battle", "Space Boss Battle", OpenGameArt, CC0.
-      Runtime mirrors: public GitHub repositories, with jsDelivr + raw.githubusercontent.com fallback.
-    v1.8.10 fixes the broken Sentinel/Spark/Core sample paths and replaces the previous low-energy music set.
+      Bundled locally for reliable Safari playback. Battle uses CC0 fallback.
+    v1.8.11 fixes the broken Sentinel/Spark/Core sample paths and replaces the previous low-energy music set.
   */
   class AudioFX {
     constructor(){
       this.ctx=null;this.enabled=true;this.volume=1;this.master=null;this.sfxBus=null;this.sfxTone=null;this.musicBus=null;this.room=null;this.roomGain=null;this.compressor=null;
       this.noiseBuffer=null;this.brownBuffer=null;this.last={};this.voiceTimes=[];this.musicTimer=0;this.musicStep=0;this.musicIntensity=.22;this.musicBoss=false;this.musicNodes=[];
       // CC0 sampled layer. Sources are documented in ASSET_SOURCES inside the build comments.
-      // v1.8.10: one verified Kenney mirror for every weapon sample. The previous build
+      // v1.8.11: one verified Kenney mirror for every weapon sample. The previous build
       // mixed repositories; Sentinel, Spark and Core Weapon pointed at missing files and
       // silently fell back to the old synthesized character while Frost used the sample.
-      const cdnNeon='https://cdn.jsdelivr.net/gh/blal1/neon-protocol@main/audio/sfx/combat/';
-      const rawNeon='https://raw.githubusercontent.com/blal1/neon-protocol/main/audio/sfx/combat/';
-      const cdnSpace='https://cdn.jsdelivr.net/gh/AdamPallus/space_game@main/assets/music/';
-      const rawSpace='https://raw.githubusercontent.com/AdamPallus/space_game/main/assets/music/';
-      const cdnMenu='https://cdn.jsdelivr.net/gh/thienphuc000012-art/Car@main/Car/Assets/Thang/Audio/MainMenu/';
-      const rawMenu='https://raw.githubusercontent.com/thienphuc000012-art/Car/main/Car/Assets/Thang/Audio/MainMenu/';
+      // Local CC0 samples: hosted alongside the iPhone game, never fetched cross-origin.
+      const local=(name)=>'./audio/'+name;
       this.sampleUrls={
-        shoot1:[cdnNeon+'laserSmall_000.ogg',rawNeon+'laserSmall_000.ogg'],
-        shoot2:[cdnNeon+'laserSmall_001.ogg',rawNeon+'laserSmall_001.ogg'],
-        shoot3:[cdnNeon+'laserSmall_002.ogg',rawNeon+'laserSmall_002.ogg'],
-        sparkShot:[cdnNeon+'laserSmall_004.ogg',rawNeon+'laserSmall_004.ogg'],
-        blaster:[cdnNeon+'laserLarge_000.ogg',rawNeon+'laserLarge_000.ogg'],
-        laser:[cdnNeon+'laserLarge_001.ogg',rawNeon+'laserLarge_001.ogg'],
-        doomsday:[cdnNeon+'laserLarge_002.ogg',rawNeon+'laserLarge_002.ogg'],
-        spark:[cdnNeon+'forceField_000.ogg',rawNeon+'forceField_000.ogg'],
-        missile:[cdnNeon+'thrusterFire_000.ogg',rawNeon+'thrusterFire_000.ogg'],
-        explosion1:[cdnNeon+'explosionCrunch_002.ogg',rawNeon+'explosionCrunch_002.ogg'],
-        explosion2:[cdnNeon+'explosionCrunch_004.ogg',rawNeon+'explosionCrunch_004.ogg']
+        shoot1:[local('laserSmall_000.ogg')],shoot2:[local('laserSmall_001.ogg')],
+        shoot3:[local('laserSmall_002.ogg')],sparkShot:[local('laserSmall_004.ogg')],
+        blaster:[local('laserLarge_000.ogg')],laser:[local('laserLarge_001.ogg')],
+        doomsday:[local('laserLarge_002.ogg')],spark:[local('forceField_000.ogg')],
+        missile:[local('thrusterFire_000.ogg')],explosion1:[local('explosionCrunch_002.ogg')],
+        explosion2:[local('explosionCrunch_004.ogg')]
       };
+      // Two locally bundled CC0 music files; battle track can use a more
+      // spacious online composition when available, but falls back to local audio.
       this.musicUrls={
-        menu:[cdnMenu+'racing_game_menu_bpm165.ogg',rawMenu+'racing_game_menu_bpm165.ogg'],
-        combat:[cdnSpace+'space_battle_bpm130.ogg',rawSpace+'space_battle_bpm130.ogg'],
-        urgent:[cdnSpace+'space_boss_battle_bpm175.ogg',rawSpace+'space_boss_battle_bpm175.ogg']
+        menu:[local('menu_theme.ogg')],
+        combat:[
+          'https://cdn.jsdelivr.net/gh/AdamPallus/space_game@main/assets/music/space_battle_bpm130.ogg',
+          local('battle_theme.ogg')
+        ],
+        urgent:[local('battle_theme.ogg')]
       };
       this.samplePools={};this.sampleCursor={};this.mediaReady=false;this.mediaUnlocked=false;this.musicEls={};this.currentMusic=null;this.currentMusicKey='';this.musicResumeWanted=false;this.pendingMusicKey='';
       this.curves=new Map();
