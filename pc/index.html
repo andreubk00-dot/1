@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — ПК v1.8.22</title>
+  <title>Бесконечные защитники — ПК v1.8.23</title>
   <meta name="apple-mobile-web-app-title" content="Защитники" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="application-name" content="Бесконечные защитники" />
@@ -1046,7 +1046,7 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
-/* v1.8.22: iPhone save-rescue controls */
+/* v1.8.23: iPhone save-rescue controls */
 #backupScreen{z-index:76}
 .save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
 .save-entry button{min-height:44px;max-width:100%;white-space:normal}
@@ -1061,7 +1061,7 @@ canvas { touch-action:none; }
 .backup-card #backupNotice{min-height:18px;font-size:12px;line-height:1.45}
 @media(max-width:500px){.backup-card .backup-actions{grid-template-columns:1fr}.backup-card{padding:17px}}
 
-/* v1.8.22: fit three defender cards and Pulse on 320px Android/iPhone. */
+/* v1.8.23: fit three defender cards and Pulse on 320px Android/iPhone. */
 @media (max-width:520px) and (orientation:portrait) {
   .hud-bottom { gap:4px; left:6px; right:6px; }
   .hud-bottom .unit-cards { flex:1 1 0; width:auto; min-width:0; gap:3px; }
@@ -1084,7 +1084,7 @@ canvas { touch-action:none; }
 #fullscreenBtn{display:none}
 @media(min-width:800px) and (pointer:fine){.desktop-controls-guide{display:block}#fullscreenBtn{display:inline-grid;place-items:center}}
 
-/* v1.8.22 — UI clarity; preserves the 320px battle-control layout. */
+/* v1.8.23 — UI clarity; preserves the 320px battle-control layout. */
 .hero-card{align-items:center}
 .hero-actions #playBtn{min-height:66px;box-shadow:0 12px 30px rgba(97,211,255,.24);border:1px solid rgba(206,251,255,.45)}
 .hero-actions #playBtn span{font-size:19px;letter-spacing:-.025em}
@@ -1589,7 +1589,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.22',
+  version: '1.8.23',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -2507,7 +2507,7 @@ window.ED_BALANCE = Object.freeze({
       this.bridge = new YandexBridge(this); this.audio=new AudioFX(); this.audio.initMedia(); this.lang='ru'; this.t=TEXT.ru; this.save=structuredClone(DEFAULT_SAVE);
       this.canvas=$('gameCanvas'); this.ctx=this.canvas.getContext('2d'); this.dpr=Math.max(1,Math.min(2,devicePixelRatio||1));
       this.inRun=false; this.paused=false; this.pauseOverlay=false; this.externalPause=false; this.externalPauseWasPaused=false; this.externalPauseReasons=new Set(); this.challenge=false; this.lastFrame=performance.now(); this.animId=0; this.autoLowFx=false; this.perfWindowStart=0; this.perfFrames=0; this.perfSlowWindows=0; this.perfFastWindows=0; this.perfFps=60;
-      this.run=null; this.rmbBoost=false; this.rmbPointerId=null; this.toastTimer=0; this.saveTimer=0; this.sessionActiveAt=now(); this.sessionInterstitials=0;
+      this.run=null; this.resultAdBusy=false; this.rmbBoost=false; this.rmbPointerId=null; this.toastTimer=0; this.saveTimer=0; this.sessionActiveAt=now(); this.sessionInterstitials=0;
     }
 
     async init(){
@@ -2879,7 +2879,7 @@ window.ED_BALANCE = Object.freeze({
       if((s.bestWave||0)>0&&now()>=(s.nextChestAt||0))add('🎁',ru?'Контейнер готов':'Chest ready',ru?'Забери награду за возвращение.':'Claim your return reward.','claim');
       const jr=JOURNEY.findIndex((goal,i)=>!s.journey.claimed[i]&&goal.test(s));
       if(jr>=0){const tx=JOURNEY[jr][this.lang]||JOURNEY[jr].ru;add('🎯',ru?'Забери награду: '+tx[0]:'Claim reward: '+tx[0],ru?'Цель новичка выполнена.':'Rookie goal complete.','rewards');}
-      const q=this.questDefs().find(q=>(s.quests[q.key]||0)>=q.goal&&!s.quests.claimed[this.questDefs().indexOf(q)]);
+      const q=this.questDefs().find((q,i)=>(s.quests[q.key]||0)>=q.goal&&!s.quests.claimed[i]);
       if(q)add('💎',ru?'Забери кристаллы за задание':'Claim quest crystals',q.text,'modal','dailyScreen');
       const wr=WEEKLY_REWARDS.find((reward,i)=>!s.weekly.claimed[i]&&(s.weekly.waves||0)>=reward.waves);
       if(wr)add('🔶',ru?'Недельная награда доступна':'Weekly reward ready',ru?'Награда за пройденные волны.':'Reward for completed waves.','modal','weeklyScreen');
@@ -3378,16 +3378,58 @@ window.ED_BALANCE = Object.freeze({
     banner(text,boss=false){const b=$('waveBanner'),w=this.run?.wave||1,tier=this.combatTier(w);b.textContent=text;b.classList.toggle('boss-banner',!!boss);b.classList.toggle('epic-banner',tier>=2);b.classList.toggle('apocalypse-banner',tier>=4);b.classList.remove('hidden');clearTimeout(this.bannerTimer);this.bannerTimer=setTimeout(()=>b.classList.add('hidden'),boss?1600:(tier>=3?1150:950));}
 
     endRun(manual=false){
-      if(!this.inRun||!this.run)return;this.rmbBoost=false;this.rmbPointerId=null;this.refreshSpeedButton();this.bridge.gameplayStop();const r=this.run;r.holdFire=false;this.inRun=false;this.paused=true;this.pauseOverlay=false;$('pauseScreen').classList.add('hidden');this.audio.stopCombatMusic(.22);if(!manual)this.audio.defeat();
+      if(!this.inRun||!this.run)return;this.rmbBoost=false;this.rmbPointerId=null;this.refreshSpeedButton();this.bridge.gameplayStop();const r=this.run;r.holdFire=false;r.manualEnd=!!manual;this.resultAdBusy=false;this.inRun=false;this.paused=true;this.pauseOverlay=false;$('pauseScreen').classList.add('hidden');this.audio.stopCombatMusic(.22);if(!manual)this.audio.defeat();
       const reached=Math.max(1,r.wave-(r.spawned===0&&r.enemies.length===0?1:0)),completed=Math.max(0,r.lastCleared||0),econ=BALANCE.economy;const depthMultiplier=Math.min(econ.shardDepthBonusCap||1.90,1+Math.max(0,completed-(econ.shardDepthBonusStartWave||30))*(econ.shardDepthBonusPerWave||.012));const base=completed>0?Math.floor((completed*econ.runShardPerWave+Math.sqrt(r.kills)*econ.runShardKillSqrt)*depthMultiplier*(1+this.save.lab.income*.04)*(1+(this.save.meta.spent.income||0)*.02)*(r.challengeBonus)*(r.mods?.shardBonus||1)):0;r.earnedShards=completed>0?base+(r.riftBonusShards||0):0;if(manual&&completed===0)setTimeout(()=>this.toast(this.lang==='ru'?'Постоянная награда начисляется после завершения хотя бы одной волны':'Permanent rewards start after clearing at least one wave'),180);if(completed>=econ.runGemWaveThreshold&&!r.endGemGranted){r.earnedGems+=1;r.endGemGranted=true;}if(this.challenge&&completed>=(econ.dailyChallengeFirstClearWave||10)&&!this.save.quests.challengeRewarded){this.save.quests.challengeRewarded=true;const cs=econ.dailyChallengeShards||30,cg=econ.dailyChallengeGems||2;r.earnedShards+=cs;r.earnedGems+=cg;this.track('daily_challenge_clear',{wave:reached,shards:cs,gems:cg});this.celebrateReward(`+${cs} 🔶   +${cg} 💎`,'◈');}
       if(completed===0){r.earnedGems=0;r.riftBonusShards=0;}r.reached=reached;r.completed=completed;const durationMs=Math.max(0,now()-(r.startedAt||now()));this.track('run_finish',{wave:reached,completed,run:this.save.runs,durationMs,manualHits:r.manualHits||0,weakHits:r.weakHits||0});const oldBest=this.save.bestWave;if(completed>oldBest){this.save.bestWave=completed;this.bridge.submitScore(completed);setTimeout(()=>this.toast(this.t.newBest.replace('{n}',completed)),450);}
       this.save.shards+=r.earnedShards;this.save.gems+=r.earnedGems;this.unlockByBest();this.checkAchievements();$('bossHud').classList.add('hidden');document.querySelector('.battle-frame')?.classList.remove('commander-active','commander-overheat');this.persist(true);
       $('resultWave').textContent=reached;$('resultShards').textContent=r.earnedShards;$('resultGems').textContent=r.earnedGems;$('resultKills').textContent=r.kills;$('resultCombo').textContent=`×${r.maxCombo||0}`;$('resultBosses').textContent=r.runBosses||0;$('resultManualHits').textContent=r.manualHits||0;this.renderResultNextGoal();const score=reached+(r.runBosses||0)*6+(r.maxCombo||0)*.22;const grade=score>=65?'S':score>=42?'A':score>=24?'B':score>=12?'C':'D';$('resultGrade').textContent=grade;const gradeBox=$('resultGrade')?.parentElement;if(gradeBox)gradeBox.dataset.grade=grade;const resultCard=document.querySelector('#resultScreen .result-card');if(resultCard){resultCard.classList.remove('result-show');void resultCard.offsetWidth;resultCard.classList.add('result-show');}const adCfg=BALANCE.ads||{},canRevive=!manual&&!r.revived&&reached>=(adCfg.reviveMinWave||5),canDouble=reached>=(adCfg.doubleMinWave||2)&&r.earnedShards>=(adCfg.doubleMinShards||20)&&(this.save.quests.doubleAds||0)<(adCfg.doubleRewardDailyLimit||3);$('doubleRewardBtn').disabled=false;$('doubleRewardBtn').classList.toggle('hidden',!canDouble);$('reviveBtn').classList.toggle('hidden',!canRevive);if(canDouble)$('doubleRewardText').textContent=this.lang==='ru'?`Удвоить награду: +${r.earnedShards} 🔶`:`Double reward: +${r.earnedShards} 🔶`;if(canRevive)$('reviveText').textContent=this.lang==='ru'?`Продолжить: ${Math.round((adCfg.reviveCorePct||.62)*100)}% ядра +${adCfg.reviveEnergy||45} ⚡`:`Continue: ${Math.round((adCfg.reviveCorePct||.62)*100)}% core +${adCfg.reviveEnergy||45} ⚡`;if(canRevive)this.track('reward_ad_offer',{placement:'revive',wave:reached});if(canDouble)this.track('reward_ad_offer',{placement:'double',wave:reached});$('comboHud')?.classList.add('hidden');$('fieldOrderHud')?.classList.add('hidden');$('bossIntro')?.classList.add('hidden');$('resultScreen').classList.remove('hidden');
       this.renderHome();
     }
-    async reviveRun(){const r=this.run;if(!r||r.revived||r.resultDoubled)return;this.track('reward_ad_attempt',{placement:'revive',wave:r.reached||r.wave});const ok=await this.bridge.rewardAd(()=>{this.save.shards-=r.earnedShards;this.save.gems-=r.earnedGems;r.earnedShards=0;r.revived=true;this.track('reward_ad_revive');this.track('reward_ad_reward',{placement:'revive',wave:r.reached||r.wave});const ac=BALANCE.ads||{};r.core=r.maxCore*(ac.reviveCorePct||.62);r.energy+=(ac.reviveEnergy||45);r.commanderCharge=Math.max(r.commanderCharge||0,ac.reviveCharge||50);r.commanderHeat=0;r.commanderOverheated=false;r.holdFire=false;r.enemies=[];r.projectiles=[];r.spawned=0;r.toSpawn=this.waveEnemyCount(r.wave);r.spawnTimer=.35;r.wavePause=.7;this.inRun=true;this.paused=false;$('resultScreen').classList.add('hidden');this.showScreen('battleScreen');this.audio.startCombatMusic(r.wave,this.isBossWave(r.wave));this.bridge.gameplayStart();this.persist(true);});if(!ok&&!r.revived)this.toast(this.t.noAd);}
-    async doubleResult(){const r=this.run,adCfg=BALANCE.ads||{};if(!r||r.resultDoubled||(this.save.quests.doubleAds||0)>=(adCfg.doubleRewardDailyLimit||3))return;this.track('reward_ad_attempt',{placement:'double',wave:r.reached||r.wave});const ok=await this.bridge.rewardAd(()=>{this.save.shards+=r.earnedShards;this.save.quests.doubleAds=(this.save.quests.doubleAds||0)+1;r.resultDoubled=true;this.track('reward_ad_double');this.track('reward_ad_reward',{placement:'double',wave:r.reached||r.wave});$('resultShards').textContent=r.earnedShards*2;$('doubleRewardBtn').disabled=true;$('reviveBtn').classList.add('hidden');this.persist(true);this.renderHome();});if(!ok&&!r.resultDoubled)this.toast(this.t.noAd);}
-    async leaveResult(){const reached=this.run?.reached||0,shouldAd=this.canShowInterstitial(reached);this.rmbBoost=false;this.rmbPointerId=null;$('resultScreen').classList.add('hidden');this.run=null;this.paused=false;this.showScreen('homeScreen');this.renderHome();if(this.save.sound)this.audio.startMenuMusic();if(shouldAd){this.track('interstitial_offer',{wave:reached,run:this.save.runs});const shown=await this.bridge.fullscreen();this.track(shown?'interstitial_shown':'interstitial_missed',{wave:reached,run:this.save.runs});this.persist();}}
+    // Only one result-screen ad may run at a time. Closing the result during an
+    // asynchronous rewarded-video callback must never revive an abandoned run.
+    async reviveRun(){
+      const r=this.run,ads=BALANCE.ads||{};
+      if(this.resultAdBusy||this.bridge.adInProgress||this.inRun||!r||r.manualEnd||r.revived||r.resultDoubled||r.reached<(ads.reviveMinWave||5))return;
+      this.resultAdBusy=true;$('reviveBtn').disabled=true;$('doubleRewardBtn').disabled=true;
+      try{
+        this.track('reward_ad_attempt',{placement:'revive',wave:r.reached||r.wave});
+        const ok=await this.bridge.rewardAd(()=>{
+          if(this.run!==r||r.revived||r.resultDoubled)return;
+          this.save.shards-=r.earnedShards;this.save.gems-=r.earnedGems;r.earnedShards=0;r.revived=true;
+          this.track('reward_ad_revive');this.track('reward_ad_reward',{placement:'revive',wave:r.reached||r.wave});
+          r.core=r.maxCore*(ads.reviveCorePct||.62);r.energy+=(ads.reviveEnergy||45);
+          r.commanderCharge=Math.max(r.commanderCharge||0,ads.reviveCharge||50);
+          r.commanderHeat=0;r.commanderOverheated=false;r.holdFire=false;r.enemies=[];r.projectiles=[];
+          r.spawned=0;r.toSpawn=this.waveEnemyCount(r.wave);r.spawnTimer=.35;r.wavePause=.7;
+          this.inRun=true;this.paused=false;$('resultScreen').classList.add('hidden');this.showScreen('battleScreen');
+          this.audio.startCombatMusic(r.wave,this.isBossWave(r.wave));this.bridge.gameplayStart();this.persist(true);
+        });
+        if(!ok&&!r.revived)this.toast(this.t.noAd);
+      }finally{
+        this.resultAdBusy=false;
+        if(!this.inRun&&this.run===r){$('reviveBtn').disabled=false;$('doubleRewardBtn').disabled=false;}
+      }
+    }
+    async doubleResult(){
+      const r=this.run,ads=BALANCE.ads||{};
+      if(this.resultAdBusy||this.bridge.adInProgress||this.inRun||!r||r.resultDoubled||r.reached<(ads.doubleMinWave||2)||r.earnedShards<(ads.doubleMinShards||20)||(this.save.quests.doubleAds||0)>=(ads.doubleRewardDailyLimit||3))return;
+      this.resultAdBusy=true;$('doubleRewardBtn').disabled=true;$('reviveBtn').disabled=true;
+      try{
+        this.track('reward_ad_attempt',{placement:'double',wave:r.reached||r.wave});
+        const ok=await this.bridge.rewardAd(()=>{
+          if(this.run!==r||r.resultDoubled)return;
+          this.save.shards+=r.earnedShards;this.save.quests.doubleAds=(this.save.quests.doubleAds||0)+1;
+          r.resultDoubled=true;this.track('reward_ad_double');this.track('reward_ad_reward',{placement:'double',wave:r.reached||r.wave});
+          $('resultShards').textContent=r.earnedShards*2;$('doubleRewardBtn').disabled=true;
+          $('reviveBtn').classList.add('hidden');this.persist(true);this.renderHome();
+        });
+        if(!ok&&!r.resultDoubled)this.toast(this.t.noAd);
+      }finally{
+        this.resultAdBusy=false;
+        if(!this.inRun&&this.run===r&&!r.resultDoubled){$('doubleRewardBtn').disabled=false;$('reviveBtn').disabled=false;}
+      }
+    }
+    async leaveResult(){if(this.resultAdBusy||this.bridge.adInProgress)return;const reached=this.run?.reached||0,shouldAd=this.canShowInterstitial(reached);this.rmbBoost=false;this.rmbPointerId=null;$('resultScreen').classList.add('hidden');this.run=null;this.paused=false;this.showScreen('homeScreen');this.renderHome();if(this.save.sound)this.audio.startMenuMusic();if(shouldAd){this.track('interstitial_offer',{wave:reached,run:this.save.runs});const shown=await this.bridge.fullscreen();this.track(shown?'interstitial_shown':'interstitial_missed',{wave:reached,run:this.save.runs});this.persist();}}
 
     claimReturnReward(){
       if(now()<(this.save.nextChestAt||0))return;const rc=BALANCE.retentionEconomy||{},scaled=Math.min(this.save.streak||1,rc.chestStreakCap||14),s=(rc.chestShardBase||18)+Math.floor(Math.random()*((rc.chestShardRandom||12)+1))+scaled,g=Math.random()<(rc.chestGemChance||.20)?1:0;this.save.shards+=s;this.save.gems+=g;this.save.nextChestAt=now()+6*60*60*1000;const rewardText=`+${s} 🔶${g?`   +${g} 💎`:''}`;this.celebrateReward(rewardText,g?'💎':'🔶');this.persist();this.renderHome();this.toast(g?this.t.chestReward.replace('{s}',s).replace('{g}',g):(this.lang==='ru'?`Контейнер: +${s} осколков`:`Container: +${s} shards`));
