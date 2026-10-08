@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники</title>
+  <title>Бесконечные защитники — iPhone v1.8.12</title>
   <style>
 :root{
   --bg:#0b1018;--bg2:#111827;--panel:#151d2b;--panel2:#1c2637;--line:#2a3850;
@@ -942,7 +942,7 @@ button,.buy-upgrade,.season-claim,.return-milestone button,.mastery-reward-row b
 
 
 
-/* v1.8.11 CC0 audio hotfix: reliable GitHub/CDN mirrors + preload/unlock/retry */
+/* v1.8.12 CC0 audio hotfix: reliable GitHub/CDN mirrors + preload/unlock/retry */
 .battle-frame.boss-intro-live .boss-hud,
 .battle-frame.boss-intro-live .boss-objective,
 .battle-frame.boss-intro-live .rift-hud,
@@ -1463,7 +1463,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.11',
+  version: '1.8.12',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1710,7 +1710,7 @@ window.ED_BALANCE = Object.freeze({
 
 
   const BALANCE = window.ED_BALANCE || {
-    version:'fallback-1.8.11', run:{baseCore:100,baseEnergy:74},
+    version:'fallback-1.8.12', run:{baseCore:100,baseEnergy:74},
     wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.115,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
@@ -2050,20 +2050,20 @@ window.ED_BALANCE = Object.freeze({
   /*
     AUDIO ASSET SOURCES — all CC0 / public domain, commercial use permitted, attribution not required:
     - Kenney, "Sci-Fi Sounds" (laserSmall, laserLarge, explosionCrunch, forceField, thrusterFire), CC0.
-      Audio samples bundled at ./audio/ on the same origin.
+      Verified runtime mirror: blal1/neon-protocol, with jsDelivr + raw.githubusercontent.com fallback.
     - MintoDog, "Racing Game Menu", "Space Battle", "Space Boss Battle", OpenGameArt, CC0.
-      Bundled locally for reliable Safari playback. Battle uses CC0 fallback.
-    v1.8.11 fixes the broken Sentinel/Spark/Core sample paths and replaces the previous low-energy music set.
+      Runtime mirrors: public GitHub repositories, with jsDelivr + raw.githubusercontent.com fallback.
+    v1.8.12 fixes the broken Sentinel/Spark/Core sample paths and replaces the previous low-energy music set.
   */
   class AudioFX {
     constructor(){
       this.ctx=null;this.enabled=true;this.volume=1;this.master=null;this.sfxBus=null;this.sfxTone=null;this.musicBus=null;this.room=null;this.roomGain=null;this.compressor=null;
       this.noiseBuffer=null;this.brownBuffer=null;this.last={};this.voiceTimes=[];this.musicTimer=0;this.musicStep=0;this.musicIntensity=.22;this.musicBoss=false;this.musicNodes=[];
       // CC0 sampled layer. Sources are documented in ASSET_SOURCES inside the build comments.
-      // v1.8.11: one verified Kenney mirror for every weapon sample. The previous build
+      // v1.8.12: one verified Kenney mirror for every weapon sample. The previous build
       // mixed repositories; Sentinel, Spark and Core Weapon pointed at missing files and
       // silently fell back to the old synthesized character while Frost used the sample.
-      // Local CC0 samples: hosted alongside the iPhone game, never fetched cross-origin.
+      // Local CC0 samples from the same-origin /audio directory.
       const local=(name)=>'./audio/'+name;
       this.sampleUrls={
         shoot1:[local('laserSmall_000.ogg')],shoot2:[local('laserSmall_001.ogg')],
@@ -2073,17 +2073,12 @@ window.ED_BALANCE = Object.freeze({
         missile:[local('thrusterFire_000.ogg')],explosion1:[local('explosionCrunch_002.ogg')],
         explosion2:[local('explosionCrunch_004.ogg')]
       };
-      // Two locally bundled CC0 music files; battle track can use a more
-      // spacious online composition when available, but falls back to local audio.
       this.musicUrls={
         menu:[local('menu_theme.ogg')],
-        combat:[
-          'https://cdn.jsdelivr.net/gh/AdamPallus/space_game@main/assets/music/space_battle_bpm130.ogg',
-          local('battle_theme.ogg')
-        ],
+        combat:['https://cdn.jsdelivr.net/gh/AdamPallus/space_game@main/assets/music/space_battle_bpm130.ogg',local('battle_theme.ogg')],
         urgent:[local('battle_theme.ogg')]
       };
-      this.samplePools={};this.sampleCursor={};this.mediaReady=false;this.mediaUnlocked=false;this.musicEls={};this.currentMusic=null;this.currentMusicKey='';this.musicResumeWanted=false;this.pendingMusicKey='';
+      this.samplePools={};this.sampleCursor={};this.sampleBuffers={};this.sampleLoadJobs={};this.sampleFailed={};this.mediaReady=false;this.mediaUnlocked=false;this.musicEls={};this.currentMusic=null;this.currentMusicKey='';this.musicResumeWanted=false;this.pendingMusicKey='';this.mediaSuspended=false;this.mediaSuspended=false;
       this.curves=new Map();
     }
     init(){
@@ -2111,39 +2106,84 @@ window.ED_BALANCE = Object.freeze({
     }
     initMedia(){
       if(this.mediaReady||typeof Audio==='undefined')return;this.mediaReady=true;
-      const sizes={shoot1:7,shoot2:7,shoot3:7,sparkShot:7,blaster:7,doomsday:5,laser:6,spark:5,missile:4,explosion1:5,explosion2:5};
-      for(const [key,urls] of Object.entries(this.sampleUrls)){this.samplePools[key]=[];this.sampleCursor[key]=0;for(let i=0;i<(sizes[key]||4);i++){const a=this.makeMedia(urls,'auto',false);this.samplePools[key].push(a);try{a.load();}catch(e){}}}
-      for(const [key,urls] of Object.entries(this.musicUrls)){const a=this.makeMedia(urls,'auto',true);this.musicEls[key]=a;try{a.load();}catch(e){}}
+      // Music remains streamed, but weapon SFX decode ONCE into AudioBuffers.
+      // Avoid allocating ~70 HTMLAudioElements and competing network requests on Safari.
+      for(const key of Object.keys(this.sampleUrls)){this.samplePools[key]=[];this.sampleCursor[key]=0;}
+      for(const [key,urls] of Object.entries(this.musicUrls)){
+        const a=this.makeMedia(urls,'metadata',true);this.musicEls[key]=a;
+        a.addEventListener('canplay',()=>{
+          if(this.currentMusic===a&&this.pendingMusicKey===key&&this.mediaUnlocked&&!this.mediaSuspended&&!document.hidden)this.tryPlayMedia(a);
+        });
+      }
       this.updateMediaVolumes();
     }
     unlockMedia(){
       this.mediaUnlocked=true;this.initMedia();try{if(this.ctx&&this.ctx.state==='suspended')this.ctx.resume();}catch(e){}
+      this.mediaSuspended=false;
+      this.ensureSampleBuffers();
       const key=this.pendingMusicKey||this.currentMusicKey;if(key&&this.enabled&&this.volume>0)this.playMusic(key,false);
     }
+    ensureSampleBuffers(){
+      if(!this.ctx||!this.sfxBus)return;
+      for(const [key,urls] of Object.entries(this.sampleUrls)){
+        if(this.sampleBuffers[key]||this.sampleLoadJobs[key]||this.sampleFailed[key])continue;
+        this.sampleLoadJobs[key]=Promise.resolve().then(async()=>{
+          for(const url of urls){
+            try{
+              const response=await fetch(url,{cache:'force-cache'});
+              if(!response.ok)continue;
+              const bytes=await response.arrayBuffer();
+              const decoded=await this.ctx.decodeAudioData(bytes);
+              if(decoded&&decoded.length){this.sampleBuffers[key]=decoded;return;}
+            }catch(e){}
+          }
+          this.sampleFailed[key]=true;
+          // Decoder may not support OGG on old iOS. Keep a small, lazy media fallback.
+          if(typeof Audio!=='undefined'){
+            const pool=this.samplePools[key]||[];
+            if(!pool.length){for(let i=0;i<2;i++){const a=this.makeMedia(urls,'auto',false);pool.push(a);try{a.load();}catch(e){}}this.samplePools[key]=pool;}
+          }
+        }).finally(()=>{delete this.sampleLoadJobs[key];});
+      }
+    }
     tryPlayMedia(a){
-      if(!a||!this.enabled||this.volume<=0)return false;a._pendingPlay=true;
+      if(!a||!this.enabled||this.volume<=0||this.mediaSuspended||document.hidden)return false;a._pendingPlay=true;
       try{const pr=a.play();if(pr?.then)pr.then(()=>{a._pendingPlay=false;}).catch(()=>{a._pendingPlay=true;});return true;}catch(e){return false;}
     }
     updateMediaVolumes(){
       for(const [key,a] of Object.entries(this.musicEls||{}))a.volume=Math.max(0,Math.min(1,this.volume*(key==='menu'?.36:key==='urgent'?.39:.37)));
     }
     sample(key,gain=.7,rate=1,jitter=.025){
-      if(!this.enabled||this.volume<=0)return false;this.initMedia();const pool=this.samplePools[key];if(!pool?.length)return false;
+      if(!this.enabled||this.volume<=0||this.mediaSuspended||document.hidden)return false;
+      this.initMedia();const buffer=this.sampleBuffers[key];
+      if(buffer&&this.ctx&&this.ctx.state==='running'&&this.sfxBus){
+        if(!this.voiceAllowed(32,220))return false;
+        try{
+          const src=this.ctx.createBufferSource(),level=this.ctx.createGain();
+          src.buffer=buffer;src.playbackRate.value=Math.max(.55,Math.min(1.65,rate*(1+this.rand(-jitter,jitter))));
+          level.gain.value=Math.max(0,Math.min(1,gain*this.rand(.94,1.04)));
+          src.connect(level);level.connect(this.sfxBus);src.start(0);
+          src.onended=()=>{try{src.disconnect();level.disconnect();}catch(e){}};
+          return true;
+        }catch(e){return false;}
+      }
+      if(!this.sampleLoadJobs[key])this.ensureSampleBuffers();
+      const pool=this.samplePools[key];if(!pool?.length)return false;
       const i=this.sampleCursor[key]=(this.sampleCursor[key]+1)%pool.length,a=pool[i];
-      try{if(a.readyState<2){a.load();return false;}a.pause();a.currentTime=0;a.playbackRate=Math.max(.55,Math.min(1.65,rate*(1+this.rand(-jitter,jitter))));a.volume=Math.max(0,Math.min(1,this.volume*gain*this.rand(.94,1.04)));return this.tryPlayMedia(a);}catch(e){return false;}
+      try{if(a.readyState<2)return false;a.pause();a.currentTime=0;a.playbackRate=Math.max(.55,Math.min(1.65,rate*(1+this.rand(-jitter,jitter))));a.volume=Math.max(0,Math.min(1,this.volume*gain*this.rand(.94,1.04)));return this.tryPlayMedia(a);}catch(e){return false;}
     }
     playMusic(key,restart=false){
       if(!this.enabled||this.volume<=0)return;this.initMedia();const next=this.musicEls[key];if(!next)return;this.pendingMusicKey=key;
       if(this.currentMusic!==next&&this.currentMusic){try{this.currentMusic.pause();this.currentMusic._pendingPlay=false;}catch(e){}}
       this.currentMusic=next;this.currentMusicKey=key;next.volume=Math.max(0,Math.min(1,this.volume*(key==='menu'?.36:key==='urgent'?.39:.37)));
       if(restart){try{next.currentTime=0;}catch(e){}}
-      if(next.readyState<2){try{next.load();}catch(e){}next.addEventListener('canplay',()=>{if(this.pendingMusicKey===key&&this.mediaUnlocked)this.tryPlayMedia(next);},{once:true});return;}
+      if(next.readyState<2){try{next.load();}catch(e){}return;}
       if(this.mediaUnlocked)this.tryPlayMedia(next);
     }
     startMenuMusic(){this.musicBoss=false;this.playMusic('menu',false);}
     stopAllMusic(){if(this.currentMusic){try{this.currentMusic.pause();this.currentMusic._pendingPlay=false;}catch(e){}}this.currentMusic=null;this.currentMusicKey='';this.pendingMusicKey='';}
-    suspend(){this.musicResumeWanted=!!(this.currentMusic&&!this.currentMusic.paused);if(this.currentMusic){try{this.currentMusic.pause();}catch(e){}}try{if(this.ctx&&this.ctx.state==='running')this.ctx.suspend();}catch(e){}}
-    resume(){try{if(this.enabled&&this.ctx&&this.ctx.state==='suspended')this.ctx.resume();}catch(e){}if(this.enabled&&this.musicResumeWanted&&this.currentMusic){this.mediaUnlocked=true;this.tryPlayMedia(this.currentMusic);}this.musicResumeWanted=false;}
+    suspend(){if(!this.mediaSuspended)this.musicResumeWanted=!!(this.currentMusic&&(this.currentMusicKey||this.pendingMusicKey));this.mediaSuspended=true;if(this.currentMusic){try{this.currentMusic.pause();}catch(e){}}try{if(this.ctx&&this.ctx.state==='running')this.ctx.suspend();}catch(e){}}
+    resume(){this.mediaSuspended=false;try{if(this.enabled&&this.ctx&&this.ctx.state==='suspended')this.ctx.resume();}catch(e){}if(this.enabled&&this.musicResumeWanted&&this.currentMusic&&this.mediaUnlocked&&!document.hidden){this.tryPlayMedia(this.currentMusic);}this.musicResumeWanted=false;}
     can(key,ms=35){const t=typeof performance!=='undefined'&&performance.now?performance.now():Date.now(),last=this.last[key]||0;if(t-last<ms)return false;this.last[key]=t;return true;}
     rand(a,b){return a+Math.random()*(b-a);}
     voiceAllowed(max=52,windowMs=190){const t=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();this.voiceTimes=this.voiceTimes.filter(x=>t-x<windowMs);if(this.voiceTimes.length>=max)return false;this.voiceTimes.push(t);return true;}
@@ -2292,7 +2332,11 @@ window.ED_BALANCE = Object.freeze({
       setInterval(()=>this.updateTimers(),1000);
       setInterval(()=>this.persist(false),15000);
       window.addEventListener('beforeunload',()=>{this.checkpointPlaytime();this.save.lastSeen=now();this.persist(true);});
-      document.addEventListener('visibilitychange',()=>{if(document.hidden){this.checkpointPlaytime();this.handleExternalPause(true);this.save.lastSeen=now();this.persist(true);}else{this.resumePlaytime();this.handleExternalPause(false);}}); window.addEventListener('focus',()=>{if(!document.hidden)this.handleExternalPause(false);});
+      const parkGame=()=>{this.checkpointPlaytime();this.handleExternalPause(true);this.save.lastSeen=now();this.persist(true);};
+      document.addEventListener('visibilitychange',()=>{if(document.hidden)parkGame();else{this.resumePlaytime();this.handleExternalPause(false);}});
+      window.addEventListener('pagehide',parkGame);
+      window.addEventListener('pageshow',()=>{if(!document.hidden){this.resumePlaytime();this.handleExternalPause(false);}});
+      window.addEventListener('focus',()=>{if(!document.hidden)this.handleExternalPause(false);});
     }
 
     loadLocal(){
@@ -2342,7 +2386,7 @@ window.ED_BALANCE = Object.freeze({
       $('dailyBtn').onclick=()=>this.openModal('dailyScreen'); $('labBtn').onclick=()=>this.openModal('labScreen'); $('collectionBtn').onclick=()=>this.openModal('collectionScreen'); $('weeklyBtn').onclick=()=>this.openModal('weeklyScreen'); $('seasonBtn').onclick=()=>this.openModal('seasonScreen'); $('returnTrackBtn').onclick=()=>this.openModal('returnTrackScreen'); $('metaBtn').onclick=()=>this.openModal('metaScreen'); $('commanderBtn').onclick=()=>this.openModal('commanderScreen'); $('achievementBtn').onclick=()=>this.openModal('achievementScreen'); $('journeyBtn').onclick=()=>this.openModal('journeyScreen');
       document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>this.closeModal(b.dataset.close));
       $('pauseBtn').onclick=()=>this.togglePauseOverlay(); $('resumeBtn').onclick=()=>this.togglePauseOverlay(false); $('exitRunBtn').onclick=()=>this.endRun(true);
-      $('soundBtn').onclick=()=>{this.save.sound=!this.save.sound;this.audio.enabled=this.save.sound;this.audio.setVolume(this.save.sfxVolume||0);if(this.save.sound&&this.inRun&&this.run)this.audio.startCombatMusic(this.run.wave,this.isBossWave(this.run.wave));else if(this.save.sound)this.audio.startMenuMusic();else{this.audio.stopCombatMusic(.08);this.audio.stopAllMusic();}$('soundBtn').textContent=this.save.sound?'🔊':'🔇';this.updateSettingsUI();this.persist();};
+      $('soundBtn').onclick=()=>{this.save.sound=!this.save.sound;if(this.save.sound&&this.save.sfxVolume===0)this.save.sfxVolume=1;this.audio.enabled=this.save.sound;this.audio.setVolume(this.save.sfxVolume||0);if(this.save.sound&&this.inRun&&this.run)this.audio.startCombatMusic(this.run.wave,this.isBossWave(this.run.wave));else if(this.save.sound)this.audio.startMenuMusic();else{this.audio.stopCombatMusic(.08);this.audio.stopAllMusic();}$('soundBtn').textContent=this.save.sound?'🔊':'🔇';this.updateSettingsUI();this.persist();};
       $('soundLevelBtn')?.addEventListener('click',()=>{const levels=[1,.5,0],cur=levels.indexOf(this.save.sfxVolume);this.save.sfxVolume=levels[(cur+1)%levels.length];this.save.sound=this.save.sfxVolume>0;this.audio.enabled=this.save.sound;this.audio.setVolume(this.save.sfxVolume||0);if(this.save.sound&&this.inRun&&this.run)this.audio.startCombatMusic(this.run.wave,this.isBossWave(this.run.wave));else if(this.save.sound)this.audio.startMenuMusic();else{this.audio.stopCombatMusic(.08);this.audio.stopAllMusic();}$('soundBtn').textContent=this.save.sound?'🔊':'🔇';this.updateSettingsUI();this.persist();});
       $('fxToggleBtn')?.addEventListener('click',()=>{this.save.lowFx=!this.save.lowFx;this.updateSettingsUI();this.persist();});
       $('shakeToggleBtn')?.addEventListener('click',()=>{this.save.shake=!this.save.shake;this.updateSettingsUI();this.persist();});
@@ -2360,6 +2404,7 @@ window.ED_BALANCE = Object.freeze({
       this.canvas.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'||e.buttons!==2)this.handleAimPointer(e);});
       this.canvas.addEventListener('pointerup',e=>{if(e.button===2){this.rmbPointerId=null;this.setRmbBoost(false);}else if(this.run)this.run.holdFire=false;});
       this.canvas.addEventListener('pointercancel',()=>{if(this.run)this.run.holdFire=false;this.rmbPointerId=null;this.setRmbBoost(false);});
+      this.canvas.addEventListener('lostpointercapture',()=>{if(this.run)this.run.holdFire=false;this.rmbPointerId=null;this.setRmbBoost(false);});
       document.addEventListener('pointerup',e=>{if(e.button===2){this.rmbPointerId=null;this.setRmbBoost(false);}});
       window.addEventListener('blur',()=>{this.setRmbBoost(false);this.handleExternalPause(true);});
       this.canvas.addEventListener('pointerleave',e=>{if(this.run&&e.buttons!==2){this.run.aim=null;this.run.holdFire=false;}});
@@ -2750,7 +2795,20 @@ window.ED_BALANCE = Object.freeze({
     usePulse(){if(!this.run||this.run.skillCd>0||this.paused)return;this.run.skillCd=12*(this.run.mods?.skillCd||1);this.run.skills++;this.save.quests.skills++;this.save.stats.skills++;if(this.run.skills===1)this.track('first_pulse',{wave:this.run.wave});for(const e of this.run.enemies){let resist=e.boss?.id==='aegis'&&e.hp/e.maxHp>.5?.72:1;if(e.boss?.variant?.guard)resist*=1-e.boss.variant.guard;if(e.affixes?.includes('barrier'))resist*=ENEMY_AFFIXES.barrier.fx.damageTaken;e.hp-=32*(1+this.save.lab.damage*.06)*(1+(this.save.meta.spent.damage||0)*.03)*this.metaRankBonus()*resist*(this.run.rift?.fx?.playerDamage||1);e.flash=.18;}this.run.screenFlash=.18;this.spawnBurst(690,360,'#7fe7ff',36);this.audio.pulse();this.checkFieldOrders();this.checkAchievements();this.persist();}
     togglePauseOverlay(force){if(!this.inRun)return;const next=typeof force==='boolean'?force:!this.pauseOverlay;this.pauseOverlay=next;$('pauseScreen').classList.toggle('hidden',!next);this.pauseInternal(next);if(next)this.bridge.gameplayStop();else this.bridge.gameplayStart();}
     pauseInternal(v){this.paused=v;if(v){this.setRmbBoost(false);this.audio.suspend();}else this.audio.resume();}
-    handleExternalPause(active){if(active){if(this.externalPause)return;this.externalPause=true;this.externalPauseWasPaused=!!this.paused;if(this.inRun){this.pauseInternal(true);this.bridge.gameplayStop();}return;}if(!this.externalPause)return;const resume=this.inRun&&!this.externalPauseWasPaused&&!this.pauseOverlay;this.externalPause=false;this.externalPauseWasPaused=false;if(resume){this.pauseInternal(false);this.bridge.gameplayStart();}}
+    handleExternalPause(active){
+      if(active){
+        if(this.run){this.run.holdFire=false;this.run.aim=null;}
+        this.setRmbBoost(false);this.audio.suspend();
+        if(this.externalPause)return;
+        this.externalPause=true;this.externalPauseWasPaused=!!this.paused;
+        if(this.inRun){this.pauseInternal(true);this.bridge.gameplayStop();}return;
+      }
+      if(!this.externalPause)return;
+      const resume=this.inRun&&!this.externalPauseWasPaused&&!this.pauseOverlay;
+      this.externalPause=false;this.externalPauseWasPaused=false;
+      if(resume){this.pauseInternal(false);this.bridge.gameplayStart();}
+      else if(!this.inRun)this.audio.resume();
+    }
 
     spawnEnemy(){
       const w=this.run.wave,bossWave=this.isBossWave(w);
@@ -3023,15 +3081,11 @@ window.ED_BALANCE = Object.freeze({
 </script>
 
 <script>
-(function(){
-  let lastTouchEnd=0;
-  document.addEventListener('touchend',function(e){
-    const now=Date.now();
-    if(now-lastTouchEnd<=300)e.preventDefault();
-    lastTouchEnd=now;
-  },{passive:false});
-  document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
-})();
+// Safari mobile: no document-wide touchend.preventDefault; it eats rapid UI clicks.
+// Canvas touch-action:none, buttons touch-action:manipulation handle zoom and gestures.
+document.addEventListener('gesturestart',e=>{
+  if(e.target?.closest?.('.battle-frame'))e.preventDefault();
+},{passive:false});
 </script>
 </body>
 </html>
