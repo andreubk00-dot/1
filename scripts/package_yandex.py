@@ -14,7 +14,7 @@ assert 'onrender.com/' not in html, 'External links must not be present'
 audio=sorted((root/'audio').glob('*.ogg'))
 assert len(audio)==13,f'Expected 13 audio files, got {len(audio)}'
 # Literal local sample paths must resolve before publishing.
-for path in set(re.findall(r"audio/[a-zA-Z0-9_-]+\\.ogg",html)):
+for path in set(re.findall(r"audio/[a-zA-Z0-9_-]+\.ogg",html)):
     assert (root/path).is_file(), f'Missing local audio {path}'
 dist=root/'dist';dist.mkdir(exist_ok=True)
 name=dist/'endless-defenders-yandex-v1.8.20.zip'
