@@ -29,6 +29,18 @@ async function smoke(profile){
   assert(await page.locator('#resourceHelpScreen').isVisible(),'Resource dialog failed to open');
   await page.locator('#resourceHelpClose').click();
   assert(!(await page.locator('#resourceHelpScreen').isVisible()),'Resource dialog failed to close');
+  // Long-term contract goal is visible without changing prices or balances.
+  const contractGoal=page.locator('[data-contract-goal="prism"]');
+  assert(await contractGoal.isVisible(),'Prism long-term contract goal missing');
+  assert.equal(await contractGoal.locator('.contract-goal-meter').count(),4,'Not all permanent resource meters are shown');
+  const goalCheck=await page.evaluate(()=>{
+    const g=window.__ENDLESS_DEFENDERS__,before=JSON.stringify(g.save);
+    const node=document.querySelector('[data-contract-goal="prism"]');
+    const width=node?.getBoundingClientRect().width||0;
+    return {unchanged:before===JSON.stringify(g.save),width,scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth};
+  });
+  assert(goalCheck.unchanged&&goalCheck.width>20,'Contract goal mutated resources or failed to render');
+  assert(goalCheck.scrollWidth<=goalCheck.viewport+6,'Contract goal caused mobile overflow');
   const result=await page.evaluate(()=>{
     const g=window.__ENDLESS_DEFENDERS__;g.save.tutorialDone=true;
     g.audio.enabled=false;g.startRun(false);
