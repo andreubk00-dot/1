@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — ПК v1.8.21</title>
+  <title>Бесконечные защитники — ПК v1.8.22</title>
   <meta name="apple-mobile-web-app-title" content="Защитники" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="application-name" content="Бесконечные защитники" />
@@ -1046,7 +1046,7 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
-/* v1.8.21: iPhone save-rescue controls */
+/* v1.8.22: iPhone save-rescue controls */
 #backupScreen{z-index:76}
 .save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
 .save-entry button{min-height:44px;max-width:100%;white-space:normal}
@@ -1061,7 +1061,7 @@ canvas { touch-action:none; }
 .backup-card #backupNotice{min-height:18px;font-size:12px;line-height:1.45}
 @media(max-width:500px){.backup-card .backup-actions{grid-template-columns:1fr}.backup-card{padding:17px}}
 
-/* v1.8.21: fit three defender cards and Pulse on 320px Android/iPhone. */
+/* v1.8.22: fit three defender cards and Pulse on 320px Android/iPhone. */
 @media (max-width:520px) and (orientation:portrait) {
   .hud-bottom { gap:4px; left:6px; right:6px; }
   .hud-bottom .unit-cards { flex:1 1 0; width:auto; min-width:0; gap:3px; }
@@ -1084,7 +1084,7 @@ canvas { touch-action:none; }
 #fullscreenBtn{display:none}
 @media(min-width:800px) and (pointer:fine){.desktop-controls-guide{display:block}#fullscreenBtn{display:inline-grid;place-items:center}}
 
-/* v1.8.21 — UI clarity; preserves the 320px battle-control layout. */
+/* v1.8.22 — UI clarity; preserves the 320px battle-control layout. */
 .hero-card{align-items:center}
 .hero-actions #playBtn{min-height:66px;box-shadow:0 12px 30px rgba(97,211,255,.24);border:1px solid rgba(206,251,255,.45)}
 .hero-actions #playBtn span{font-size:19px;letter-spacing:-.025em}
@@ -1111,6 +1111,10 @@ canvas { touch-action:none; }
 .resource-help-action{width:100%;margin-top:20px;min-height:46px;border-radius:13px;font-weight:850;color:#091820;background:linear-gradient(110deg,#7be7ff,#a3bbff)}
 .collection-resource-guide{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 15px}
 .collection-resource-guide button{min-height:40px;padding:8px 12px;border:1px solid #375975;border-radius:11px;background:#172a41;color:#d9ecfa;font-weight:750;font-size:12px}
+.contract-hunt-forecast{display:flex;flex-direction:column;gap:5px;margin-top:10px;padding:10px 11px;border-radius:11px;background:rgba(52,68,91,.34);border:1px solid rgba(135,180,217,.22)}
+.contract-hunt-forecast b{font-size:10px;color:#8fe0ff;letter-spacing:.06em}
+.contract-hunt-forecast span{font-size:12px;line-height:1.5;color:#e6f3ff}
+.contract-hunt-forecast small{font-size:11px;line-height:1.4;color:#afc5d8}
 .contract-missing{font-size:11px;color:#ffbd9e;line-height:1.5;margin-top:8px}
 .promote-btn small{line-height:1.45;white-space:normal}
 .upgrade-row .buy-upgrade{white-space:normal;line-height:1.4}
@@ -1585,7 +1589,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.21',
+  version: '1.8.22',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1664,8 +1668,8 @@ window.ED_BALANCE = Object.freeze({
     prism:  { source:'aegis',       minWave:40,  chance:0.30, pity:3, parts:2, shards:2500, gems:18,  requires:null },
     nova:   { source:'leech',       minWave:50,  chance:0.25, pity:4, parts:3, shards:4500, gems:30, requires:'prism' },
     ember:  { source:'singularity', minWave:60,  chance:0.22, pity:4, parts:4, shards:8000, gems:50, requires:'nova' },
-    volt:   { source:'aegis',       minWave:100, chance:0.18, pity:5, parts:5, shards:13000, gems:80, requires:'ember' },
-    chrono: { source:'singularity', minWave:120, chance:0.14, pity:6, parts:6, shards:20000, gems:125, requires:'volt' }
+    volt:   { source:'aegis',       minWave:100, chance:0.18, pity:4, parts:5, shards:13000, gems:80, requires:'ember' },
+    chrono: { source:'singularity', minWave:120, chance:0.14, pity:5, parts:6, shards:20000, gems:125, requires:'volt' }
   },
   retentionEconomy: {
     loginShardBase: 10,
@@ -1919,8 +1923,8 @@ window.ED_BALANCE = Object.freeze({
     prism:{source:'aegis',minWave:40,chance:.30,pity:3,parts:2,shards:2500,gems:18,requires:null},
     nova:{source:'leech',minWave:50,chance:.25,pity:4,parts:3,shards:4500,gems:30,requires:'prism'},
     ember:{source:'singularity',minWave:60,chance:.22,pity:4,parts:4,shards:8000,gems:50,requires:'nova'},
-    volt:{source:'aegis',minWave:100,chance:.18,pity:5,parts:5,shards:13000,gems:80,requires:'ember'},
-    chrono:{source:'singularity',minWave:120,chance:.14,pity:6,parts:6,shards:20000,gems:125,requires:'volt'}
+    volt:{source:'aegis',minWave:100,chance:.18,pity:4,parts:5,shards:13000,gems:80,requires:'ember'},
+    chrono:{source:'singularity',minWave:120,chance:.14,pity:5,parts:6,shards:20000,gems:125,requires:'volt'}
   };
 
   const CONTEXT_COACHES = {
@@ -2802,6 +2806,13 @@ window.ED_BALANCE = Object.freeze({
       // v1.7.3: defender unlocks are explicit contracts, never automatic by wave.
       return this.save.unlocked;
     }
+    // Only eligible bosses count toward a contract. Listing those waves does not grant loot.
+    eligibleContractBossWaves(id,count=3){
+      const c=DEFENDER_CONTRACTS[id];if(!c)return [];
+      const offset={aegis:10,leech:20,singularity:30}[c.source];if(!offset)return [];
+      const wave=offset+30*Math.max(0,Math.ceil((c.minWave-offset)/30));
+      return Array.from({length:Math.max(0,Math.min(4,count))},(_,i)=>wave+i*30);
+    }
     bossSourceName(id){
       const names={aegis:this.lang==='ru'?'АЭГИДА':'AEGIS',leech:this.lang==='ru'?'ПОЖИРАТЕЛЬ':'DEVOURER',singularity:this.lang==='ru'?'СИНГУЛЯРНОСТЬ':'SINGULARITY'};return names[id]||id.toUpperCase();
     }
@@ -3044,7 +3055,7 @@ window.ED_BALANCE = Object.freeze({
 
     renderCollection(){
       $('defenderList').innerHTML=Object.entries(DEFENDERS).map(([id,d])=>{const open=this.save.unlocked.includes(id),sel=this.save.selected.includes(id),rar=d.rarity||'common',rlabel=this.lang==='ru'?(rar==='legendary'?'ЛЕГЕНДАРНЫЙ':rar==='epic'?'ЭПИЧЕСКИЙ':rar==='rare'?'РЕДКИЙ':'ОБЫЧНЫЙ'):(rar==='legendary'?'LEGENDARY':rar==='epic'?'EPIC':rar==='rare'?'RARE':'COMMON'),m=this.masteryState(id),cap=this.masteryCap(m.stars),need=this.masteryXpNeed(m.level),xpPct=m.level>=cap?100:Math.min(100,m.xp/need*100),bonus=this.masteryBonuses(id),promote=open&&m.level>=cap&&m.stars<5,cost=PROMOTION_COSTS[m.stars]||0,bpCost=PROMOTION_BLUEPRINT_COSTS[m.stars]||0,bp=this.save.blueprints[id]||0,tstate=this.talentState(id),talCount=(tstate.t10?1:0)+(tstate.t20?1:0),talReady=(m.level>=10&&!tstate.t10)||(m.level>=20&&!tstate.t20),rewardReady=this.masteryMilestoneReady(id),canPromote=this.save.gems>=cost&&bp>=bpCost,cs=!open?this.defenderContractStatus(id):null;
-        const missing=[];if(cs){const c=cs.contract;if(!cs.prevOk)missing.push(this.lang==='ru'?'Открой предыдущего защитника':'Unlock the previous defender');if(!cs.waveOk)missing.push(this.lang==='ru'?`Рекорд: ${this.save.bestWave||0}/${c.minWave} волн`:`Best wave: ${this.save.bestWave||0}/${c.minWave}`);if(!cs.partsOk)missing.push(`◈ ${this.lang==='ru'?'Не хватает':'Missing'} ${c.parts-cs.parts}`);if(this.save.shards<c.shards)missing.push(`🔶 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.shards-this.save.shards)}`);if(this.save.gems<c.gems)missing.push(`💎 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.gems-this.save.gems)}`);}const missingHtml=missing.length?`<div class="contract-missing">${missing.join(' · ')}</div>`:'';let contract='';if(cs){const c=cs.contract,reqHtml=cs.reqs.map(r=>`<span class="contract-req ${r.current>=r.goal?'done':''}">${r.current>=r.goal?'✓':'○'} ${r.label} <b>${r.key==='parts'?`${Math.min(r.current,r.goal)}/${r.goal}`:(r.key==='source'?`${Math.min(this.save.bestWave||0,c.minWave)}/${c.minWave}`:(r.current>=r.goal?(this.lang==='ru'?'ГОТОВО':'READY'):'—'))}</b></span>`).join(''),costHtml=`<span class="shard-cost">🔶 ${c.shards}</span>${c.gems?`<span class="gem-cost">💎 ${c.gems}</span>`:''}`,huntNote=this.lang==='ru'?'Фрагменты сигнатуры добываются только с этого босса на нужной глубине':'Signature fragments drop only from this boss at the required depth';contract=`<div class="unlock-contract"><div class="contract-head"><b>${this.lang==='ru'?'СБОРКА СИГНАТУРЫ':'SIGNATURE ASSEMBLY'}</b><small>${cs.partsOk?(this.lang==='ru'?'КОМПЛЕКТ СОБРАН':'SET COMPLETE'):(this.lang==='ru'?'ОХОТА АКТИВНА':'HUNT ACTIVE')}</small></div><div class="contract-source"><strong>☠ ${this.bossSourceName(c.source)} · ${c.minWave}+</strong><span>${huntNote}</span></div><div class="fragment-track">${Array.from({length:c.parts},(_,i)=>`<i class="${i<cs.parts?'filled':''}">◈</i>`).join('')}<b>${cs.parts}/${c.parts}</b></div><div class="contract-reqs">${reqHtml}</div><div class="contract-cost"><em>${this.lang==='ru'?'Сборка':'Assembly'}</em>${costHtml}</div>${missingHtml}</div>`;}
+        const missing=[];if(cs){const c=cs.contract;if(!cs.prevOk)missing.push(this.lang==='ru'?'Открой предыдущего защитника':'Unlock the previous defender');if(!cs.waveOk)missing.push(this.lang==='ru'?`Рекорд: ${this.save.bestWave||0}/${c.minWave} волн`:`Best wave: ${this.save.bestWave||0}/${c.minWave}`);if(!cs.partsOk)missing.push(`◈ ${this.lang==='ru'?'Не хватает':'Missing'} ${c.parts-cs.parts}`);if(this.save.shards<c.shards)missing.push(`🔶 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.shards-this.save.shards)}`);if(this.save.gems<c.gems)missing.push(`💎 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.gems-this.save.gems)}`);}const missingHtml=missing.length?`<div class="contract-missing">${missing.join(' · ')}</div>`:'';let contract='';if(cs){const c=cs.contract,forecast=this.eligibleContractBossWaves(id,3),needBosses=Math.max(1,c.pity-cs.pity),contractGuide=cs.partsOk?'':`<div class="contract-hunt-forecast"><b>${this.lang==='ru'?'ОХОТА НА ФРАГМЕНТ':'FRAGMENT HUNT'}</b><span>${this.lang==='ru'?('Базовый шанс '+Math.round(c.chance*100)+'% · следующий фрагмент гарантирован не позднее чем через '+needBosses+' побед над нужным боссом'):('Base chance '+Math.round(c.chance*100)+'% · next fragment guaranteed within '+needBosses+' eligible boss victories')}</span><small>${this.lang==='ru'?'Подходящие волны: ':'Eligible waves: '}${forecast.join(' · ')}…</small></div>`,reqHtml=cs.reqs.map(r=>`<span class="contract-req ${r.current>=r.goal?'done':''}">${r.current>=r.goal?'✓':'○'} ${r.label} <b>${r.key==='parts'?`${Math.min(r.current,r.goal)}/${r.goal}`:(r.key==='source'?`${Math.min(this.save.bestWave||0,c.minWave)}/${c.minWave}`:(r.current>=r.goal?(this.lang==='ru'?'ГОТОВО':'READY'):'—'))}</b></span>`).join(''),costHtml=`<span class="shard-cost">🔶 ${c.shards}</span>${c.gems?`<span class="gem-cost">💎 ${c.gems}</span>`:''}`,huntNote=this.lang==='ru'?'Фрагменты сигнатуры добываются только с этого босса на нужной глубине':'Signature fragments drop only from this boss at the required depth';contract=`<div class="unlock-contract"><div class="contract-head"><b>${this.lang==='ru'?'СБОРКА СИГНАТУРЫ':'SIGNATURE ASSEMBLY'}</b><small>${cs.partsOk?(this.lang==='ru'?'КОМПЛЕКТ СОБРАН':'SET COMPLETE'):(this.lang==='ru'?'ОХОТА АКТИВНА':'HUNT ACTIVE')}</small></div><div class="contract-source"><strong>☠ ${this.bossSourceName(c.source)} · ${c.minWave}+</strong><span>${huntNote}</span></div><div class="fragment-track">${Array.from({length:c.parts},(_,i)=>`<i class="${i<cs.parts?'filled':''}">◈</i>`).join('')}<b>${cs.parts}/${c.parts}</b></div><div class="contract-reqs">${reqHtml}</div><div class="contract-cost"><em>${this.lang==='ru'?'Сборка':'Assembly'}</em>${costHtml}</div>${contractGuide}${missingHtml}</div>`;}
         return `<div class="defender-row mastery-row ${open?'':'locked-contract'}" data-rarity="${rar}"><div class="defender-icon" style="color:${d.color}">${open?d.icon:'?'}</div><div class="defender-main"><h4>${this.t[d.nameKey]} <span class="rarity-tag ${rar}">${rlabel}</span></h4><p>${this.t[d.roleKey]}</p>${open?`<div class="mastery-head"><b>${this.t.masteryLevel} ${m.level}</b><span>${'★'.repeat(m.stars)}${'☆'.repeat(5-m.stars)}</span></div><div class="mastery-track"><i style="width:${xpPct}%"></i></div><div class="mastery-meta"><span>${m.level>=cap?this.t.masteryCapped:`${m.xp}/${need} XP`}</span><span>DMG +${Math.round((bonus.damage-1)*100)}% · SPD +${Math.round((bonus.rate-1)*100)}% · 🎯 +${Math.round((bonus.range-1)*100)}%</span></div><div class="blueprint-line"><span>🧩 ${this.lang==='ru'?'Чертежи':'Blueprints'}</span><b>${bp}</b></div>`:contract}</div><div class="defender-actions">${open?`<button class="buy-upgrade ${sel?'can-buy':''}" data-def="${id}">${sel?this.t.selected:this.t.choose}</button><button class="milestone-btn ${rewardReady?'reward-ready':''}" data-milestones="${id}">🎁 ${this.lang==='ru'?'Рубежи':'Milestones'}${rewardReady?'<small>НАГРАДА</small>':''}</button><button class="talent-btn ${talReady?'talent-ready':''}" data-talents="${id}">⎇ ${this.lang==='ru'?'Таланты':'Talents'} <small>${talCount}/2</small></button>${promote?`<button class="promote-btn ${canPromote?'can-promote':''}" data-promote="${id}" ${!canPromote?'disabled':''}>★ ${this.t.masteryPromote}<small>💎 ${this.save.gems}/${cost} · 🧩 ${bp}/${bpCost}${canPromote?"":` · ${this.lang==="ru"?"Не хватает":"Missing"} ${[this.save.gems<cost?`💎 ${cost-this.save.gems}`:"",bp<bpCost?`🧩 ${bpCost-bp}`:""].filter(Boolean).join(" + ")}`}</small></button>`:''}`:`<button class="unlock-defender-btn ${cs?.ready?'ready':cs?.requirementsMet?'needs-resources':''}" data-unlock-defender="${id}" ${!cs?.requirementsMet?'disabled':''}>${cs?.ready?(this.lang==='ru'?'АКТИВИРОВАТЬ':'ACTIVATE'):cs?.requirementsMet?(this.lang==='ru'?'НУЖНЫ РЕСУРСЫ':'NEED RESOURCES'):(this.lang==='ru'?'ЗАКРЫТО':'LOCKED')}</button>`}</div></div>`}).join('');
       document.querySelectorAll('[data-def]').forEach(b=>b.onclick=()=>this.selectDefender(b.dataset.def));document.querySelectorAll('[data-unlock-defender]').forEach(b=>b.onclick=()=>this.unlockDefender(b.dataset.unlockDefender));document.querySelectorAll('[data-promote]').forEach(b=>b.onclick=e=>{e.stopPropagation();this.promoteDefender(b.dataset.promote);});document.querySelectorAll('[data-talents]').forEach(b=>b.onclick=e=>{e.stopPropagation();this.openTalents(b.dataset.talents);});document.querySelectorAll('[data-milestones]').forEach(b=>b.onclick=e=>{e.stopPropagation();this.openMasteryRewards(b.dataset.milestones);});
     }
