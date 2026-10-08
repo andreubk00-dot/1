@@ -15699,14 +15699,22 @@ func _interior_trim_texture(region):
     return tex
 
 func _interior_trim_piece(parent,region,pos,scale_vec = Vector2.ONE,z_value = 0):
-    var tex = _interior_trim_texture(region)
+    # 1.38: HD trim (tools/wa_interior_trim_hd.py): stepped flat shadows
+    var hd = _hd_exists("res://art/world_hd/interior_trim_hd.png")
+    var tex = null
+    if hd:
+        tex = AtlasTexture.new()
+        tex.atlas = load("res://art/world_hd/interior_trim_hd.png")
+        tex.region = Rect2(region.position * 2.0,region.size * 2.0)
+    else:
+        tex = _interior_trim_texture(region)
     if tex == null:
         return null
     var sprite = Sprite2D.new()
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.position = Vector2(round(pos.x),round(pos.y))
-    sprite.scale = scale_vec
+    sprite.scale = scale_vec * (0.5 if hd else 1.0)
     sprite.z_index = z_value
     parent.add_child(sprite)
     return sprite
@@ -19857,6 +19865,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/world_hd/interior_floor_hd.png")
     paths.append("res://art/world_hd/interior_wall_band_hd.png")
     paths.append("res://art/world_hd/props_hd.png")
+    paths.append("res://art/world_hd/interior_trim_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
