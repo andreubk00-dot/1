@@ -6,13 +6,11 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — Android / iPhone v1.8.19</title>
+  <title>Бесконечные защитники — ПК v1.8.19</title>
   <meta name="apple-mobile-web-app-title" content="Защитники" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="application-name" content="Бесконечные защитники" />
   <meta name="description" content="Бесконечная защита Ядра: защитники, волны, боссы и постоянные улучшения." />
-  <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="./icon-192.png" />
   <style>
 :root{
   --bg:#0b1018;--bg2:#111827;--panel:#151d2b;--panel2:#1c2637;--line:#2a3850;
@@ -1109,6 +1107,7 @@ canvas { touch-action:none; }
         <div class="resources">
           <button class="resource-chip shard-chip" id="shardChip" title="Осколки"><span class="resource-icon" aria-hidden="true">🔶</span><span class="resource-meta"><small id="shardName">ОСКОЛКИ</small><b id="shardValue">0</b></span></button>
           <button class="resource-chip premium gem-chip" id="gemChip" title="Кристаллы"><span class="resource-icon" aria-hidden="true">💎</span><span class="resource-meta"><small id="gemName">КРИСТАЛЛЫ</small><b id="gemValue">0</b></span></button>
+          <button class="icon-btn" id="fullscreenBtn" type="button" title="Полный экран (F)" aria-label="Полный экран">⛶</button>
           <button class="icon-btn" id="soundBtn" aria-label="Звук">🔊</button>
           <button class="icon-btn" id="pauseBtn" aria-label="Пауза">⏸</button>
         </div>
@@ -1128,9 +1127,9 @@ canvas { touch-action:none; }
             <div class="hero-actions">
               <button class="primary-btn" id="playBtn"><span id="playBtnText">Начать вылазку</span><small id="playBtnSub">Новая бесконечная серия волн</small></button>
               <button class="secondary-btn" id="dailyBtn">🎯 <span id="dailyBtnText">Ежедневные задания</span></button>
-              <button class="secondary-btn" id="installAppBtn" type="button" hidden aria-label="Добавить игру на главный экран">⌂ На главный экран</button>
+              
             </div>
-            <a class="platform-crosslink" target="_blank" rel="noopener" href="https://endless-defenders-pc.onrender.com/">🖥 Открыть версию для ПК</a>
+            <a class="platform-crosslink" target="_blank" rel="noopener" href="https://endless-defenders-iphone.onrender.com/">📱 Версия для Android и iPhone</a><div class="desktop-controls-guide">Управление: <kbd>ЛКМ</kbd> — огонь · <kbd>ПКМ</kbd> — ускорение ×3 при удержании · <kbd>Пробел</kbd> — Импульс · <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — улучшение защитников · <kbd>P</kbd> — пауза · <kbd>M</kbd> — звук · <kbd>F</kbd> — полный экран. Прогресс телефона и ПК хранится раздельно — перенос через «Резервная копия».</div>
           </div>
           <div class="hero-visual" aria-hidden="true">
             <div class="hero-rift"></div>
@@ -3351,64 +3350,28 @@ document.addEventListener('gesturestart',e=>{
 </script>
 <script>
 (() => {
-  if(window.ED_YANDEX_BUILD)return;
-  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-  const ios=()=>/iPhone|iPad|iPod/.test(navigator.userAgent);
-  const ru=()=>document.documentElement.lang==='ru';
-  const game=()=>window.__ENDLESS_DEFENDERS__;
-  const button=()=>document.getElementById('installAppBtn');
-  const notice=()=>document.getElementById('mobileUpdateNotice');
-  const text=()=>document.getElementById('mobileUpdateCopy');
-  const action=()=>document.getElementById('mobileUpdateApply');
-  let installEvent=null,pendingWorker=null,registration=null,requestReload=false;
-  function updateInstallButton(){
-    const b=button();if(!b)return;const available=!!installEvent||ios();
-    b.hidden=standalone()||!available;
-    if(available)b.textContent=ios()?'⌂ На экран Домой':'⬇ Установить игру';
+  const $=id=>document.getElementById(id),game=()=>window.__ENDLESS_DEFENDERS__;
+  const input=t=>t?.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes((t?.tagName||'').toUpperCase());
+  async function fullScreen(){
+    try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen?.();}
+    catch(e){console.warn('Fullscreen unavailable',e);}
   }
-  function displayPending(worker){
-    if(!worker)return;pendingWorker=worker;
-    if(notice())notice().hidden=!!game()?.inRun;
-    if(text())text().textContent=ru()?'Доступна новая версия':'Update available';
-    if(action())action().textContent=ru()?'Обновить':'Update';
-  }
-  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installEvent=event;updateInstallButton();});
-  window.addEventListener('appinstalled',()=>{installEvent=null;updateInstallButton();});
-  document.addEventListener('DOMContentLoaded',()=>{
-    updateInstallButton();
-    button()?.addEventListener('click',async()=>{
-      if(installEvent){const event=installEvent;installEvent=null;try{await event.prompt();await event.userChoice;}catch(err){console.warn('Install failed',err);}updateInstallButton();}
-      else if(ios())alert(ru()?'Safari: «Поделиться» → «На экран Домой» → «Добавить». Сначала экспортируй прогресс: отдельное приложение может не получить сохранение из Safari автоматически.':'Safari: Share → Add to Home Screen. Export and import your save: storage may be separate.');
-    });
-    action()?.addEventListener('click',()=>{
-      const g=game();
-      if(g?.inRun){if(text())text().textContent=ru()?'Заверши бой перед обновлением':'Finish the run first';return;}
-      try{g?.checkpointPlaytime?.();g?.persist?.(true);}catch(err){console.warn('Save failed',err);return;}
-      if(!pendingWorker||pendingWorker.state!=='installed'){if(notice())notice().hidden=true;return;}
-      requestReload=true;pendingWorker.postMessage({type:'ACTIVATE_UPDATE'});
-    });
+  document.addEventListener('DOMContentLoaded',()=>{$('fullscreenBtn')?.addEventListener('click',fullScreen);});
+  document.addEventListener('keydown',e=>{
+    if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||input(e.target))return;
+    const g=game();if(!g)return;
+    if(e.code==='KeyF'){e.preventDefault();fullScreen();return;}
+    if(e.code==='KeyM'){$('soundBtn')?.click();return;}
+    if(!g.inRun)return;
+    if(e.code==='KeyP'||e.code==='Escape'){
+      if($('relicScreen')&&!$('relicScreen').classList.contains('hidden'))return;
+      e.preventDefault();g.togglePauseOverlay();return;
+    }
+    const n={Digit1:0,Digit2:1,Digit3:2,Numpad1:0,Numpad2:1,Numpad3:2}[e.code];
+    if(n!==undefined&&!g.paused&&g.run?.units?.[n]){e.preventDefault();g.upgradeUnit(n);}
   });
-  if('serviceWorker' in navigator&&window.isSecureContext){
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(requestReload){requestReload=false;location.reload();}});
-    window.addEventListener('load',async()=>{
-      try{
-        registration=await navigator.serviceWorker.register('./service-worker.js',{scope:'./',updateViaCache:'none'});
-        const detect=w=>{
-          if(!w)return;
-          if(w.state==='installed'&&navigator.serviceWorker.controller)displayPending(w);
-          else w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)displayPending(w);});
-        };
-        if(registration.waiting)displayPending(registration.waiting);
-        registration.addEventListener('updatefound',()=>detect(registration.installing));
-        if(registration.installing)detect(registration.installing);
-        registration.update().catch(()=>{});
-        document.addEventListener('visibilitychange',()=>{if(!document.hidden){registration.update().catch(()=>{});if(pendingWorker)displayPending(pendingWorker);}});
-        setInterval(()=>{if(pendingWorker)displayPending(pendingWorker);},5000);
-      }catch(err){console.warn('Offline installation unavailable',err);}
-    });
-  }
 })();
 </script>
-<div id="mobileUpdateNotice" hidden role="status" aria-live="polite"><span id="mobileUpdateCopy">Доступна новая версия</span><button type="button" id="mobileUpdateApply">Обновить</button></div>
+
 </body>
 </html>
