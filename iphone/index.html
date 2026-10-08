@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — iPhone v1.8.14</title>
+  <title>Бесконечные защитники — iPhone v1.8.15</title>
   <style>
 :root{
   --bg:#0b1018;--bg2:#111827;--panel:#151d2b;--panel2:#1c2637;--line:#2a3850;
@@ -1042,7 +1042,7 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
-/* v1.8.14: iPhone save-rescue controls */
+/* v1.8.15: iPhone save-rescue controls */
 #backupScreen{z-index:76}
 .save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
 .save-entry button{min-height:44px;max-width:100%;white-space:normal}
@@ -1502,7 +1502,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.14',
+  version: '1.8.15',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1749,7 +1749,7 @@ window.ED_BALANCE = Object.freeze({
 
 
   const BALANCE = window.ED_BALANCE || {
-    version:'fallback-1.8.14', run:{baseCore:100,baseEnergy:74},
+    version:'fallback-1.8.15', run:{baseCore:100,baseEnergy:74},
     wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.115,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
     economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
@@ -2014,7 +2014,11 @@ window.ED_BALANCE = Object.freeze({
   };
 
   class YandexBridge {
-    constructor(game){ this.game=game; this.ysdk=null; this.player=null; this.payments=null; this.lang=(navigator.language||'ru').slice(0,2); this.ready=false; }
+    constructor(game){
+      this.game=game; this.ysdk=null; this.player=null; this.payments=null;
+      this.lang=(navigator.language||'ru').slice(0,2); this.ready=false;
+      this.gameplayActive=false; this.adInProgress=false;
+    }
     async init(){
       try {
         if (window.YaGames?.init) {
@@ -2023,8 +2027,9 @@ window.ED_BALANCE = Object.freeze({
           try { this.player = await this.ysdk.getPlayer(); } catch(e) { console.warn('Player init',e); }
           try { this.payments = await this.ysdk.getPayments(); } catch(e) { /* purchases optional */ }
           try {
-            this._gamePause=()=>{this.game.setRmbBoost(false);this.game.pauseInternal(true);};
-            this._gameResume=()=>{if(this.game.inRun&&!this.game.pauseOverlay)this.game.pauseInternal(false);};
+            // Pause sources can overlap: background, platform and advertisement.
+            this._gamePause=()=>this.game.handleExternalPause(true,'sdk');
+            this._gameResume=()=>this.game.handleExternalPause(false,'sdk');
             this.ysdk.on?.('game_api_pause',this._gamePause);
             this.ysdk.on?.('game_api_resume',this._gameResume);
           } catch(e) { console.warn('Yandex pause events',e); }
@@ -2034,8 +2039,16 @@ window.ED_BALANCE = Object.freeze({
       return this;
     }
     loadingReady(){ try{ this.ysdk?.features?.LoadingAPI?.ready(); }catch(e){} }
-    gameplayStart(){ try{ this.ysdk?.features?.GameplayAPI?.start(); }catch(e){} }
-    gameplayStop(){ try{ this.ysdk?.features?.GameplayAPI?.stop(); }catch(e){} }
+    gameplayStart(){
+      if(!this.game.inRun||this.game.paused||this.game.pauseOverlay||this.game.externalPause||this.adInProgress||document.hidden)return;
+      if(this.gameplayActive)return;
+      try{this.ysdk?.features?.GameplayAPI?.start();this.gameplayActive=!!this.ysdk;}catch(e){console.warn('Gameplay start',e);}
+    }
+    gameplayStop(){
+      if(!this.gameplayActive)return;
+      this.gameplayActive=false;
+      try{this.ysdk?.features?.GameplayAPI?.stop();}catch(e){console.warn('Gameplay stop',e);}
+    }
     isAuthorized(){ try{return !!this.player?.isAuthorized?.();}catch(e){return false;} }
     async authorize(){
       if (!this.ysdk?.auth?.openAuthDialog) return false;
@@ -2055,31 +2068,55 @@ window.ED_BALANCE = Object.freeze({
       } catch(e){ console.warn('Cloud save',e); return false; }
     }
     async rewardAd(onReward){
-      if (!this.ysdk?.adv?.showRewardedVideo) { onReward?.(); return true; }
-      return new Promise(resolve => {
-        let rewarded=false;
-        this.game.pauseInternal(true);
-        this.gameplayStop();
-        this.ysdk.adv.showRewardedVideo({callbacks:{
+      // Yandex rewards require a real onRewarded callback; standalone retains free bonus.
+      if(!this.ysdk?.adv?.showRewardedVideo){
+        if(window.ED_YANDEX_BUILD)return false;
+        onReward?.();return true;
+      }
+      if(this.adInProgress)return false;
+      this.adInProgress=true;
+      this.game.handleExternalPause(true,'ad');
+      this.gameplayStop();
+      return new Promise(resolve=>{
+        let rewarded=false,settled=false;
+        const finish=(confirmed)=>{
+          if(settled)return;settled=true;
+          if(confirmed){
+            try{onReward?.();}catch(e){console.warn('Ad reward callback',e);}
+            if(this.game.inRun&&!this.game.paused&&!this.game.pauseOverlay)this.game.externalPauseWasPaused=false;
+          }
+          this.adInProgress=false;
+          this.game.handleExternalPause(false,'ad');
+          resolve(!!confirmed);
+        };
+        try{this.ysdk.adv.showRewardedVideo({callbacks:{
           onOpen:()=>{},
-          onRewarded:()=>{rewarded=true; onReward?.();},
-          onClose:()=>{this.game.pauseInternal(false); if(this.game.inRun) this.gameplayStart(); resolve(rewarded);},
-          onError:()=>{this.game.pauseInternal(false); if(this.game.inRun) this.gameplayStart(); resolve(false);}
-        }});
+          onRewarded:()=>{if(!settled)rewarded=true;},
+          onClose:()=>finish(rewarded),
+          onError:()=>finish(false)
+        }});}catch(e){console.warn('Rewarded ad failed',e);finish(false);}
       });
     }
     async fullscreen(){
-      if (!this.ysdk?.adv?.showFullscreenAdv) return false;
+      if(!this.ysdk?.adv?.showFullscreenAdv||this.adInProgress)return false;
       const s=this.game.save,cfg=BALANCE.ads||{};
-      if(s.noInterstitial || now()-s.lastFullscreenAt < (cfg.fullscreenCooldownMs||240000)) return false;
-      s.lastFullscreenAt=now(); this.game.persist();
+      if(s.noInterstitial||now()-s.lastFullscreenAt<(cfg.fullscreenCooldownMs||240000))return false;
+      this.adInProgress=true;
+      this.game.handleExternalPause(true,'ad');this.gameplayStop();
       return new Promise(resolve=>{
-        this.game.pauseInternal(true); this.gameplayStop();
-        let opened=false;this.ysdk.adv.showFullscreenAdv({callbacks:{
+        let settled=false,opened=false;
+        const finish=(shown)=>{
+          if(settled)return;settled=true;
+          if(shown){s.lastFullscreenAt=now();this.game.persist();}
+          this.adInProgress=false;
+          this.game.handleExternalPause(false,'ad');
+          resolve(!!shown);
+        };
+        try{this.ysdk.adv.showFullscreenAdv({callbacks:{
           onOpen:()=>{opened=true;this.game.sessionInterstitials=(this.game.sessionInterstitials||0)+1;},
-          onClose:(shown)=>{this.game.pauseInternal(false); if(this.game.inRun) this.gameplayStart(); resolve(!!shown||opened);},
-          onError:()=>{this.game.pauseInternal(false); if(this.game.inRun) this.gameplayStart(); resolve(false);}
-        }});
+          onClose:(wasShown)=>finish(!!wasShown||opened),
+          onError:()=>finish(false)
+        }});}catch(e){console.warn('Fullscreen ad failed',e);finish(false);}
       });
     }
     async submitScore(score){
@@ -2358,7 +2395,7 @@ window.ED_BALANCE = Object.freeze({
     constructor(){
       this.bridge = new YandexBridge(this); this.audio=new AudioFX(); this.audio.initMedia(); this.lang='ru'; this.t=TEXT.ru; this.save=structuredClone(DEFAULT_SAVE);
       this.canvas=$('gameCanvas'); this.ctx=this.canvas.getContext('2d'); this.dpr=Math.max(1,Math.min(2,devicePixelRatio||1));
-      this.inRun=false; this.paused=false; this.pauseOverlay=false; this.externalPause=false; this.externalPauseWasPaused=false; this.challenge=false; this.lastFrame=performance.now(); this.animId=0; this.autoLowFx=false; this.perfWindowStart=0; this.perfFrames=0; this.perfSlowWindows=0; this.perfFastWindows=0; this.perfFps=60;
+      this.inRun=false; this.paused=false; this.pauseOverlay=false; this.externalPause=false; this.externalPauseWasPaused=false; this.externalPauseReasons=new Set(); this.challenge=false; this.lastFrame=performance.now(); this.animId=0; this.autoLowFx=false; this.perfWindowStart=0; this.perfFrames=0; this.perfSlowWindows=0; this.perfFastWindows=0; this.perfFps=60;
       this.run=null; this.rmbBoost=false; this.rmbPointerId=null; this.toastTimer=0; this.saveTimer=0; this.sessionActiveAt=now(); this.sessionInterstitials=0;
     }
 
@@ -2377,11 +2414,11 @@ window.ED_BALANCE = Object.freeze({
       setInterval(()=>this.updateTimers(),1000);
       setInterval(()=>this.persist(false),15000);
       window.addEventListener('beforeunload',()=>{this.checkpointPlaytime();this.save.lastSeen=now();this.persist(true);});
-      const parkGame=()=>{this.checkpointPlaytime();this.handleExternalPause(true);this.save.lastSeen=now();this.persist(true);};
-      document.addEventListener('visibilitychange',()=>{if(document.hidden)parkGame();else{this.resumePlaytime();this.handleExternalPause(false);}});
+      const parkGame=()=>{this.checkpointPlaytime();this.handleExternalPause(true,'visibility');this.save.lastSeen=now();this.persist(true);};
+      document.addEventListener('visibilitychange',()=>{if(document.hidden)parkGame();else{this.resumePlaytime();this.handleExternalPause(false,'visibility');}});
       window.addEventListener('pagehide',parkGame);
-      window.addEventListener('pageshow',()=>{if(!document.hidden){this.resumePlaytime();this.handleExternalPause(false);}});
-      window.addEventListener('focus',()=>{if(!document.hidden)this.handleExternalPause(false);});
+      window.addEventListener('pageshow',()=>{if(!document.hidden){this.resumePlaytime();this.handleExternalPause(false,'visibility');}});
+      window.addEventListener('focus',()=>{if(!document.hidden)this.handleExternalPause(false,'visibility');});
     }
 
     loadLocal(){
@@ -2449,7 +2486,7 @@ window.ED_BALANCE = Object.freeze({
 
     saveBackupObject(){
       // The persistent account/collection is backed up; active battle state is not.
-      return {format:'endless-defenders-save',formatVersion:1,createdAt:new Date().toISOString(),gameVersion:'1.8.14',save:structuredClone(this.save)};
+      return {format:'endless-defenders-save',formatVersion:1,createdAt:new Date().toISOString(),gameVersion:'1.8.15',save:structuredClone(this.save)};
     }
     backupMessage(message,failed=false){const el=$('backupNotice');if(el){el.textContent=message;el.style.color=failed?'#ff9daa':'#92f3d5';}}
     openBackup(){
@@ -2931,19 +2968,32 @@ window.ED_BALANCE = Object.freeze({
     setRmbBoost(active){const next=!!active&&!!this.inRun&&!!this.run&&!this.paused;if(this.rmbBoost===next)return;this.rmbBoost=next;this.refreshSpeedButton();if(next)this.track('combat_speed_hold',{speed:3,wave:this.run?.wave||0});}
     toggleSpeed(){if(!this.run)return;const speeds=[.5,1,2,3,4],cur=Number(this.run.speed||1),i=speeds.findIndex(x=>Math.abs(x-cur)<.01);this.run.speed=speeds[(i+1+speeds.length)%speeds.length];this.refreshSpeedButton();this.track('combat_speed',{speed:this.run.speed,wave:this.run.wave});}
     usePulse(){if(!this.run||this.run.skillCd>0||this.paused)return;this.run.skillCd=12*(this.run.mods?.skillCd||1);this.run.skills++;this.save.quests.skills++;this.save.stats.skills++;if(this.run.skills===1)this.track('first_pulse',{wave:this.run.wave});for(const e of this.run.enemies){let resist=e.boss?.id==='aegis'&&e.hp/e.maxHp>.5?.72:1;if(e.boss?.variant?.guard)resist*=1-e.boss.variant.guard;if(e.affixes?.includes('barrier'))resist*=ENEMY_AFFIXES.barrier.fx.damageTaken;e.hp-=32*(1+this.save.lab.damage*.06)*(1+(this.save.meta.spent.damage||0)*.03)*this.metaRankBonus()*resist*(this.run.rift?.fx?.playerDamage||1);e.flash=.18;}this.run.screenFlash=.18;this.spawnBurst(690,360,'#7fe7ff',36);this.audio.pulse();this.checkFieldOrders();this.checkAchievements();this.persist();}
-    togglePauseOverlay(force){if(!this.inRun)return;const next=typeof force==='boolean'?force:!this.pauseOverlay;this.pauseOverlay=next;$('pauseScreen').classList.toggle('hidden',!next);this.pauseInternal(next);if(next)this.bridge.gameplayStop();else this.bridge.gameplayStart();}
-    pauseInternal(v){this.paused=v;if(v){this.setRmbBoost(false);this.audio.suspend();}else this.audio.resume();}
-    handleExternalPause(active){
+    togglePauseOverlay(force){if(!this.inRun)return;const next=typeof force==='boolean'?force:!this.pauseOverlay;this.pauseOverlay=next;$('pauseScreen').classList.toggle('hidden',!next);if(next)this.bridge.gameplayStop();this.pauseInternal(next);if(!next)this.bridge.gameplayStart();}
+    pauseInternal(v){
+      const lock=!!(this.externalPauseReasons?.size)||document.hidden;
+      this.paused=!!v||lock;
+      if(this.paused){this.setRmbBoost(false);this.audio.suspend();}
+      else this.audio.resume();
+    }
+    handleExternalPause(active,source='visibility'){
+      if(!this.externalPauseReasons)this.externalPauseReasons=new Set();
       if(active){
         if(this.run){this.run.holdFire=false;this.run.aim=null;}
-        this.setRmbBoost(false);this.audio.suspend();
-        if(this.externalPause)return;
-        this.externalPause=true;this.externalPauseWasPaused=!!this.paused;
-        if(this.inRun){this.pauseInternal(true);this.bridge.gameplayStop();}return;
+        this.setRmbBoost(false);
+        if(!this.externalPauseReasons.size)this.externalPauseWasPaused=!!this.paused;
+        this.externalPauseReasons.add(source);
+        this.externalPause=true;
+        if(this.inRun)this.bridge.gameplayStop();
+        this.pauseInternal(true);
+        return;
       }
+      this.externalPauseReasons.delete(source);
+      if(document.hidden)this.externalPauseReasons.add('visibility');
+      if(this.externalPauseReasons.size){this.externalPause=true;this.pauseInternal(true);return;}
       if(!this.externalPause)return;
+      this.externalPause=false;
       const resume=this.inRun&&!this.externalPauseWasPaused&&!this.pauseOverlay;
-      this.externalPause=false;this.externalPauseWasPaused=false;
+      this.externalPauseWasPaused=false;
       if(resume){this.pauseInternal(false);this.bridge.gameplayStart();}
       else if(!this.inRun)this.audio.resume();
     }
