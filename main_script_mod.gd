@@ -19867,6 +19867,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/world_hd/interior_wall_band_hd.png")
     paths.append("res://art/world_hd/props_hd.png")
     paths.append("res://art/world_hd/interior_trim_hd.png")
+    paths.append("res://art/world_hd/rail_track_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
@@ -20126,11 +20127,26 @@ func _decorate_region_ground(chunk,coord,profile):
 
     # Low-z macro details communicate district identity without changing collision.
     if district_id == "rail_corridor":
-        # Two rails and sparse sleepers through the service corridor.
-        _rect(Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5-16),Vector2(CHUNK_SIZE,3),Color(0.20,0.21,0.19,0.78),chunk)
-        _rect(Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5+16),Vector2(CHUNK_SIZE,3),Color(0.20,0.21,0.19,0.78),chunk)
-        for x in range(18,CHUNK_SIZE,34):
-            _rect(Vector2(x,CHUNK_SIZE*0.5),Vector2(5,44),Color(0.18,0.16,0.13,0.62),chunk)
+        # Track through the service corridor: HD ballast, sleepers and rails
+        # (tools/wa_rail_hd.py), tiled along the chunk, world-anchored.
+        if _hd_exists("res://art/world_hd/rail_track_hd.png"):
+            var track = Sprite2D.new()
+            track.texture = load("res://art/world_hd/rail_track_hd.png")
+            track.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+            track.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+            track.region_enabled = true
+            track.region_rect = Rect2(float(coord.x * CHUNK_SIZE * 2 % 144),0,CHUNK_SIZE * 2.0,176)
+            track.centered = false
+            track.scale = Vector2(0.5,0.5)
+            track.position = Vector2(0,CHUNK_SIZE * 0.5 - 44.0)
+            track.z_index = -18
+            track.set_meta("rail_track",true)
+            chunk.add_child(track)
+        else:
+            _rect(Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5-16),Vector2(CHUNK_SIZE,3),Color(0.20,0.21,0.19,0.78),chunk)
+            _rect(Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5+16),Vector2(CHUNK_SIZE,3),Color(0.20,0.21,0.19,0.78),chunk)
+            for x in range(18,CHUNK_SIZE,34):
+                _rect(Vector2(x,CHUNK_SIZE*0.5),Vector2(5,44),Color(0.18,0.16,0.13,0.62),chunk)
     elif hd_ground and district_id != "military_northeast":
         pass
     elif district_id == "industrial_belt" or district_id == "outer_industrial":
