@@ -47,4 +47,8 @@ test('Battle upgrade cost unchanged through level nine',()=>Array.from({length:9
 test('Battle upgrade cost grows more gently past pivot',()=>g.unitUpgradeCost({level:20})<Math.floor(BALANCE.economy.unitUpgradeBase*Math.pow(BALANCE.economy.unitUpgradeGrowth,19)));
 test('Later upgrade damage multiplies without altering early levels',()=>Math.abs(g.unitDamageMultiplier(8)-(1+7*.42))<1e-10&&g.unitDamageMultiplier(20)>g.unitDamageMultiplier(10));
 test('Progression range is capped and non-decreasing',()=>{g.save.lab.damage=0;g.save.mastery.sentinel={level:1,stars:1,xp:0};const early=g.masteryBonuses('sentinel').range;g.save.lab.damage=30;g.save.mastery.sentinel={level:25,stars:5,xp:0};const late=g.masteryBonuses('sentinel').range;return early===1&&late>early&&late<=1.85;});
+
+test('Rift easing never alters waves 1 through 30',()=>[1,10,20,30].every(w=>g.riftEase(w).hp===1&&g.riftEase(w).speed===1));
+test('Rift easing is smooth and reversible through wave 55',()=>{const a=[30,31,34,35,40,45,50,54,55,56].map(w=>g.riftEase(w));return a.every(x=>x.hp>=.70&&x.hp<=1&&x.speed>=.88&&x.speed<=1)&&a[3].hp===.70&&a[3].speed===.88&&a[8].hp===1&&a[8].speed===1&&a[9].hp===1;});
+test('Rift pacing applied only to normal enemies, not bosses',()=>html.includes('const ease=this.riftEase(w),hp=this.waveHp(w)*hpMul*ease.hp')&&html.includes('speed:this.waveSpeed(w)*speedMul*affixSpeed*ease.speed')&&html.includes('const b=this.bossSpec(w),v=b.variant||{},hp=this.bossHp(w,b)'));
 console.log(checks+' balance checks passed');
