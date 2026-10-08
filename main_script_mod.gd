@@ -14992,13 +14992,7 @@ func _decorate_roof_details(roof,sign_text,size,building_id):
         var stack = _facade_atlas_sprite(roof,"res://facade_extras_v1.png",Rect2(112,0,64,120),c + Vector2(-area.x * 0.30,-area.y * 0.10),0.8)
         if stack != null:
             stack.z_index = 3
-    # autumn litter on pitched / corrugated roofs
-    if style >= 2:
-        for i in range(rng.randi_range(1,2)):
-            var lp = c + Vector2(rng.randf_range(-0.35,0.35) * area.x,rng.randf_range(-0.3,0.3) * area.y)
-            var leaf = _facade_atlas_sprite(roof,"res://vegetation_v1.png",Rect2((5 if i == 0 else 6) * 64,0,64,64),lp,0.45)
-            if leaf != null:
-                leaf.z_index = 2
+    # (no leaf piles / branches: roofs carry building elements only)
     roof.set_meta("roof_details",true)
 
 func _scatter_vegetation(chunk,coord,district_id):
@@ -15221,8 +15215,8 @@ func _interior_floor_detail_sprite(parent,index,pos,rotation_value,scale_value):
     var sprite = Sprite2D.new()
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    sprite.position = pos
-    sprite.rotation = rotation_value
+    sprite.position = pos.round()
+    sprite.flip_h = rotation_value < 0.0
     sprite.scale = Vector2(scale_value,scale_value)
     sprite.z_index = 0
     parent.add_child(sprite)
@@ -15525,7 +15519,9 @@ func _roof_surface_sprite(parent,sign_text,size):
         tex = _roof_surface_texture(sign_text)
     if tex == null:
         return null
-    var area = Vector2(max(64.0,size.x*0.90),max(64.0,size.y*0.90))
+    # the roof covers the footprint up to a 3 px dark rim (a 5 % margin each side
+    # read as a black frame around every roof)
+    var area = Vector2(max(64.0,size.x - 6.0),max(64.0,size.y*0.90))
     var center = Vector2(0,-size.y*0.02)
     var sprite = Sprite2D.new()
     sprite.texture = tex
@@ -15761,16 +15757,43 @@ func _update_detail_lights(delta):
             target *= 0.12 + _time_night_factor() * 0.88
         light.energy = max(0.0,target)
 
+const GROUND_DECAL_KINDS = ["rubble_a","rubble_b","rubble_c","blood_a","blood_b","blood_dry","papers_a","papers_b","glass","oil"]
+
 func _add_ground_decals(chunk,coord):
+    # 1.38: HD pixel decals (tools/wa_ground_decals.py). Pixel art is only ever
+    # flipped, never rotated by an arbitrary angle (that breaks it into jaggies).
     var rng = RandomNumberGenerator.new()
     rng.seed = int(abs(coord.x*198491 + coord.y*65497 + 32001)) + 1
+    var atlas = load("res://art/world_hd/ground_decals_hd.png") if _hd_exists("res://art/world_hd/ground_decals_hd.png") else null
     for i in range(10):
         var p = Vector2(rng.randi_range(35,765),rng.randi_range(35,765))
-        var kind = "debris" if rng.randf() > 0.18 else "blood"
-        var sprite = _world_prop_sprite(kind,chunk,p,1,rng.randf_range(0.42,0.70))
-        if sprite != null:
-            sprite.rotation = rng.randf_range(-PI,PI)
-
+        var roll = rng.randf()
+        if atlas == null:
+            var kind = "debris" if roll > 0.18 else "blood"
+            var sprite = _world_prop_sprite(kind,chunk,p,1,rng.randf_range(0.42,0.70))
+            if sprite != null:
+                sprite.flip_h = rng.randf() < 0.5
+            continue
+        var idx = rng.randi_range(0,2)                 # rubble
+        if roll < 0.14:
+            idx = 3 + rng.randi_range(0,2)             # blood
+        elif roll < 0.36:
+            idx = 6 + rng.randi_range(0,1)             # papers
+        elif roll < 0.46:
+            idx = 8 + rng.randi_range(0,1)             # glass / oil
+        var tex = AtlasTexture.new()
+        tex.atlas = atlas
+        tex.region = Rect2(idx * 96,0,96,64)
+        var spr = Sprite2D.new()
+        spr.texture = tex
+        spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        spr.position = p.round()
+        spr.scale = Vector2(0.5,0.5)
+        spr.flip_h = rng.randf() < 0.5
+        spr.flip_v = rng.randf() < 0.3 and idx < 6
+        spr.z_index = 1
+        spr.set_meta("ground_decal",GROUND_DECAL_KINDS[idx])
+        chunk.add_child(spr)
 
 func _make_button(parent, pos, size, text, callback):
     var button = Button.new()
@@ -18779,7 +18802,7 @@ func _decorate_multifloor_surface(root,size:Vector2,theme:String,layout:String) 
         var kind = str(decal_kinds[i % decal_kinds.size()])
         var sp = _world_prop_sprite(kind,root,Vector2(px,py),0,rng.randf_range(0.36,0.54))
         if is_instance_valid(sp):
-            sp.rotation = rng.randf_range(-0.35,0.35)
+            sp.flip_h = rng.randf() < 0.5
 
 func _multifloor_add_fixture_rows(root,size:Vector2,theme:String) -> void:
     # Dense but navigable edge fixtures make the large floor area feel occupied.
@@ -19768,6 +19791,7 @@ func _ensure_world_hd_preloaded():
         paths.append("res://art/world_hd/ground_%s_hd.png" % family)
     for family in ["rural","woodland","military","industrial","city"]:
         paths.append("res://art/world_hd/yard_%s_hd.png" % family)
+    paths.append("res://art/world_hd/ground_decals_hd.png")
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
@@ -19822,6 +19846,7 @@ uniform float band = 96.0;     // world units
 uniform vec2 origin;           // sprite origin, chunk-local world units
 uniform vec2 world_origin;     // chunk origin, world units (noise variety)
 uniform bool soft_verges = true;
+uniform bool styled = true;    // lip + drop shadow; off where both grounds are alike
 varying vec2 local;
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) {
@@ -19879,20 +19904,22 @@ void fragment() {
     bool on = shown(lp);
     if (!on) {
         // the raised edge casts a short shadow down-right onto the lower ground
-        if (shown(lp - vec2(px, px) * 2.0) || shown(lp - vec2(0.0, px) * 2.0)) {
+        if (styled && (shown(lp - vec2(px, px) * 2.0) || shown(lp - vec2(0.0, px) * 2.0))) {
             COLOR = vec4(0.0, 0.0, 0.0, paved(lp) ? 0.32 : 0.26);
         } else {
             discard;
         }
     } else {
         vec4 c = texture(TEXTURE, UV);
-        // lit lip on the top-left side of the edge, dark crack on paving
-        bool lip = !shown(lp - vec2(px, 0.0)) || !shown(lp - vec2(0.0, px));
-        bool rim = lip || !shown(lp + vec2(px, 0.0)) || !shown(lp + vec2(0.0, px));
-        if (paved(lp)) {
-            if (rim) c.rgb *= 0.6;
-        } else if (lip) {
-            c.rgb = min(c.rgb * 1.18 + 0.03, vec3(1.0));
+        if (styled) {
+            // lit lip on the top-left side of the edge, dark crack on paving
+            bool lip = !shown(lp - vec2(px, 0.0)) || !shown(lp - vec2(0.0, px));
+            bool rim = lip || !shown(lp + vec2(px, 0.0)) || !shown(lp + vec2(0.0, px));
+            if (paved(lp)) {
+                if (rim) c.rgb *= 0.6;
+            } else if (lip) {
+                c.rgb = min(c.rgb * 1.18 + 0.03, vec3(1.0));
+            }
         }
         COLOR = c;
     }
@@ -20155,7 +20182,9 @@ func _street_detail_sprite(parent,index,pos,rotation_value = 0.0,scale_value = 1
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.position = Vector2(round(pos.x),round(pos.y))
-    sprite.rotation = rotation_value
+    # pixel art is flipped, not rotated by odd angles (rotation tore it into jaggies)
+    sprite.flip_h = rotation_value < 0.0
+    sprite.flip_v = abs(rotation_value) > 0.12 and index != 0
     sprite.scale = Vector2(scale_value,scale_value)
     sprite.z_index = z_value
     parent.add_child(sprite)
@@ -20399,6 +20428,8 @@ func _compound_yard_sprite(chunk,coord,g:String,path:String):
         var mat = ShaderMaterial.new()
         mat.shader = _ground_edge_shader
         mat.set_shader_parameter("mode",1 if fam == "rural" or fam == "woodland" else 2)
+        # a forest clearing in a forest / a dacha plot among fields: no raised edge
+        mat.set_shader_parameter("styled",fam != _ground_family(coord))
         mat.set_shader_parameter("outer",outer)
         mat.set_shader_parameter("texel_per_unit",k)
         mat.set_shader_parameter("band",72.0)
@@ -21471,7 +21502,7 @@ func _settlement_clutter(chunk,coord,cell_data:Dictionary,style:String):
         else:
             var litter = _world_prop_sprite(SETTLEMENT_LITTER[rng.randi_range(0,6)],chunk,p,1,rng.randf_range(0.42,0.6))
             if litter != null:
-                litter.rotation = rng.randf_range(-0.4,0.4)
+                litter.flip_h = rng.randf() < 0.5
     # 2. leaves and weeds drifting against the kerbs and fences of every block
     for quad in cell_data.get("blocks",{}).keys():
         var block = cell_data["blocks"][quad]
@@ -21915,9 +21946,11 @@ func _settlement_decal(parent,kind:String,pos:Vector2,rot:float = 0.0,scale_valu
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.position = Vector2(round(pos.x),round(pos.y))
-    sprite.rotation = rot
+    # no odd-angle rotation of pixel art: a quarter turn at most, otherwise flips
+    sprite.rotation = rot if is_equal_approx(fmod(abs(rot),PI * 0.5),0.0) else 0.0
     sprite.scale = Vector2(scale_value,scale_value)
     sprite.flip_h = int(pos.x + pos.y) % 2 == 0
+    sprite.flip_v = rot < -0.15
     sprite.modulate = Color(1,1,1,0.82 if kind != "ruts" else 1.0)
     parent.add_child(sprite)
     return sprite
@@ -23847,11 +23880,13 @@ func _exterior_model(model_id:String) -> Dictionary:
     return {}
 
 func _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_data,visual_seed_id = ""):
+    # roof slab exactly over the footprint: the old trapezoid (wider at the top)
+    # read as a black frame jutting past the facade in the oblique projection
     _poly(PackedVector2Array([
-        Vector2(-size.x*0.52,-size.y*0.52),
-        Vector2(size.x*0.52,-size.y*0.52),
-        Vector2(size.x*0.48,size.y*0.42),
-        Vector2(-size.x*0.48,size.y*0.42)
+        Vector2(-size.x*0.5,-size.y*0.5),
+        Vector2(size.x*0.5,-size.y*0.5),
+        Vector2(size.x*0.5,size.y*0.42),
+        Vector2(-size.x*0.5,size.y*0.42)
     ]),Color("262b29"),roof)
     _roof_surface_sprite(roof,sign_text,size)
     _rect(Vector2(0,size.y*0.47),Vector2(size.x*0.96,6),Color("181c1b"),roof)
