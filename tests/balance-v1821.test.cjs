@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const html=fs.readFileSync(path.join(__dirname,'..','pc','index.html'),'utf8');
 const mobile=fs.readFileSync(path.join(__dirname,'..','iphone','index.html'),'utf8');
-const js=s=>[...s.matchAll(/<script\b[^>]*>([\s\\S]*?)<\/script>/gi)].map(m=>m[1]);
+const js=s=>[...s.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
 const scripts=js(html),mobileScripts=js(mobile);
 assert.equal(scripts[0],mobileScripts[0]);assert.equal(scripts[1],mobileScripts[1]);
 for(const body of scripts)if(body.trim())new Function(body);
