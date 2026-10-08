@@ -5,6 +5,7 @@ on:
     branches:
       - endless-defenders-balance-v1821
       - endless-defenders-economy-v1822
+      - endless-defenders-economy-guard-v1823
     paths:
       - pc/**
       - iphone/**
@@ -36,6 +37,8 @@ jobs:
         run: node tests/economy-v1822.test.cjs
       - name: Verify long-term economy with rewarded ads
         run: node tests/economy-progression-v1822.test.cjs
+      - name: Guard against duplicate rewarded ads and false quest prompts
+        run: node tests/economy-guard-v1823.test.cjs
       - name: Run deterministic complete-run simulations
         run: |
           for profile in fresh progressed veteran; do
