@@ -27678,8 +27678,9 @@ func _prefetch_high_risk_art(delta):
 # rain leaves a mist behind, and the fields and woods hold it thicker than the
 # town. It is drawn in the world (so the night darkens it and lamps glow in
 # it) as slow, wind-drifted banks of world-space noise; the player stands in a
-# ragged clear pocket that shrinks as it thickens. Pixel look: the density is
-# cut into flat alpha steps with a 4 x 4 ordered dither on the HD texel grid.
+# ragged clear pocket that shrinks as it thickens, and closes into a wall a
+# few dozen steps out. Pixel look: density sampled on the HD texel grid and
+# cut into 24 flat alpha steps (an ordered dither read as a screen door).
 # Beyond the pocket the infected are hidden in it, and it halves how far they
 # can make out the player.
 const FOG_SHADER = """shader_type canvas_item;
@@ -27696,14 +27697,6 @@ float vn(vec2 p) {
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-float bayer4(vec2 p) {
-    vec2 q = mod(p, 4.0);
-    int x = int(q.x);
-    int y = int(q.y);
-    int i = y * 4 + x;
-    float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
-    return (m[i] + 0.5) / 16.0;
-}
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
 void fragment() {
     vec2 tp = floor(wpos * 2.0);            // HD texel grid
@@ -27713,13 +27706,16 @@ void fragment() {
     float bank = smoothstep(0.2, 0.9, n);
     // the clear pocket around the player, its edge ragged by the same noise
     float d = length((w - player) * vec2(1.0, 1.25));
-    float r = clear_r * (0.85 + 0.3 * n);
-    float pocket = smoothstep(r, r + 110.0, d);
-    float a = density * (0.42 + 0.48 * bank) * (0.2 + 0.8 * pocket);
-    a = clamp(a * 1.15, 0.0, 0.92);
-    // flat steps + ordered dither: crisp pixel fog, no smooth gradient
-    float steps = 7.0;
-    float q = floor(a * steps + bayer4(tp)) / steps;
+    float edge = vn((w + drift * 0.6) / vec2(40.0, 30.0));
+    float r = clear_r * (0.72 + 0.4 * n + 0.25 * edge);
+    // thin at the pocket's edge, a wall a few dozen steps further out
+    float pocket = smoothstep(r, r + 70.0, d);
+    float far = smoothstep(r + 40.0, r + 240.0, d);
+    float a = density * (0.75 + 0.25 * bank) * (0.12 + 0.58 * pocket + 0.55 * far);
+    a = clamp(a, 0.0, 0.94);
+    // fine flat steps, snapped to the HD texel grid: pixel fog without a
+    // screen-door dither pattern
+    float q = floor(a * 24.0 + 0.5) / 24.0;
     COLOR = vec4(fog_col, q);
 }"""
 var fog_layer = null
