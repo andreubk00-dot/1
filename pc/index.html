@@ -1151,6 +1151,8 @@ canvas { touch-action:none; }
   .boss-hud-head{min-width:0}
   .boss-hud-head span{min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .boss-hud-head b{display:none!important}
+  /* Override the older higher-specificity 112px boss rule, not only .boss-objective. */
+  .boss-hud:not(.hidden) ~ .boss-objective{top:140px}
   .boss-objective{box-sizing:border-box;max-width:calc(100% - 12px)}
   .boss-objective b{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
   .boss-objective small{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
