@@ -21532,6 +21532,13 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
             _create_environmental_story_clue(chunk,high_risk_ground_story)
     else:
         _dress_major_poi(chunk,coord,str(cell_data.get("ground","")))
+    # site dressing adds interior pieces after the buildings were laid out:
+    # settle them and check the rooms again
+    for b in chunk.get_children():
+        if b.has_meta("world_building") and b.has_meta("partitions"):
+            var bsize:Vector2 = b.get_meta("building_size",Vector2.ZERO)
+            if bsize != Vector2.ZERO:
+                _settle_interior_props(b,bsize)
     return true
 
 const POI_PROP_KINDS = [
@@ -23977,16 +23984,11 @@ func _layout_wall_h(root,y,width,gap_x = 0.0,gap = 28.0):
     var gap_right = clamp(float(gap_x) + float(gap) * 0.5,left_edge + 8.0,right_edge - 8.0)
     var left_len = max(0.0,gap_left - left_edge)
     var right_len = max(0.0,right_edge - gap_right)
+    _note_partition_gap(root,Rect2(gap_left,y - 18.0,gap_right - gap_left,36.0))
     if left_len > 4.0:
-        var left_pos = left_edge + left_len * 0.5
-        _rect(Vector2(left_pos,y),Vector2(left_len,8),Color("242927"),root)
-        _rect(Vector2(left_pos,y-2),Vector2(max(2.0,left_len-3.0),2),Color(0.36,0.37,0.33,0.55),root)
-        _add_static_rect(root,Vector2(left_pos,y),Vector2(left_len,8))
+        _wall_piece(root,Vector2(left_edge + left_len * 0.5,y),Vector2(left_len,8),true)
     if right_len > 4.0:
-        var right_pos = gap_right + right_len * 0.5
-        _rect(Vector2(right_pos,y),Vector2(right_len,8),Color("242927"),root)
-        _rect(Vector2(right_pos,y-2),Vector2(max(2.0,right_len-3.0),2),Color(0.36,0.37,0.33,0.55),root)
-        _add_static_rect(root,Vector2(right_pos,y),Vector2(right_len,8))
+        _wall_piece(root,Vector2(gap_right + right_len * 0.5,y),Vector2(right_len,8),true)
 
 func _layout_wall_v(root,x,height,gap_y = 0.0,gap = 28.0):
     var half_h = max(20.0,float(height) * 0.5)
@@ -23996,16 +23998,65 @@ func _layout_wall_v(root,x,height,gap_y = 0.0,gap = 28.0):
     var gap_bottom = clamp(float(gap_y) + float(gap) * 0.5,top_edge + 8.0,bottom_edge - 8.0)
     var top_len = max(0.0,gap_top - top_edge)
     var bottom_len = max(0.0,bottom_edge - gap_bottom)
+    _note_partition_gap(root,Rect2(x - 18.0,gap_top,36.0,gap_bottom - gap_top))
     if top_len > 4.0:
-        var top_pos = top_edge + top_len * 0.5
-        _rect(Vector2(x,top_pos),Vector2(8,top_len),Color("242927"),root)
-        _rect(Vector2(x-2,top_pos),Vector2(2,max(2.0,top_len-3.0)),Color(0.36,0.37,0.33,0.55),root)
-        _add_static_rect(root,Vector2(x,top_pos),Vector2(8,top_len))
+        _wall_piece(root,Vector2(x,top_edge + top_len * 0.5),Vector2(8,top_len),false)
     if bottom_len > 4.0:
-        var bottom_pos = gap_bottom + bottom_len * 0.5
-        _rect(Vector2(x,bottom_pos),Vector2(8,bottom_len),Color("242927"),root)
-        _rect(Vector2(x-2,bottom_pos),Vector2(2,max(2.0,bottom_len-3.0)),Color(0.36,0.37,0.33,0.55),root)
-        _add_static_rect(root,Vector2(x,bottom_pos),Vector2(8,bottom_len))
+        _wall_piece(root,Vector2(x,gap_bottom + bottom_len * 0.5),Vector2(8,bottom_len),false)
+
+# 1.38: partitions keep out of the entrance: every wall piece is clipped
+# against the building's keep-clear zones (the hall inside the front door),
+# so a partition never runs into the doorway. Pieces and the gaps between
+# them are recorded for the furniture pass that follows.
+func _note_partition_gap(root,r:Rect2):
+    var gaps = root.get_meta("partition_gaps",[])
+    gaps.append(r)
+    root.set_meta("partition_gaps",gaps)
+
+func _wall_piece(root,center:Vector2,size:Vector2,horizontal:bool):
+    var a = (center.x - size.x * 0.5) if horizontal else (center.y - size.y * 0.5)
+    var b = (center.x + size.x * 0.5) if horizontal else (center.y + size.y * 0.5)
+    var spans = [[a,b]]
+    for z in root.get_meta("keep_clear",[]):
+        var zr:Rect2 = z
+        var across_lo = (center.y - size.y * 0.5) if horizontal else (center.x - size.x * 0.5)
+        var across_hi = (center.y + size.y * 0.5) if horizontal else (center.x + size.x * 0.5)
+        var z_across_lo = zr.position.y if horizontal else zr.position.x
+        var z_across_hi = zr.end.y if horizontal else zr.end.x
+        if across_hi <= z_across_lo or across_lo >= z_across_hi:
+            continue
+        var z_lo = zr.position.x if horizontal else zr.position.y
+        var z_hi = zr.end.x if horizontal else zr.end.y
+        var next = []
+        for sp in spans:
+            if sp[1] <= z_lo or sp[0] >= z_hi:
+                next.append(sp)
+                continue
+            if sp[0] < z_lo:
+                next.append([sp[0],z_lo])
+            if sp[1] > z_hi:
+                next.append([z_hi,sp[1]])
+        spans = next
+    var walls = root.get_meta("partitions",[])
+    for sp in spans:
+        var length = sp[1] - sp[0]
+        if length < 14.0:
+            continue                  # a stub that short reads as a stray block
+        var mid = (sp[0] + sp[1]) * 0.5
+        var pos = Vector2(mid,center.y) if horizontal else Vector2(center.x,mid)
+        var dims = Vector2(length,size.y) if horizontal else Vector2(size.x,length)
+        var v1 = _rect(pos,dims,Color("242927"),root)
+        var v2 = null
+        if horizontal:
+            v2 = _rect(pos + Vector2(0,-2),Vector2(max(2.0,length - 3.0),2),Color(0.36,0.37,0.33,0.55),root)
+        else:
+            v2 = _rect(pos + Vector2(-2,0),Vector2(2,max(2.0,length - 3.0)),Color(0.36,0.37,0.33,0.55),root)
+        var body = _add_static_rect(root,pos,dims)
+        body.set_meta("partition",true)
+        body.set_meta("horizontal",horizontal)
+        body.set_meta("wall_visuals",[v1,v2])
+        walls.append(Rect2(pos - dims * 0.5,dims))
+    root.set_meta("partitions",walls)
 
 func _layout_stair_marks(root,origin,count = 5):
     for i in range(int(count)):
@@ -24032,6 +24083,9 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
     var inner_h = max(66.0,size.y - 34.0)
     var back_y = -size.y * 0.28
     var front_y = size.y * 0.22
+    var door_x = float(building.get_meta("door_local_x",0.0))
+    # the hall inside the front door stays open: no partition runs into it
+    building.set_meta("keep_clear",[Rect2(door_x - 24.0,size.y * 0.5 - 44.0,48.0,44.0)])
 
     match layout:
         "panel_block":
@@ -24059,6 +24113,16 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             _archetype_prop(building,"gas_can",Vector2(size.x*0.02,back_y+8),0.52)
             _archetype_prop(building,"tool_case",Vector2(size.x*0.32,back_y),0.56)
             _archetype_prop(building,"wooden_debris",Vector2(size.x*0.28,front_y-8),0.44,2)
+        "clinic" when size.x < 300.0 or size.y < 170.0:
+            # a small surgery: waiting room in front, treatment and store
+            # behind one partition (the full plan's four partitions crossed in
+            # their own doorways at this size)
+            _layout_wall_h(building,-size.y*0.10,inner_w,size.x*0.22,32.0)
+            _archetype_prop(building,"reception_desk",Vector2(-size.x*0.28,front_y-16),0.64)
+            _archetype_prop(building,"hospital_bed",Vector2(size.x*0.28,-size.y*0.30),0.58)
+            _archetype_prop(building,"medical_shelf",Vector2(-size.x*0.30,-size.y*0.30),0.56)
+            _archetype_prop(building,"floor_papers",Vector2(size.x*0.06,size.y*0.12),0.44,2)
+            building.set_meta("room_roles",["reception","treatment","medical_storage"])
         "clinic":
             # Reception / waiting corridor with two treatment wings and a rear store.
             _layout_wall_v(building,-size.x*0.18,inner_h,-size.y*0.05,34.0)
@@ -24181,6 +24245,7 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
 
     _decorate_world_content_variant_interior(building,archetype_id,data,size)
     _furnish_interior(building,layout,size,building_id)
+    _settle_interior_props(building,size)
     building.set_meta("authored_layout",layout)
     building.set_meta("layout_version",3)
 
@@ -24284,6 +24349,246 @@ func _furnish_interior(building,layout:String,size:Vector2,building_id):
             continue
         _archetype_prop(building,INTERIOR_LITTER[rng.randi_range(0,INTERIOR_LITTER.size() - 1)],lp,rng.randf_range(0.36,0.46),2)
     building.set_meta("interior_fill_count",placed)
+
+func _prop_foot(spr) -> Rect2:
+    # the floor footprint of a standing piece: the lower part of what it draws
+    var r = spr.get_rect()
+    r = Rect2(r.position * spr.scale,r.size * spr.scale)
+    r.position += spr.position
+    return Rect2(r.position.x + r.size.x * 0.12,r.position.y + r.size.y * 0.55,r.size.x * 0.76,r.size.y * 0.40)
+
+func _settle_interior_props(building,size:Vector2,check_rooms:bool = true):
+    # Furniture never stands on a partition, in a doorway between rooms or in
+    # the entrance hall: each offending piece is nudged to the nearest free
+    # spot inside the room (or taken out if it was only filler).
+    var walls = building.get_meta("partitions",[])
+    var blocked = []
+    for w in walls:
+        blocked.append(w.grow(2.0))
+    for g in building.get_meta("partition_gaps",[]):
+        blocked.append(g)
+    for z in building.get_meta("keep_clear",[]):
+        blocked.append(z)
+    var inner = Rect2(-size * 0.5 + Vector2(11,12),size - Vector2(22,18))
+    var others = []
+    for c in building.get_children():
+        if c is Sprite2D and c.texture != null and (c.is_in_group("interior_depth_props") or c.has_meta("interior_fill")):
+            others.append(c)
+    var moved = 0
+    var removed = 0
+    for spr in others:
+        if not _foot_blocked(_prop_foot(spr),blocked,inner):
+            continue
+        # try the piece where it stands first, then a size smaller for a
+        # narrow bay (a workbench in a garage stall), nudging up to 32 px
+        var base_scale = spr.scale
+        var fixed = false
+        for k in [1.0,0.88,0.76]:
+            spr.scale = base_scale * k
+            var foot = _prop_foot(spr)
+            var best = null
+            for step in range(0,9):
+                for d in [Vector2(1,0),Vector2(-1,0),Vector2(0,1),Vector2(0,-1),Vector2(1,1),Vector2(-1,1),Vector2(1,-1),Vector2(-1,-1)]:
+                    var off = d * float(step) * 4.0
+                    if not _foot_blocked(Rect2(foot.position + off,foot.size),blocked,inner):
+                        best = off
+                        break
+                if best != null:
+                    break
+            if best != null:
+                spr.position += best
+                fixed = true
+                moved += 1
+                break
+        if not fixed:
+            # nowhere it fits without standing on a wall or in a doorway
+            spr.scale = base_scale
+            spr.remove_from_group("interior_depth_props")
+            spr.queue_free()
+            removed += 1
+    building.set_meta("interior_props_settled",[moved,removed])
+    if check_rooms and _open_blocked_rooms(building,size):
+        # a doorway was cut: clear it of furniture, then check once more
+        _settle_interior_props(building,size,false)
+        _open_blocked_rooms(building,size)
+
+func _cut_partition(building,body,wr:Rect2,at:Vector2):
+    var horizontal = bool(body.get_meta("horizontal",wr.size.x > wr.size.y))
+    for v in body.get_meta("wall_visuals",[]):
+        if is_instance_valid(v):
+            v.queue_free()
+    body.queue_free()
+    var walls = building.get_meta("partitions",[])
+    var keep = []
+    for w in walls:
+        if not w.is_equal_approx(wr):
+            keep.append(w)
+    building.set_meta("partitions",keep)
+    var lo = wr.position.x if horizontal else wr.position.y
+    var hi = wr.end.x if horizontal else wr.end.y
+    var c = clamp(at.x if horizontal else at.y,lo,hi)
+    var thick = wr.size.y if horizontal else wr.size.x
+    var mid_across = wr.get_center().y if horizontal else wr.get_center().x
+    for span in [[lo,c - 16.0],[c + 16.0,hi]]:
+        var length = span[1] - span[0]
+        if length < 14.0:
+            continue
+        var m = (span[0] + span[1]) * 0.5
+        var center = Vector2(m,mid_across) if horizontal else Vector2(mid_across,m)
+        var dims = Vector2(length,thick) if horizontal else Vector2(thick,length)
+        _wall_piece(building,center,dims,horizontal)
+    _note_partition_gap(building,Rect2(c - 16.0,mid_across - 18.0,32.0,36.0) if horizontal else Rect2(mid_across - 18.0,c - 16.0,36.0,32.0))
+
+# Every room has to be reachable from the front door. A flood fill on a 4 px
+# grid with the player's clearance; walls and standing furniture block. If
+# floor is cut off, the piece of furniture that seals the most of it from the
+# reachable side is taken out (filler first), and the fill runs again.
+const ROOM_CELL = 4.0
+const ROOM_CLEAR = 7.0
+
+func _room_grid(size:Vector2,rects:Array) -> Dictionary:
+    var inner = Rect2(-size * 0.5 + Vector2(6,6),size - Vector2(12,12))
+    var nx = int(inner.size.x / ROOM_CELL)
+    var ny = int(inner.size.y / ROOM_CELL)
+    var grid = PackedByteArray()
+    grid.resize(nx * ny)
+    # walls first, furniture last, so a piece against a wall owns its cells
+    var ordered = rects.duplicate()
+    ordered.sort_custom(func(a,b): return (a[1] == 1 or a[1] >= 200) and not (b[1] == 1 or b[1] >= 200))
+    for r in ordered:
+        var g:Rect2 = r[0]
+        var i0 = clampi(int(floor((g.position.x - inner.position.x) / ROOM_CELL)),0,nx)
+        var i1 = clampi(int(ceil((g.end.x - inner.position.x) / ROOM_CELL)),0,nx)
+        var j0 = clampi(int(floor((g.position.y - inner.position.y) / ROOM_CELL)),0,ny)
+        var j1 = clampi(int(ceil((g.end.y - inner.position.y) / ROOM_CELL)),0,ny)
+        for j in range(j0,j1):
+            for i in range(i0,i1):
+                grid[j * nx + i] = r[1]
+    return {"inner":inner,"nx":nx,"ny":ny,"grid":grid}
+
+func _open_blocked_rooms(building,size:Vector2) -> bool:
+    var door_x = float(building.get_meta("door_local_x",0.0))
+    var cut_any = false
+    for attempt in range(12):
+        var walls = []
+        var bodies = []
+        for c in building.get_children():
+            if c is StaticBody2D and not c.is_queued_for_deletion():
+                for sh in c.get_children():
+                    if sh is CollisionShape2D and sh.shape is RectangleShape2D:
+                        walls.append(Rect2(c.position + sh.position - sh.shape.size * 0.5,sh.shape.size))
+                        bodies.append(c)
+        var props = []
+        for c in building.get_children():
+            if c is Sprite2D and c.texture != null and not c.is_queued_for_deletion() and (c.is_in_group("interior_depth_props") or c.has_meta("interior_fill")):
+                props.append(c)
+        # owners: 1 outer wall, 2.. furniture, 200.. partitions
+        var rects = []
+        for i in range(walls.size()):
+            rects.append([walls[i].grow(ROOM_CLEAR),(200 + i) if bool(bodies[i].get_meta("partition",false)) else 1])
+        for i in range(min(props.size(),190)):
+            rects.append([_prop_foot(props[i]).grow(ROOM_CLEAR - 4.0),2 + i])
+        var g = _room_grid(size,rects)
+        var nx:int = g["nx"]
+        var ny:int = g["ny"]
+        var grid:PackedByteArray = g["grid"]
+        var inner:Rect2 = g["inner"]
+        var seen = PackedByteArray()
+        seen.resize(nx * ny)
+        var queue = []
+        var si = int((door_x - inner.position.x) / ROOM_CELL)
+        for dj in range(1,5):
+            for di in range(-3,4):
+                var ii = si + di
+                var jj = ny - dj
+                if ii >= 0 and ii < nx and jj >= 0 and grid[jj * nx + ii] == 0 and seen[jj * nx + ii] == 0:
+                    seen[jj * nx + ii] = 1
+                    queue.append(jj * nx + ii)
+        var head = 0
+        while head < queue.size():
+            var k = queue[head]
+            head += 1
+            var x = k % nx
+            var y = k / nx
+            for nb in [k - 1 if x > 0 else -1,k + 1 if x < nx - 1 else -1,k - nx if y > 0 else -1,k + nx if y < ny - 1 else -1]:
+                if nb >= 0 and grid[nb] == 0 and seen[nb] == 0:
+                    seen[nb] = 1
+                    queue.append(nb)
+        var cut = 0
+        for k in range(nx * ny):
+            if grid[k] == 0 and seen[k] == 0:
+                cut += 1
+        if cut * ROOM_CELL * ROOM_CELL < 900.0 or queue.is_empty():
+            return cut_any
+        # which piece of furniture (or else which partition) borders both
+        # sides the most
+        var score = {}
+        var contact = {}
+        for k in range(nx * ny):
+            var owner = grid[k]
+            if owner < 2:
+                continue
+            var x = k % nx
+            var y = k / nx
+            var touches_in = false
+            var touches_out = false
+            for nb in [k - 1 if x > 0 else -1,k + 1 if x < nx - 1 else -1,k - nx if y > 0 else -1,k + nx if y < ny - 1 else -1]:
+                if nb < 0 or grid[nb] != 0:
+                    continue
+                if seen[nb] == 1:
+                    touches_in = true
+                else:
+                    touches_out = true
+            # a blocker is several cells thick: count how much of it faces
+            # each side, and where it faces the cut-off side
+            var t = contact.get(owner,[0,0,Vector2.ZERO])
+            if touches_in:
+                t[0] += 1
+            if touches_out:
+                t[1] += 1
+                t[2] += inner.position + Vector2(x + 0.5,y + 0.5) * ROOM_CELL
+            contact[owner] = t
+        for owner in contact.keys():
+            var t = contact[owner]
+            if t[0] > 0 and t[1] > 0:
+                score[owner] = min(t[0],t[1])
+        var best = -1
+        var best_score = -1
+        for owner in score.keys():
+            if owner >= 200:
+                continue
+            var sc = int(score[owner]) + (1000 if props[owner - 2].has_meta("interior_fill") else 0)
+            if sc > best_score:
+                best_score = sc
+                best = owner
+        if best >= 2:
+            var victim = props[best - 2]
+            victim.remove_from_group("interior_depth_props")
+            victim.queue_free()
+            continue
+        # sealed by the partitions themselves (walls crossing in a doorway):
+        # cut a 32 px opening into the partition on the boundary
+        for owner in score.keys():
+            if owner >= 200 and int(score[owner]) > best_score:
+                best_score = int(score[owner])
+                best = owner
+        if best < 200:
+            return cut_any
+        var body = bodies[best - 200]
+        var wr:Rect2 = walls[best - 200]
+        var at:Vector2 = contact[best][2] / float(contact[best][1])
+        _cut_partition(building,body,wr,at)
+        cut_any = true
+    return cut_any
+
+
+func _foot_blocked(foot:Rect2,blocked:Array,inner:Rect2) -> bool:
+    if not inner.encloses(foot):
+        return true
+    for b in blocked:
+        if foot.intersects(b):
+            return true
+    return false
 
 func _decorate_world_content_variant_interior(building,archetype_id,data,size):
     if building == null or not data.has("content_variant"):
