@@ -7709,6 +7709,7 @@ func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
         var key = "%d:%d:%d" % [c.x, c.y, sid]
         defeated[key] = true
         _high_risk_check_incident_resolution(c,sid)
+        _spawn_infected_corpse(enemy,hit_dir)
         enemy.queue_free()
 
 func _ai_state_valid(state):
@@ -26712,6 +26713,16 @@ func _enemy_move_speed(enemy,multiplier = 1.0) -> float:
 # drags the body on slowly. Speed surges and sags with the gait (its average
 # is unchanged), the walk frames hurry through the bad step and linger on the
 # drag, and the body dips and leans toward the bad side as it lands.
+func _infected_idle_pose(enemy,twitching:bool) -> int:
+    # standing stance per infected: -1 upright (walk sheet), or a frame of the
+    # strike sheet: 0 slack arms, 4 doubled over; a twitch flicks the hunched
+    # ones into the next frame for a beat
+    var sid = int(enemy.get_meta("spawn_id",0))
+    var pose = [-1,4,0,-1,3][abs(sid) % 5]
+    if twitching:
+        return 5 if pose == 4 else (4 if pose >= 0 else 0)
+    return pose
+
 func _infected_limp(enemy) -> float:
     var sid = int(enemy.get_meta("spawn_id",0))
     return 0.55 + float(abs(sid * 7919) % 45) / 100.0   # 0.55 .. 0.99
@@ -26957,7 +26968,23 @@ func _update_enemies(delta):
                 var attack_progress = 1.0 - attack_anim / 0.26
                 # The 0.77 attack sheet already contains the body lunge; only a tiny
                 # root impulse is kept so collision and shadow do not visibly detach.
-                attack_offset = facing_visual.normalized() * sin(clamp(attack_progress,0.0,1.0) * PI) * 0.8
+                # anticipation: the body draws back a pixel, then throws itself
+                # two pixels forward into the swipe and recovers
+                var ap = clamp(attack_progress,0.0,1.0)
+                var push = -1.0 if ap < 0.22 else (round(sin((ap - 0.22) / 0.78 * PI) * 2.5))
+                attack_offset = (facing_visual.normalized() * push).round()
+            # idle: every infected keeps its own stance and now and then jerks
+            # its head or shoulders, a whole-pixel twitch held for a beat
+            var twitch = Vector2.ZERO
+            var twitching = false
+            if not moving_visual and attack_anim <= 0.0:
+                var sid_tw = int(enemy.get_meta("spawn_id",0))
+                var slot = int(floor(idle_visual_time / 1.7))
+                var roll = abs(hash(Vector2i(sid_tw,slot))) % 100
+                var in_slot = idle_visual_time - float(slot) * 1.7
+                if roll < 22 and in_slot < 0.16:
+                    twitching = true
+                    twitch = Vector2(-1.0 if roll % 2 == 0 else 1.0,-1.0 if roll < 9 else 0.0)
             var idle_sway = 0.0 if moving_visual else sin(idle_visual_time * 1.35 + float(int(enemy.get_meta("spawn_id",0)) % 11)) * 0.18
             # the limp: a dip and a lean toward the bad leg as it takes the
             # weight, held for the drag, whole pixels only
@@ -26966,7 +26993,7 @@ func _update_enemies(delta):
             var limp_load = max(0.0,-sin(walk)) if moving_visual else 0.0
             var lean = Vector2(-facing_visual.y,facing_visual.x) * bad_side * round(limp_load * limp_k * 1.6)
             var dip = round(limp_load * limp_k * 1.8) if moving_visual else 0.0
-            visual.position = attack_offset + lean + Vector2(idle_sway,dip + sin(walk * 2.0) * (0.3 if moving_visual else 0.0))
+            visual.position = attack_offset + twitch + lean + Vector2(idle_sway,dip + sin(walk * 2.0) * (0.3 if moving_visual else 0.0))
             var call_telegraph = _infected_is_calling(enemy)
             var spit_telegraph = _infected_is_spitting(enemy)
             var special_telegraph = call_telegraph or spit_telegraph
@@ -26999,6 +27026,11 @@ func _update_enemies(delta):
                         infected_sprite.texture = load("res://infected_attack_v12.png")
                     var attack_progress = clamp(1.0 - attack_anim / 0.26,0.0,1.0)
                     frame = min(INFECTED_ATTACK_FRAMES - 1,int(floor(attack_progress * INFECTED_ATTACK_FRAMES)))
+                elif not moving_visual and _infected_idle_pose(enemy,twitching) >= 0:
+                    # hunched stances borrowed from the strike sheet
+                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != "res://infected_attack_v12.png":
+                        infected_sprite.texture = load("res://infected_attack_v12.png")
+                    frame = _infected_idle_pose(enemy,twitching)
                 else:
                     if infected_sprite.texture == null or infected_sprite.texture.resource_path != "res://infected_walk_v12.png":
                         infected_sprite.texture = load("res://infected_walk_v12.png")
@@ -28586,9 +28618,132 @@ func _eject_casing(origin:Vector2,aim:Vector2,shell:bool):
     c.set_meta("spin",randf_range(10.0,18.0) * (1.0 if randf() < 0.5 else -1.0))
     _casings.append(c)
 
+# --- bodies of the infected -------------------------------------------------
+# A killed infected buckles, drops to its knees and falls sideways, away from
+# the blow, and the body stays on the ground. The lying sprite is its own
+# walk frame turned a quarter (pixel art only turns in quarter steps).
+const CORPSE_MAX = 24
+const CORPSE_LIFE = 300.0
+var _corpses = []
+var _corpse_tex = {}
+
+func _corpse_texture(variant:int,dir:int,cw:bool):
+    var key = "%d:%d:%s" % [variant,dir,cw]
+    if _corpse_tex.has(key):
+        return _corpse_tex[key]
+    var sheet = load("res://infected_walk_v12.png")
+    var img = sheet.get_image() if sheet != null else null
+    if img == null:
+        return null
+    if img.is_compressed():
+        img.decompress()
+    var cell = img.get_region(Rect2i(0,(variant * 8 + dir) * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL))
+    cell = cell.get_region(cell.get_used_rect())
+    cell.rotate_90(CLOCKWISE if cw else COUNTERCLOCKWISE)
+    # dead flesh and cloth: a touch darker and greyer than the living
+    for y in range(cell.get_height()):
+        for x in range(cell.get_width()):
+            var c = cell.get_pixel(x,y)
+            if c.a > 0.0:
+                var g = (c.r + c.g + c.b) / 3.0
+                cell.set_pixel(x,y,Color(lerp(c.r,g,0.25) * 0.92,lerp(c.g,g,0.25) * 0.90,lerp(c.b,g,0.25) * 0.90,c.a))
+    var tex = ImageTexture.create_from_image(cell)
+    _corpse_tex[key] = tex
+    return tex
+
+func _spawn_infected_corpse(enemy,hit_dir:Vector2):
+    if not is_instance_valid(enemy):
+        return
+    var sprite = enemy.get_meta("infected_sprite",null)
+    if not is_instance_valid(sprite) or sprite.texture == null:
+        return
+    var variant = int(enemy.get_meta("infected_variant",0))
+    var dir = int(enemy.get_meta("infected_visual_dir",0))
+    var cw = hit_dir.x > 0.0 if abs(hit_dir.x) > 0.2 else randf() < 0.5
+    var lying = _corpse_texture(variant,dir,cw)
+    if lying == null:
+        return
+    var stand = AtlasTexture.new()
+    stand.atlas = sprite.texture
+    stand.region = sprite.region_rect
+    var kneel = AtlasTexture.new()
+    kneel.atlas = load("res://infected_attack_v12.png")
+    kneel.region = Rect2(4 * INFECTED_CELL,(variant * 8 + dir) * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
+    var body = Sprite2D.new()
+    body.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    body.texture = stand
+    body.scale = Vector2(INFECTED_SPRITE_SCALE,INFECTED_SPRITE_SCALE)
+    body.z_as_relative = false
+    body.z_index = 9
+    body.modulate = sprite.modulate
+    body.add_to_group("infected_corpses")
+    var shade = Sprite2D.new()
+    shade.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    shade.texture = lying
+    shade.show_behind_parent = true
+    shade.position = Vector2(1.0,2.0) / INFECTED_SPRITE_SCALE
+    shade.self_modulate = Color(0.0,0.0,0.0,0.32)
+    shade.visible = false
+    body.add_child(shade)
+    _fx_root().add_child(body)
+    var base = enemy.global_position.round()
+    body.global_position = base + Vector2(0,-7)
+    body.set_meta("base",base)
+    body.set_meta("fall",0.0)
+    body.set_meta("age",0.0)
+    body.set_meta("tex_kneel",kneel)
+    body.set_meta("tex_lying",lying)
+    body.set_meta("shade",shade)
+    body.set_meta("side",1.0 if cw else -1.0)
+    _corpses.append(body)
+    while _corpses.size() > CORPSE_MAX:
+        var old = _corpses.pop_front()
+        if is_instance_valid(old):
+            old.queue_free()
+
+func _update_corpses(delta):
+    var keep = []
+    for b in _corpses:
+        if not is_instance_valid(b):
+            continue
+        var age = float(b.get_meta("age",0.0)) + delta
+        b.set_meta("age",age)
+        var base:Vector2 = b.get_meta("base")
+        if age < 0.40:
+            var side = float(b.get_meta("side",1.0))
+            if age < 0.10:
+                # the hit buckles it: one pixel down, still on its feet
+                b.global_position = base + Vector2(0,-6)
+            elif age < 0.24:
+                # doubled over, sinking to its knees
+                b.texture = b.get_meta("tex_kneel")
+                b.global_position = base + Vector2(side,-4)
+            else:
+                # down on its side, one small bounce, then still
+                if b.texture != b.get_meta("tex_lying"):
+                    b.texture = b.get_meta("tex_lying")
+                    b.z_index = -46
+                    b.modulate = Color.WHITE
+                    var shade = b.get_meta("shade")
+                    if is_instance_valid(shade):
+                        shade.visible = true
+                var bounce = -1.0 if age < 0.31 else 0.0
+                b.global_position = base + Vector2(side * 6.0,7.0 + bounce)
+        elif age > CORPSE_LIFE:
+            b.modulate.a = max(0.0,1.0 - (age - CORPSE_LIFE) / 20.0)
+            if b.modulate.a <= 0.0:
+                b.queue_free()
+                continue
+        if player != null and base.distance_to(player.global_position) > CHUNK_SIZE * 4.0:
+            b.queue_free()
+            continue
+        keep.append(b)
+    _corpses = keep
+
 func _update_combat_traces(delta):
     if player == null:
         return
+    _update_corpses(delta)
     # casings: a short arc (up then down to the floor), one bounce, then rest
     for c in _casings:
         var age = float(c.get_meta("age",0.0)) + delta

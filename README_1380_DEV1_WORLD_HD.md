@@ -728,3 +728,17 @@ QA: `tests/qa_vertical_fence_capture.gd`.
   - Кадры ходьбы проскакивают больной шаг и задерживаются на волочении.
   - На больной ноге тело проседает до 2 px и заваливается вбок до 2 px,
     только целыми пикселями.
+
+## dev42 — infected bodies, idle stances, attack lunge
+
+- **Death and bodies.** A killed infected buckles (1 px drop), doubles over onto its
+  knees (strike-sheet frame 4) and falls sideways away from the blow, with one small
+  bounce. The body stays on the ground: its own walk frame turned a quarter
+  (pixel art turns only in quarter steps), slightly greyed, with a 1–2 px drop
+  shadow, lying over its blood pool (`_spawn_infected_corpse`, `_update_corpses`).
+  At most 24 bodies; they fade after 5 minutes or vanish beyond 4 chunks.
+- **Idle stances.** Standing infected keep their own stance: upright, slack-armed or
+  doubled over (`_infected_idle_pose`). Now and then one jerks its head or
+  shoulders with a whole-pixel twitch held for a beat.
+- **Attack lunge.** Before the swipe the body draws back one pixel, then throws
+  itself up to 2–3 px forward and recovers.
