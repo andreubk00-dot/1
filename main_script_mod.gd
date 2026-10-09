@@ -30373,6 +30373,11 @@ func _update_day_night(delta):
     if flashlight_on and has_flashlight and flashlight_battery > 0.0:
         flashlight_battery = max(0.0,flashlight_battery - delta * 0.22)
         player_light.visible = true
+        # a torch barely shows in daylight: it was throwing a full night-time
+        # pool around the player at noon
+        var gloom = max(_time_night_factor(),0.0 if weather_state == "clear" else (0.18 if weather_state == "cloudy" else 0.3))
+        gloom = max(gloom,fog_density * 0.4)
+        player_light.energy = 1.35 * lerpf(0.12,1.0,gloom)
         if flashlight_battery <= 0.0:
             flashlight_on = false
             player_light.visible = false
