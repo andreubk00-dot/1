@@ -131,6 +131,67 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert(src.includes("if(!this.ysdk?.adv?.showRewardedVideo)return false;"),
       'Yandex builds may not grant phantom rewards');
   });
+  await test('Consumable purchase must persist to cloud before SDK consumption',async()=>{
+    const {g,bridge}=fixture();let saved=0,consumed=[],persisted=0;
+    g.persist=()=>{persisted++;};
+    bridge.saveCloud=async()=>{saved++;return true;};
+    bridge.consume=async token=>{consumed.push(token);return true;};
+    await g.applyPurchase({productID:'crystals_80',purchaseToken:'purchase-1'});
+    assert.equal(g.save.gems,100);assert.equal(g.save.shards,1000);
+    assert.equal(g.save.purchases['purchase-1'],true);
+    assert.equal(saved,1);assert.deepEqual(consumed,['purchase-1']);
+    assert.equal(persisted,1);
+    await g.applyPurchase({productID:'crystals_80',purchaseToken:'purchase-1'});
+    assert.equal(g.save.gems,100,'Duplicate callback awarded 80 crystals twice');
+    assert.equal(persisted,1,'Duplicate callback persisted currency twice');
+  });
+  await test('Failed cloud save preserves purchase token for a safe retry',async()=>{
+    const {g,bridge}=fixture();let cloudReady=false,consumed=[],local=0;
+    g.persist=()=>{local++;};
+    bridge.saveCloud=async()=>cloudReady;
+    bridge.consume=async token=>{consumed.push(token);return true;};
+    const p={productID:'supporter_pack',purchaseToken:'purchase-2'};
+    await g.applyPurchase(p);
+    assert.equal(g.save.gems,200);assert.equal(g.save.shards,1500);
+    assert.equal(g.save.purchases['purchase-2'],true);
+    assert.equal(local,1);
+    assert.deepEqual(consumed,[],'Cloud-save failure consumed purchase irreversibly');
+    cloudReady=true;
+    await g.applyPurchase(p);
+    assert.equal(g.save.gems,200);assert.equal(g.save.shards,1500);
+    assert.deepEqual(consumed,['purchase-2'],'Successful retry did not consume pending purchase');
+    assert.equal(local,1,'Receipt recovery paid out twice');
+  });
+  await test('Duplicated asynchronous purchase callbacks are serialized',async()=>{
+    const {g,bridge}=fixture();let ack,received=0;
+    bridge.saveCloud=()=>new Promise(resolve=>{ack=resolve;});
+    bridge.consume=async()=>{received++;return true;};
+    const purchase={productID:'crystals_250',purchaseToken:'purchase-3'};
+    const first=g.applyPurchase(purchase),second=g.applyPurchase(purchase);
+    assert.equal(g.save.gems,270,'Concurrent callbacks awarded currency twice');
+    assert.equal(g._purchaseProcessing.size,1);
+    await second;ack(true);await first;
+    assert.equal(received,1,'Concurrent SDK callback consumed purchase twice');
+    assert.equal(g._purchaseProcessing.size,0);
+  });
+  await test('Invalid, unrecognized or tokenless products never award currency',async()=>{
+    const {g,bridge}=fixture();let calls=0;
+    bridge.saveCloud=async()=>{calls++;return true;};
+    await g.applyPurchase({productID:'crystals_250',purchaseToken:''});
+    await g.applyPurchase({productID:'crystals_250'});
+    await g.applyPurchase({productID:'unknown_sku',purchaseToken:'purchase-4'});
+    assert.equal(g.save.gems,20);assert.equal(g.save.shards,1000);
+    assert.equal(calls,0,'Unverified purchase reached cloud');
+  });
+  await test('Permanent no-interstitial purchase is never consumed',async()=>{
+    const {g,bridge}=fixture();let consumed=0;
+    bridge.saveCloud=async()=>true;bridge.consume=async()=>{consumed++;return true;};
+    const purchase={productID:'no_interstitial',purchaseToken:'purchase-5'};
+    await g.applyPurchase(purchase);await g.applyPurchase(purchase);
+    assert.equal(g.save.noInterstitial,true);
+    assert.equal(g.save.purchases['purchase-5'],true);
+    assert.equal(consumed,0,'Permanent purchase must remain queryable');
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
