@@ -57,7 +57,9 @@ const existingContracts=['prism','nova','ember'],nextContract='volt';
 const priorShards=existingContracts.reduce((s,id)=>s+DEFENDER_CONTRACTS[id].shards,0);
 const priorGems=existingContracts.reduce((s,id)=>s+DEFENDER_CONTRACTS[id].gems,0);
 const totalShardTarget=labCosts+priorShards+DEFENDER_CONTRACTS[nextContract].shards;
-const totalGemTarget=priorGems+DEFENDER_CONTRACTS[nextContract].gems+units.length*58;
+const remainingContractGems=priorGems+DEFENDER_CONTRACTS[nextContract].gems;
+const totalGemTarget=remainingContractGems+units.length*58;
+assert.equal(remainingContractGems,178);
 assert.equal(totalShardTarget,109136);
 assert.equal(totalGemTarget,352);
 function simulate(seed,depth,maxRuns=550){
@@ -107,11 +109,16 @@ function simulate(seed,depth,maxRuns=550){
   if(!record.star4All&&units.every(id=>g.masteryState(id).stars>=4))record.star4All=run;
   if(!record.level20All&&units.every(id=>g.masteryState(id).level>=20))record.level20All=run;
   for(const rank of [14,25,35,40])if(!record['meta'+rank]&&save.meta.level>=rank)record['meta'+rank]=run;
+  if(!record.gemsForContracts&&save.gems>=remainingContractGems)record.gemsForContracts=run;
   if(!record.shardsForLab&&save.shards>=labCosts)record.shardsForLab=run;
   if(!record.shardsForPriorContractsAndNextLab&&save.shards>=totalShardTarget)record.shardsForPriorContractsAndNextLab=run;
-  if(record.level20All&&record.star4All&&record.meta35&&record.shardsForPriorContractsAndNextLab)break;
+  if(!record.fullSnapshotBudget&&record.level20All&&record.star4All&&record.meta35&&
+     record.shardsForPriorContractsAndNextLab&&record.gemsForContracts)
+   record.fullSnapshotBudget=run;
+  if(record.fullSnapshotBudget)break;
  }
- assert(record.level20All&&record.star4All&&record.meta35&&record.shardsForPriorContractsAndNextLab,
+ assert(record.fullSnapshotBudget&&record.level20All&&record.star4All&&record.meta35&&
+   record.shardsForPriorContractsAndNextLab&&record.gemsForContracts,
   'Unreachable fixed-depth scenario '+depth);
  assert(save.gems>=0&&save.shards>=0,'Negative currency during legitimate progression');
  assert.equal(spentGems,58*3,'Unexpected spent promotion gems');
@@ -122,7 +129,7 @@ function simulate(seed,depth,maxRuns=550){
 }
 function summary(depth){
  const samples=Array.from({length:40},(_,i)=>simulate(i*911+1419,depth));
- const fields=['star4All','level20All','meta14','meta25','meta35',
+ const fields=['star4All','level20All','meta14','meta25','meta35','gemsForContracts','fullSnapshotBudget',
   'shardsForLab','shardsForPriorContractsAndNextLab'];
  const values=Object.fromEntries(fields.map(key=>{
   const a=samples.map(x=>x[key]).sort((a,b)=>a-b);
@@ -144,4 +151,4 @@ for(let i=1;i<results.length;i++){
 }
 console.log('PASS permanent progression/resource audit '+JSON.stringify({coreXp,xp20,labCosts,
  totalShardTarget,totalGemTarget,results}));
-console.log('ASSUMPTIONS: preunlocked Spark, Prism and Ember; no actual combat losses; all bosses through fixed depth die; no ad, daily, weekly, season, Rift or achievement resources. Prices are real; Lab budget is counted, not actually bought during fixed-depth runs. Runs are NOT real playtime.');
+console.log('ASSUMPTIONS: preunlocked Spark, Prism and Ember; no actual combat losses; all bosses through fixed depth die; no ad, daily, weekly, season, Rift or achievement resources. Prices are real; Lab/contracts shard and gem budgets are checked as affordability snapshots, not actually bought during fixed-depth runs. Runs are NOT real playtime.');
