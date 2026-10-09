@@ -7726,14 +7726,17 @@ func _create_world_audio_layer():
 # machine-guns one sample: stone (asphalt, pavement, concrete and tiled
 # floors), grass (yards, verges, fields), gravel (dirt roads, military and
 # industrial grounds), wood (homes, shops, sheds).
-const STEP_TAKES = {"stone":6,"grass":6,"gravel":6,"wood":3}
+const STEP_TAKES = {"stone":11,"grass":11,"gravel":6,"wood":8}
 const WOOD_FLOOR_LOOT = ["residential","grocery","rural","forest_cache"]
 var _last_step_take = ""
+var _infected_step_gate = 0
 
 func _footstep_surface() -> String:
+    return _footstep_surface_at(player.global_position)
+
+func _footstep_surface_at(p:Vector2) -> String:
     if _high_risk_floor_active():
         return "stone"
-    var p = player.global_position
     var coord = _world_to_chunk(p)
     var chunk = loaded_chunks.get(coord,null)
     if chunk != null:
@@ -7755,6 +7758,20 @@ func _footstep_surface() -> String:
     if family in ["military","industrial"]:
         return "gravel"
     return "grass"
+
+func _play_infected_step(enemy):
+    # the infected drag their feet: the same surface takes, lower and heavier,
+    # only heard close by and fading with distance
+    if player == null or not is_instance_valid(enemy):
+        return
+    var d = enemy.global_position.distance_to(player.global_position)
+    if d > 300.0:
+        return
+    var surface = _footstep_surface_at(enemy.global_position)
+    var take = "step_%s_%d" % [surface,randi() % int(STEP_TAKES.get(surface,1)) + 1]
+    if _play_distance_sfx(take,enemy.global_position,-19.0,300.0,0.05):
+        var voice = world_audio_players[(world_audio_cursor + world_audio_players.size() - 1) % world_audio_players.size()]
+        voice.pitch_scale *= 0.82
 
 func _play_footstep():
     if player == null:
@@ -27571,7 +27588,13 @@ func _update_enemies(delta):
         # prevents infected from moonwalking when blocked by walls or each other.
         var moved_visual_distance = previous_visual_position.distance_to(enemy.global_position)
         if moved_visual_distance > 0.02:
+            var half_before = int(floor(walk / PI))
             walk = fposmod(walk + (moved_visual_distance / 34.0) * TAU,TAU)
+            # a scuff on each footfall; a shared gate keeps a crowd from
+            # flooding the voice pool the player's own steps use
+            if int(floor(walk / PI)) != half_before and Time.get_ticks_msec() >= _infected_step_gate:
+                _infected_step_gate = Time.get_ticks_msec() + 140
+                _play_infected_step(enemy)
 
         var visual = enemy.get_meta("visual_node",null)
         if is_instance_valid(visual):

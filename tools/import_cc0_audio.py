@@ -59,6 +59,12 @@ def norm(x, peak):
     return x * (peak / m) if m > 0 else x
 
 
+def at_db(x, db):
+    # set the bed's RMS level (the old synthesized beds were mixed around these)
+    r = np.sqrt(np.mean(x * x))
+    return x * (10 ** (db / 20.0) / r) if r > 0 else x
+
+
 def lowpass(x, hz, order=4):
     return sosfilt(butter(order, hz, 'low', fs=SR, output='sos'), x)
 
@@ -201,7 +207,7 @@ a = rain[10 * SR:10 * SR + n + xf].copy()
 loop = a[:n].copy()
 r = np.linspace(0.0, 1.0, xf)
 loop[:xf] = a[:xf] * r + a[n:n + xf] * (1.0 - r)
-save(norm(loop, 0.5), os.path.join(ROOT, 'audio/ambience/rain.wav'))
+save(at_db(loop, -18.0), os.path.join(ROOT, 'audio/ambience/rain.wav'))
 
 # --- music: CC0 tracks, re-encoded to OGG Vorbis ----------------------------
 MUSIC = os.path.join(ROOT, 'audio', 'music')
@@ -216,6 +222,8 @@ TRACKS = {
     'cold_silence.ogg': 'cold_silence.ogg',
 }
 for out, src in TRACKS.items():
+    if os.path.exists(os.path.join(MUSIC, out)):
+        continue                      # Vorbis output is not bit-stable: keep the committed one
     d, sr = sf.read(os.path.join(SRC, 'music', src), always_2d=True)
     d = d / max(1e-9, np.sqrt(np.mean(d * d))) * 0.12     # even loudness across tracks
     peak = np.abs(d).max()
@@ -226,3 +234,64 @@ for out, src in TRACKS.items():
         for i in range(0, len(d), 16384):
             f.write(d[i:i + 16384])
     print('%-52s %.0fs' % (os.path.relpath(os.path.join(MUSIC, out), ROOT), len(d) / sr))
+
+# --- Kenney packs (CC0): interface, impacts, extra footsteps -----------------
+KN = os.path.join(SRC, 'kenney')
+KI = os.path.join(KN, 'kenney_interface-sounds', 'Audio')
+KR = os.path.join(KN, 'kenney_rpg-audio', 'Audio')
+KP = os.path.join(KN, 'kenney_impact-sounds', 'Audio')
+
+
+def clip(path, length, peak, min_len=0.0, tail=0.4, hp=0.0):
+    x = load(path)
+    x = segment(x, onset(x, 0.06), length)
+    if hp:
+        x = highpass(x, hp)
+    if len(x) < int(min_len * SR):
+        x = np.concatenate([x, np.zeros(int(min_len * SR) - len(x))])
+    return norm(fade(x, tail=tail, shape=2.0), peak)
+
+# UI (0.10 - 0.20 s)
+save(clip(os.path.join(KI, 'open_001.ogg'), 0.15, 0.32, 0.12), os.path.join(ROOT, 'audio/ui/ui_open.wav'))
+save(clip(os.path.join(KI, 'close_001.ogg'), 0.15, 0.32, 0.12), os.path.join(ROOT, 'audio/ui/ui_close.wav'))
+save(clip(os.path.join(KI, 'confirmation_001.ogg'), 0.19, 0.32, 0.12), os.path.join(ROOT, 'audio/ui/ui_confirm.wav'))
+# hand-to-hand and handling (world budget 0.16 - 0.50 s)
+save(clip(os.path.join(KR, 'knifeSlice.ogg'), 0.30, 0.45, 0.18), os.path.join(ROOT, 'audio/world/melee_swing.wav'))
+save(clip(os.path.join(KP, 'impactPunch_heavy_000.ogg'), 0.30, 0.8, 0.18), os.path.join(ROOT, 'audio/world/melee_hit.wav'))
+save(clip(os.path.join(KR, 'dropLeather.ogg'), 0.30, 0.6, 0.18), os.path.join(ROOT, 'audio/world/item_drop.wav'))
+x = np.concatenate([clip(os.path.join(KP, 'impactMetal_medium_000.ogg'), 0.20, 0.6), np.zeros(int(0.04 * SR)),
+                    clip(os.path.join(KP, 'impactMetal_light_002.ogg'), 0.18, 0.45)])
+save(x, os.path.join(ROOT, 'audio/world/workbench.wav'))
+# a blow landing on the player (infected budget 0.20 - 0.90 s)
+save(clip(os.path.join(KP, 'impactPunch_medium_001.ogg'), 0.28, 0.75, 0.22), os.path.join(ROOT, 'audio/infected/player_hit.wav'))
+save(clip(os.path.join(KP, 'impactSoft_heavy_002.ogg'), 0.26, 0.65, 0.22), os.path.join(ROOT, 'audio/infected/spit_hit.wav'))
+
+# more footstep takes for variety (appended after the OpenGameArt ones)
+EXTRA = {'stone': 'footstep_concrete', 'wood': 'footstep_wood', 'grass': 'footstep_grass'}
+START = {'stone': 7, 'wood': 4, 'grass': 7}
+for surf, stem in EXTRA.items():
+    for i in range(5):
+        x = load(os.path.join(KP, '%s_%03d.ogg' % (stem, i)))
+        save(step(x, length=0.26, peak=0.55), os.path.join(STEPS, '%s_%d.wav' % (surf, START[surf] + i)))
+
+# --- ambience beds: 4 s seamless loops (crossfaded) --------------------------
+def loop4(x, at, peak, lp=0.0):
+    n, xf = 4 * SR, int(0.6 * SR)
+    a = x[int(at * SR):int(at * SR) + n + xf].copy()
+    if lp:
+        a = lowpass(a, lp)
+    out = a[:n].copy()
+    r = np.linspace(0.0, 1.0, xf)
+    out[:xf] = a[:xf] * r + a[n:n + xf] * (1.0 - r)
+    return norm(out, peak)
+
+amb = os.path.join(SRC, 'oga')
+day = load(os.path.join(amb, 'amb-outside-1/amb_outdoor1_loop.wav'))
+save(at_db(loop4(highpass(day, 50), 6.0, 0.22), -32.0), os.path.join(ROOT, 'audio/ambience/outdoor_day.wav'))
+crickets = load(os.path.join(amb, 'crickets-ambient-noise-loopable/crickets_1.mp3'))
+wind = load(os.path.join(amb, 'mild-wind-background-noise/wind background noise 2.wav'))
+n = min(len(crickets), len(wind))
+night = norm(crickets[:n], 1.0) * 0.55 + norm(lowpass(wind[:n], 900), 1.0) * 0.45
+save(at_db(loop4(night, 3.0, 0.16), -36.5), os.path.join(ROOT, 'audio/ambience/outdoor_night.wav'))
+# indoors: the same wind through walls - low, muffled, close to silence
+save(at_db(loop4(wind, 12.0, 0.07, lp=320), -38.5), os.path.join(ROOT, 'audio/ambience/interior_roomtone.wav'))

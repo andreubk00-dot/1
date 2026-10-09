@@ -35,9 +35,15 @@
 - dry_fire — https://opengameart.org/content/gun-reload-sound-effects (BMacZero)
 
 ## Шаги — `audio/world/steps/`, `footstep_*.wav`
-- stone_*, grass_*, footstep_* — https://opengameart.org/content/fantozzis-footsteps-grasssand-stone (Fantozzi)
-- wood_* — https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud (TinyWorlds)
+- stone_1-6, grass_1-6, footstep_* — https://opengameart.org/content/fantozzis-footsteps-grasssand-stone (Fantozzi)
+- wood_1-3 — https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud (TinyWorlds)
 - gravel_* — https://opengameart.org/content/42-snow-and-gravel-footsteps (Corsica_S)
+- stone_7-11, grass_7-11, wood_4-8 — Kenney «Impact Sounds» https://kenney.nl/assets/impact-sounds
+
+## Интерфейс, удары, предметы — Kenney (CC0, Kenney Vleugels, kenney.nl)
+- ui_open / ui_close / ui_confirm — «Interface Sounds» https://kenney.nl/assets/interface-sounds
+- melee_swing, item_drop — «RPG Audio» https://kenney.nl/assets/rpg-audio
+- melee_hit, workbench, player_hit, spit_hit — «Impact Sounds» https://kenney.nl/assets/impact-sounds
 
 ## Двери — `audio/world/door_*.wav`
 - https://opengameart.org/content/door-open-door-close-set (qubodup)
@@ -47,8 +53,11 @@
 - infected_attack, infected_death — https://opengameart.org/content/zombie-noises-and-moans (ianzazz)
 - infected_hurt — https://opengameart.org/content/zombie-pain (Vinrax; двойная лицензия CC-BY 3.0 / CC0 — используется вариант CC0)
 
-## Дождь — `audio/ambience/rain.wav`
-- https://opengameart.org/content/amb-rain-loop-1 (Kresiek The Furry)
+## Фон — `audio/ambience/` (петли по 4 с)
+- rain — https://opengameart.org/content/amb-rain-loop-1 (Kresiek The Furry)
+- outdoor_day — https://opengameart.org/content/amb-outside-1 (Kresiek The Furry)
+- outdoor_night — https://opengameart.org/content/crickets-ambient-noise-loopable (Wolfgang_) + https://opengameart.org/content/mild-wind-background-noise (Bashar3A)
+- interior_roomtone — тот же ветер, приглушённый «сквозь стены» (Bashar3A)
 
 ## Музыка — `audio/music/`
 | Файл | Трек | Автор |
@@ -61,7 +70,6 @@
 | tragic_ambient.ogg | Tragic ambient main menu — https://opengameart.org/content/tragic-ambient-main-menu | HaelDB |
 | cold_silence.ogg | Cold Silence — https://opengameart.org/content/cold-silence | Eponasoft |
 
-Остальные звуки (интерфейс, удары, плевок, дневной/ночной фон, тон
-помещения) — синтезированы скриптами `tools/build_*_audio.py`. Эти старые
-скрипты перезаписали бы звуки выше, поэтому для оружия, шагов, дверей,
-заражённых и дождя запускать нужно `tools/import_cc0_audio.py`.
+Синтезированным остался только звук самого плевка заражённого
+(`infected_spit`). Старые скрипты `tools/build_*_audio.py` перезаписали бы
+записи выше — пересобирать звук нужно через `tools/import_cc0_audio.py`.

@@ -876,3 +876,18 @@ authors and pages are listed in `audio/CREDITS_CC0.md`, and
   darker at night, the unsettling ones inside high-risk sites (the score
   fades out and changes when you step into one), and it dips while infected
   chase you.
+
+## dev51 — the rest of the sound set, infected footfalls
+
+- Kenney's CC0 packs (Interface, Impact, RPG Audio) replace the remaining
+  synthesized UI clicks, melee swing / hit, item drop, workbench, the blow on
+  the player and the spit splash, and add 15 more footstep takes (concrete,
+  wood, grass): 36 takes over four surfaces now.
+- Ambience beds rebuilt from CC0 field recordings as 4 s seamless loops at the
+  old mix levels: outdoor day (street air), night (crickets over low wind),
+  interior (that wind muffled through walls), rain.
+- **Infected footfalls**: each footfall of a walking infected scuffs on the
+  surface under it - lower, heavier takes, heard within 300 px and fading with
+  distance; a shared 140 ms gate keeps a crowd from flooding the voice pool.
+- `tools/import_cc0_audio.py` builds all of it and no longer re-encodes the
+  committed music (Vorbis output is not bit-stable).
