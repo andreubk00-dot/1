@@ -192,6 +192,20 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert.equal(g.save.purchases['purchase-5'],true);
     assert.equal(consumed,0,'Permanent purchase must remain queryable');
   });
+  await test('A failed pending purchase cannot block later receipts or startup',async()=>{
+    const {g,bridge}=fixture();const seen=[];
+    bridge.pendingPurchases=async()=>[
+      {productID:'crystals_80',purchaseToken:'bad-receipt'},
+      {productID:'crystals_250',purchaseToken:'good-receipt'}
+    ];
+    g.applyPurchase=async p=>{
+      seen.push(p.purchaseToken);
+      if(p.purchaseToken==='bad-receipt')throw Error('temporary cloud failure');
+    };
+    const warn=console.warn;console.warn=()=>{};
+    try{await g.processPendingPurchases();}finally{console.warn=warn;}
+    assert.deepEqual(seen,['bad-receipt','good-receipt']);
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
