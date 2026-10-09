@@ -302,6 +302,9 @@ var thirst = 82.0
 # preparation / returning to shelter meaningful.
 var fatigue = 12.0
 var is_sprinting = false
+# 1.38: crouch (C): slower, quieter and harder to spot; uses the survivor's
+# authored CrouchIdle / CrouchRun sheets
+var is_crouching = false
 var sprint_noise_time = 0.0
 var last_player_noise_radius = 0.0
 var last_player_noise_kind = "quiet"
@@ -2805,6 +2808,7 @@ func _ready():
     _ensure_input("move_down", KEY_S)
     _ensure_input("reload", KEY_R)
     _ensure_input("sprint", KEY_SHIFT)
+    _ensure_input("crouch", KEY_C)
     _ensure_input("base_build", KEY_B)
     _ensure_input("region_map", KEY_M)
     _ensure_input("quick_slot_1", KEY_1)
@@ -4041,6 +4045,10 @@ func _process(delta):
         move_direction = Input.get_vector("move_left","move_right","move_up","move_down")
         if qa_visual_mode and qa_forced_move_direction.length() > 0.01:
             move_direction = qa_forced_move_direction.normalized()
+        if Input.is_action_just_pressed("crouch"):
+            is_crouching = not is_crouching
+        if Input.is_action_pressed("sprint") and move_direction.length() > 0.05:
+            is_crouching = false                      # breaking into a run stands you up
         is_sprinting = (
             move_direction.length() > 0.05
             and (Input.is_action_pressed("sprint") or (qa_visual_mode and qa_force_sprint))
@@ -5766,9 +5774,9 @@ func _modern_survivor_idle_sheet(weapon_id):
     # 1.27-dev1: the imported survivor set already contains two authored idle variations
     # for every firearm/melee prefix. Use them only after genuine uninterrupted idle so
     # they read as weight shifts rather than random animation noise.
-    if modern_survivor_idle_time < 5.0:
+    if modern_survivor_idle_time < 3.5:
         return "Idle"
-    var cycle = fposmod(modern_survivor_idle_time - 5.0,12.0)
+    var cycle = fposmod(modern_survivor_idle_time - 3.5,10.0)
     if cycle < 2.25:
         return "Idle2"
     if cycle >= 6.25 and cycle < 8.50:
@@ -5785,13 +5793,18 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         # The old wall-clock frame could enter mid-pose on any weapon or after
         # a hit/reload, producing a visible one-frame jump. Keep the full 8-frame
         # animation within its existing 2.25s window; no gameplay timers change.
-        var cycle = fposmod(modern_survivor_idle_time - 5.0,12.0)
+        var cycle = fposmod(modern_survivor_idle_time - 3.5,10.0)
         var window_start = 0.0 if sheet_name == "Idle2" else 6.25
         var window_elapsed = clamp(cycle - window_start,0.0,2.25)
         var frames = max(1,int(count))
         return clamp(int(floor(window_elapsed / 2.25 * float(frames))),0,frames - 1)
     if sheet_name == "Idle":
-        return int(floor(Time.get_ticks_msec() * 0.0032)) % 8
+        # after a hard run the survivor heaves for breath: the idle cycle
+        # quickens as stamina runs low
+        var pant = clamp(1.0 - stamina / 45.0,0.0,1.0)
+        return int(floor(Time.get_ticks_msec() * (0.0032 + 0.0048 * pant))) % 8
+    if sheet_name == "CrouchIdle":
+        return int(floor(Time.get_ticks_msec() * 0.0024)) % max(1,int(count))
     if sheet_name == "Taunt":
         var reload_p = _reload_anim_progress()
         if reload_p < 0.0:
@@ -5832,6 +5845,8 @@ func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
             return "Attack4" if equipped_melee_id == "combat_knife" else "Attack3"
         var melee_aim = local_aim.normalized() if local_aim.length() > 0.01 else Vector2.RIGHT
         var melee_motion = local_motion.normalized() if local_motion.length() > 0.01 else Vector2.ZERO
+        if is_crouching:
+            return "CrouchRun" if moving and melee_motion != Vector2.ZERO else "CrouchIdle"
         if not moving or melee_motion == Vector2.ZERO:
             # 1.27-dev2: melee uses the same existing Idle2/Idle3 baked sheets
             # and visual-only timer as firearms. Attacks still take priority.
@@ -5847,6 +5862,9 @@ func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
 
     if reload_time > 0.0:
         return "Taunt"
+
+    if is_crouching and _weapon_cycle_progress() < 0.0 and _firearm_recoil_amount() <= 0.015:
+        return "CrouchRun" if moving else "CrouchIdle"
 
     if _weapon_cycle_progress() >= 0.0:
         return "Attack2"
@@ -6641,7 +6659,8 @@ func _update_player_visuals(delta):
     var planted_shift = motion_side * side_shift
 
     var idle_t = Time.get_ticks_msec() * 0.001
-    var idle_breath = sin(idle_t * 1.72) * 0.14 * (1.0-blend)
+    var pant_k = clamp(1.0 - stamina / 45.0,0.0,1.0)
+    var idle_breath = sin(idle_t * lerpf(1.72,5.2,pant_k)) * lerpf(0.14,0.55,pant_k) * (1.0-blend)
     var idle_weight = sin(idle_t * 0.58) * 0.16 * (1.0-blend)
     var idle_micro = sin(idle_t * 0.29 + 0.7) * 0.05 * (1.0-blend)
 
@@ -7753,6 +7772,9 @@ func _player_visibility_multiplier():
     # fog: thick fog halves how far the infected can make the player out
     visibility *= lerpf(1.0,0.5,fog_density)
 
+    # a crouched silhouette is a lot harder to pick out
+    if is_crouching:
+        visibility *= 0.7
     # Player movement affects how easy the silhouette is to notice.
     if move_direction.length() <= 0.05:
         visibility *= 0.82
@@ -26683,7 +26705,28 @@ func _enemy_detects_player(enemy,dist):
 func _enemy_move_speed(enemy,multiplier = 1.0) -> float:
     if not is_instance_valid(enemy):
         return ENEMY_SPEED * float(multiplier)
-    return ENEMY_SPEED * clamp(float(enemy.get_meta("speed_mult",1.0)),0.65,1.30) * float(multiplier)
+    return ENEMY_SPEED * clamp(float(enemy.get_meta("speed_mult",1.0)),0.65,1.30) * float(multiplier) * _infected_limp_speed(enemy)
+
+# 1.38: the infected limp. Each one favours a leg (side and severity from its
+# spawn id): the stride on the bad leg is a quick lurch, the good leg then
+# drags the body on slowly. Speed surges and sags with the gait (its average
+# is unchanged), the walk frames hurry through the bad step and linger on the
+# drag, and the body dips and leans toward the bad side as it lands.
+func _infected_limp(enemy) -> float:
+    var sid = int(enemy.get_meta("spawn_id",0))
+    return 0.55 + float(abs(sid * 7919) % 45) / 100.0   # 0.55 .. 0.99
+
+func _infected_limp_speed(enemy) -> float:
+    var w = float(enemy.get_meta("walk",0.0))
+    var k = _infected_limp(enemy)
+    # lurch on the first half of the cycle, drag on the second (mean 1.0)
+    return 1.0 + 0.42 * k * sin(w)
+
+func _infected_limp_phase(enemy,walk:float) -> float:
+    # warped gait phase: races through the bad step, lingers on the drag
+    var k = _infected_limp(enemy)
+    var p = fposmod(walk,TAU) / TAU
+    return fposmod(p + 0.11 * k * sin(p * TAU),1.0)
 
 
 func _update_enemies(delta):
@@ -26916,7 +26959,14 @@ func _update_enemies(delta):
                 # root impulse is kept so collision and shadow do not visibly detach.
                 attack_offset = facing_visual.normalized() * sin(clamp(attack_progress,0.0,1.0) * PI) * 0.8
             var idle_sway = 0.0 if moving_visual else sin(idle_visual_time * 1.35 + float(int(enemy.get_meta("spawn_id",0)) % 11)) * 0.18
-            visual.position = attack_offset + Vector2(idle_sway,sin(walk) * (0.32 if moving_visual else 0.0))
+            # the limp: a dip and a lean toward the bad leg as it takes the
+            # weight, held for the drag, whole pixels only
+            var limp_k = _infected_limp(enemy)
+            var bad_side = -1.0 if int(enemy.get_meta("spawn_id",0)) % 2 == 0 else 1.0
+            var limp_load = max(0.0,-sin(walk)) if moving_visual else 0.0
+            var lean = Vector2(-facing_visual.y,facing_visual.x) * bad_side * round(limp_load * limp_k * 1.6)
+            var dip = round(limp_load * limp_k * 1.8) if moving_visual else 0.0
+            visual.position = attack_offset + lean + Vector2(idle_sway,dip + sin(walk * 2.0) * (0.3 if moving_visual else 0.0))
             var call_telegraph = _infected_is_calling(enemy)
             var spit_telegraph = _infected_is_spitting(enemy)
             var special_telegraph = call_telegraph or spit_telegraph
@@ -26953,7 +27003,7 @@ func _update_enemies(delta):
                     if infected_sprite.texture == null or infected_sprite.texture.resource_path != "res://infected_walk_v12.png":
                         infected_sprite.texture = load("res://infected_walk_v12.png")
                     if moving_visual:
-                        frame = int(floor(fposmod(walk,TAU) / TAU * float(INFECTED_WALK_FRAMES))) % INFECTED_WALK_FRAMES
+                        frame = int(floor(_infected_limp_phase(enemy,walk) * float(INFECTED_WALK_FRAMES))) % INFECTED_WALK_FRAMES
                 infected_sprite.region_rect = Rect2(frame * INFECTED_CELL,row8 * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
 
             if stagger > 0.0:
@@ -27475,6 +27525,11 @@ func _update_survival(delta):
             _emit_ai_sound(player.global_position,138.0,"sprint",1.0)
             _play_world_sfx("footstep_sprint",-12.5,0.035)
             sprint_noise_time = 0.48
+        elif is_crouching:
+            # creeping: barely a sound
+            _emit_ai_sound(player.global_position,22.0,"walk",0.6)
+            _play_world_sfx("footstep_walk",-24.0,0.035)
+            sprint_noise_time = 1.05
         else:
             _emit_ai_sound(player.global_position,52.0,"walk",1.0)
             _play_world_sfx("footstep_walk",-16.0,0.035)
@@ -27500,6 +27555,8 @@ func _current_move_speed():
 
     if is_sprinting and stamina > 0.5 and hunger > 0.0 and thirst > 0.0:
         speed *= SPRINT_SPEED_MULT
+    elif is_crouching:
+        speed *= 0.55
 
     return speed
 
