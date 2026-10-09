@@ -222,6 +222,26 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert.equal(steps,6);assert.equal(samples,6);
     assert.equal(scheduledFrames-first,6,'Animation loop scheduling changed');
   });
+  await test('Unacknowledged first-session coach survives reopening the game',async()=>{
+    const {g}=fixture();let saved=0;
+    g.save.coachSeen={};g.persist=()=>{saved++;};
+    g.coachData=()=>({icon:'◎',kicker:'Test',title:'Resources',text:'Use shards',tip:'Tip'});
+    assert.equal(g.showCoach('resources'),true);
+    assert.equal(g.save.coachSeen.resources,undefined,'Opening already suppressed the tip');
+    assert.equal(saved,0);
+    assert.equal(g.showCoach('fragments'),false,'Pending tip was replaced before acknowledgement');
+    // Recreate the Game instance with only progress that was actually saved.
+    const reopened=fixture().g;
+    reopened.save.coachSeen={...g.save.coachSeen};
+    reopened.coachData=g.coachData;
+    let acks=0;reopened.persist=()=>{acks++;};
+    assert.equal(reopened.showCoach('resources'),true);
+    reopened.closeCoach();
+    assert.equal(reopened.save.coachSeen.resources,true);
+    assert.equal(acks,1);
+    reopened.closeCoach();assert.equal(acks,1);
+    assert.equal(reopened.showCoach('resources'),false);
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
