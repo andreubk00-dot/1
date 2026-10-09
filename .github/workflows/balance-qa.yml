@@ -79,6 +79,8 @@ jobs:
         run: node tests/coach-ack-v1824.test.cjs
       - name: Guard lightweight critical-hit feedback
         run: node tests/critical-glint-v1824.test.cjs
+      - name: Guard Laboratory funding visibility and save safety
+        run: node tests/lab-funding-ux-v1824.test.cjs
       - name: Test PC and mobile UX in Chromium and WebKit
         run: node tests/browser-smoke.cjs
       - name: Upload browser screenshots
