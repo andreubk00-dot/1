@@ -2188,16 +2188,16 @@ window.ED_BALANCE = Object.freeze({
       this.adInProgress=true;
       this.game.handleExternalPause(true,'ad');this.gameplayStop();
       return new Promise(resolve=>{
-        let settled=false,opened=false;
+        let settled=false;
         const finish=(shown)=>{
           if(settled)return;settled=true;
-          if(shown){s.lastFullscreenAt=now();this.game.persist();}
+          if(shown){s.lastFullscreenAt=now();this.game.sessionInterstitials=(this.game.sessionInterstitials||0)+1;this.game.persist();}
           this.adInProgress=false;
           this.game.handleExternalPause(false,'ad');
           resolve(!!shown);
         };
         try{this.ysdk.adv.showFullscreenAdv({callbacks:{
-          onOpen:()=>{opened=true;this.game.sessionInterstitials=(this.game.sessionInterstitials||0)+1;},
+          onOpen:()=>{},
           onClose:(wasShown)=>finish(!!wasShown),
           onError:()=>finish(false)
         }});}catch(e){console.warn('Fullscreen ad failed',e);finish(false);}
@@ -3333,8 +3333,50 @@ window.ED_BALANCE = Object.freeze({
       $('doubleRewardBtn').disabled=!adAvailable;$('doubleRewardBtn').classList.toggle('hidden',!canDouble||!adAvailable);$('reviveBtn').classList.toggle('hidden',!canRevive||!adAvailable);if(canDouble)$('doubleRewardText').textContent=this.lang==='ru'?`Удвоить награду: +${r.earnedShards} 🔶`:`Double reward: +${r.earnedShards} 🔶`;if(canRevive)$('reviveText').textContent=this.lang==='ru'?`Продолжить: ${Math.round((adCfg.reviveCorePct||.62)*100)}% ядра +${adCfg.reviveEnergy||45} ⚡`:`Continue: ${Math.round((adCfg.reviveCorePct||.62)*100)}% core +${adCfg.reviveEnergy||45} ⚡`;if(canRevive)this.track('reward_ad_offer',{placement:'revive',wave:reached});if(canDouble)this.track('reward_ad_offer',{placement:'double',wave:reached});$('comboHud')?.classList.add('hidden');$('fieldOrderHud')?.classList.add('hidden');$('bossIntro')?.classList.add('hidden');$('resultScreen').classList.remove('hidden');
       this.renderHome();
     }
-    async reviveRun(){const r=this.run;if(this.resultAdBusy||this.inRun||!r||r.revived||r.resultDoubled||this.bridge.adInProgress)return;this.resultAdBusy=true;this.track('reward_ad_attempt',{placement:'revive',wave:r.reached||r.wave});const ok=await this.bridge.rewardAd(()=>{this.save.shards-=r.earnedShards;this.save.gems-=r.earnedGems;r.earnedShards=0;r.revived=true;this.track('reward_ad_revive');this.track('reward_ad_reward',{placement:'revive',wave:r.reached||r.wave});const ac=BALANCE.ads||{};r.core=r.maxCore*(ac.reviveCorePct||.62);r.energy+=(ac.reviveEnergy||45);r.commanderCharge=Math.max(r.commanderCharge||0,ac.reviveCharge||50);r.commanderHeat=0;r.commanderOverheated=false;r.holdFire=false;r.enemies=[];r.projectiles=[];r.spawned=0;r.toSpawn=this.waveEnemyCount(r.wave);r.spawnTimer=.35;r.wavePause=.7;this.inRun=true;this.paused=false;$('resultScreen').classList.add('hidden');this.showScreen('battleScreen');this.audio.startCombatMusic(r.wave,this.isBossWave(r.wave));this.bridge.gameplayStart();this.persist(true);});this.resultAdBusy=false;if(!ok&&!r.revived)this.toast(this.t.noAd);}
-    async doubleResult(){const r=this.run,adCfg=BALANCE.ads||{};if(this.resultAdBusy||this.inRun||!r||r.resultDoubled||this.bridge.adInProgress||(this.save.quests.doubleAds||0)>=(adCfg.doubleRewardDailyLimit||3))return;this.resultAdBusy=true;this.track('reward_ad_attempt',{placement:'double',wave:r.reached||r.wave});const ok=await this.bridge.rewardAd(()=>{this.save.shards+=r.earnedShards;this.save.quests.doubleAds=(this.save.quests.doubleAds||0)+1;r.resultDoubled=true;this.track('reward_ad_double');this.track('reward_ad_reward',{placement:'double',wave:r.reached||r.wave});$('resultShards').textContent=r.earnedShards*2;$('doubleRewardBtn').disabled=true;$('reviveBtn').classList.add('hidden');this.persist(true);this.renderHome();});this.resultAdBusy=false;if(!ok&&!r.resultDoubled)this.toast(this.t.noAd);}
+    // Only one result-screen ad may run at a time. Closing the result during an
+    // asynchronous rewarded-video callback must never revive an abandoned run.
+    async reviveRun(){
+      const r=this.run,ads=BALANCE.ads||{};
+      if(this.resultAdBusy||this.bridge.adInProgress||this.inRun||!r||r.manualEnd||r.revived||r.resultDoubled||r.reached<(ads.reviveMinWave||5))return;
+      this.resultAdBusy=true;$('reviveBtn').disabled=true;$('doubleRewardBtn').disabled=true;
+      try{
+        this.track('reward_ad_attempt',{placement:'revive',wave:r.reached||r.wave});
+        const ok=await this.bridge.rewardAd(()=>{
+          if(this.run!==r||r.revived||r.resultDoubled)return;
+          this.save.shards-=r.earnedShards;this.save.gems-=r.earnedGems;r.earnedShards=0;r.revived=true;
+          this.track('reward_ad_revive');this.track('reward_ad_reward',{placement:'revive',wave:r.reached||r.wave});
+          r.core=r.maxCore*(ads.reviveCorePct||.62);r.energy+=(ads.reviveEnergy||45);
+          r.commanderCharge=Math.max(r.commanderCharge||0,ads.reviveCharge||50);
+          r.commanderHeat=0;r.commanderOverheated=false;r.holdFire=false;r.enemies=[];r.projectiles=[];
+          r.spawned=0;r.toSpawn=this.waveEnemyCount(r.wave);r.spawnTimer=.35;r.wavePause=.7;
+          this.inRun=true;this.paused=false;$('resultScreen').classList.add('hidden');this.showScreen('battleScreen');
+          this.audio.startCombatMusic(r.wave,this.isBossWave(r.wave));this.bridge.gameplayStart();this.persist(true);
+        });
+        if(!ok&&!r.revived)this.toast(this.t.noAd);
+      }finally{
+        this.resultAdBusy=false;
+        if(!this.inRun&&this.run===r){$('reviveBtn').disabled=false;$('doubleRewardBtn').disabled=false;}
+      }
+    }
+    async doubleResult(){
+      const r=this.run,ads=BALANCE.ads||{};
+      if(this.resultAdBusy||this.bridge.adInProgress||this.inRun||!r||r.resultDoubled||r.reached<(ads.doubleMinWave||2)||r.earnedShards<(ads.doubleMinShards||20)||(this.save.quests.doubleAds||0)>=(ads.doubleRewardDailyLimit||3))return;
+      this.resultAdBusy=true;$('doubleRewardBtn').disabled=true;$('reviveBtn').disabled=true;
+      try{
+        this.track('reward_ad_attempt',{placement:'double',wave:r.reached||r.wave});
+        const ok=await this.bridge.rewardAd(()=>{
+          if(this.run!==r||r.resultDoubled)return;
+          this.save.shards+=r.earnedShards;this.save.quests.doubleAds=(this.save.quests.doubleAds||0)+1;
+          r.resultDoubled=true;this.track('reward_ad_double');this.track('reward_ad_reward',{placement:'double',wave:r.reached||r.wave});
+          $('resultShards').textContent=r.earnedShards*2;$('doubleRewardBtn').disabled=true;
+          $('reviveBtn').classList.add('hidden');this.persist(true);this.renderHome();
+        });
+        if(!ok&&!r.resultDoubled)this.toast(this.t.noAd);
+      }finally{
+        this.resultAdBusy=false;
+        if(!this.inRun&&this.run===r&&!r.resultDoubled){$('doubleRewardBtn').disabled=false;$('reviveBtn').disabled=false;}
+      }
+    }
     async leaveResult(){if(this.resultAdBusy||this.bridge.adInProgress)return;const reached=this.run?.reached||0,shouldAd=this.canShowInterstitial(reached);this.rmbBoost=false;this.rmbPointerId=null;$('resultScreen').classList.add('hidden');this.run=null;this.paused=false;this.showScreen('homeScreen');this.renderHome();if(this.save.sound)this.audio.startMenuMusic();if(shouldAd){this.track('interstitial_offer',{wave:reached,run:this.save.runs});const shown=await this.bridge.fullscreen();this.track(shown?'interstitial_shown':'interstitial_missed',{wave:reached,run:this.save.runs});this.persist();}}
 
     claimReturnReward(){
