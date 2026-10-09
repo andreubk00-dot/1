@@ -24748,8 +24748,10 @@ func _update_roofs(delta):
         var inside = rec.get("rect").has_point(p)
         # 0.88: the lifted roof covers ground behind the building; fade it there.
         var behind = rec.get("behind",Rect2()).has_point(p)
-        var target_alpha = 0.12 if inside else (0.42 if behind else 1.0)
-        var target_facade = 0.22 if inside else 1.0
+        # inside, the lifted roof and the front wall all but vanish: at 0.12 /
+        # 0.22 their signs, awnings and roof kit ghosted over the room
+        var target_alpha = 0.03 if inside else (0.42 if behind else 1.0)
+        var target_facade = 0.07 if inside else 1.0
 
         var c = roof.modulate
         c.a = lerpf(c.a,target_alpha,min(1.0,delta*8.0))
@@ -30279,11 +30281,20 @@ func _create_day_night():
     texture.fill_from = Vector2(0.5,0.5)
     texture.fill_to = Vector2(1.0,0.5)
 
-    player_light.texture = texture
+    # 1.38: a real torch throws a beam, not a halo: a cone texture that is
+    # turned toward the aim every frame, plus a faint spill around the player
+    player_light.texture = _torch_cone_texture()
     player_light.energy = 1.35
-    player_light.texture_scale = 1.55
+    player_light.texture_scale = 1.0
     player_light.visible = false
     player.add_child(player_light)
+    torch_spill = PointLight2D.new()
+    torch_spill.name = "FlashlightSpill"
+    torch_spill.texture = texture
+    torch_spill.texture_scale = 0.55
+    torch_spill.energy = 0.35
+    torch_spill.visible = false
+    player.add_child(torch_spill)
 
     _update_day_night(0.0)
 
@@ -30378,11 +30389,19 @@ func _update_day_night(delta):
         var gloom = max(_time_night_factor(),0.0 if weather_state == "clear" else (0.18 if weather_state == "cloudy" else 0.3))
         gloom = max(gloom,fog_density * 0.4)
         player_light.energy = 1.35 * lerpf(0.12,1.0,gloom)
+        var dir = aim_direction if aim_direction.length() > 0.01 else Vector2.RIGHT
+        player_light.rotation = dir.angle()
+        player_light.position = dir.normalized() * 6.0 + Vector2(0,-6)
+        if torch_spill != null:
+            torch_spill.visible = true
+            torch_spill.energy = 0.35 * lerpf(0.12,1.0,gloom)
         if flashlight_battery <= 0.0:
             flashlight_on = false
             player_light.visible = false
     else:
         player_light.visible = false
+    if torch_spill != null and not player_light.visible:
+        torch_spill.visible = false
     _update_flashlight_dust()
 
 # Dust in the torch light: pale motes drift slowly around the player. They
@@ -30404,7 +30423,7 @@ func _update_flashlight_dust():
         flashlight_dust.amount = 36
         flashlight_dust.lifetime = 4.5
         flashlight_dust.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
-        flashlight_dust.emission_sphere_radius = 85.0
+        flashlight_dust.emission_sphere_radius = 60.0
         flashlight_dust.direction = Vector2(1,0)
         flashlight_dust.spread = 180.0
         flashlight_dust.gravity = Vector2(0.6,1.2)
@@ -30421,6 +30440,37 @@ func _update_flashlight_dust():
         player.add_child(flashlight_dust)
     # by day the light around is too strong for motes to show in a beam
     flashlight_dust.emitting = player_light.visible and _time_night_factor() > 0.35
+    flashlight_dust.position = player_light.position + Vector2.RIGHT.rotated(player_light.rotation) * 90.0
+
+var torch_spill = null
+
+func _torch_cone_texture() -> ImageTexture:
+    # 512 x 512, the light's origin in the middle, the beam pointing +x:
+    # ~26 degrees each side, brightest on the axis and near the lens, edges
+    # and fall-off cut into flat steps so it sits with the pixel art
+    var n = 512
+    var img = Image.create(n,n,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    var c = n / 2
+    var half = deg_to_rad(26.0)
+    for y in range(n):
+        for x in range(c,n):
+            var d = Vector2(x - c,y - c)
+            var r = d.length()
+            if r < 1.0 or r > c:
+                continue
+            var ang = abs(atan2(d.y,d.x))
+            if ang > half:
+                continue
+            var edge = 1.0 - ang / half                     # 1 on the axis
+            var fall = 1.0 - r / float(c)                   # 1 at the lens
+            var v = clamp(pow(fall,0.8) * (0.35 + 0.65 * sqrt(edge)) * 1.25,0.0,1.0)
+            v = floor(v * 7.0) / 7.0
+            # a warm hot spot a little way out along the axis
+            if edge > 0.55 and r > 40.0 and r < 150.0:
+                v = min(1.0,v + 0.14)
+            img.set_pixel(x,y,Color(1.0,0.93,0.78,v))
+    return ImageTexture.create_from_image(img)
 
 func _toggle_flashlight():
     if str(equipment.get("utility","")) != "flashlight":
