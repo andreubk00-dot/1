@@ -23,6 +23,16 @@ function fixture(){
  g.track=name=>events.push(name);g.persist=()=>{};g.renderHome=()=>{};
  return {g,events};
 }
+check('Displayed shard-income bonus matches actual +4% run and offline math',()=>{
+ assert.equal(BALANCE.economy.runShardPerWave,3);
+ assert(pc.includes("labIncomeDesc:'+4% осколков после вылазки.'"));
+ assert(pc.includes("labIncomeDesc:'+4% shards after each run.'"));
+ assert(mobile.includes("labIncomeDesc:'+4% осколков после вылазки.'"));
+ assert(mobile.includes("labIncomeDesc:'+4% shards after each run.'"));
+ assert(!pc.includes("labIncomeDesc:'+7%"));
+ assert(!mobile.includes("labIncomeDesc:'+7%"));
+ assert(pc.includes("this.save.lab.income*.04")&&mobile.includes("this.save.lab.income*.04"));
+});
 check('Base Lab costs and 8-level pivot are preserved',()=>{
  for(const [k,[base,growth]] of Object.entries({damage:[55,1.55],core:[50,1.52],income:[75,1.62],start:[45,1.5]})){
   assert.equal(price(k,0),base);

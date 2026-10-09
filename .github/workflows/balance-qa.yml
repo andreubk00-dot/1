@@ -48,6 +48,8 @@ jobs:
         run: node tests/economy-calendar-v1824.test.cjs
       - name: Verify Lab spending, level caps and v21 save compatibility
         run: node tests/lab-spending-guard-v1824.test.cjs
+      - name: Stress-test failures, boss gating and fragment pity
+        run: node tests/economy-failure-path-v1824.test.cjs
       - name: Run deterministic complete-run simulations
         run: |
           for profile in fresh progressed veteran; do
