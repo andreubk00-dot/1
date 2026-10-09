@@ -326,6 +326,30 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert.equal(outcome.meta.revived,true);assert.equal(outcome.meta.completed,9);
     assert.equal(g.analyticsSummary().runs.defeats,1);
   });
+  await test('Unloading a result finalizes one run without interrupting ads or revives',async()=>{
+    const {g,bridge}=fixture();
+    g.track=Game.prototype.track;
+    g.save.analytics={events:{},waves:{},recent:[]};g.save.runs=2;
+    g.inRun=false;g.resultAdBusy=false;
+    bridge.adInProgress=true;
+    assert.equal(g.finalizePendingRunAnalytics(),false);
+    bridge.adInProgress=false;g.resultAdBusy=true;
+    assert.equal(g.finalizePendingRunAnalytics(),false);
+    g.resultAdBusy=false;g.inRun=true;
+    assert.equal(g.finalizePendingRunAnalytics(),false);
+    g.inRun=false;
+    g.run.wave=6;g.run.reached=6;g.run.completed=5;
+    g.run.manualEnd=true;g.run.startedAt=999999000;
+    assert.equal(g.finalizePendingRunAnalytics(),true);
+    assert.equal(g.finalizePendingRunAnalytics(),false);
+    assert.equal(g.save.analytics.events.run_finish,1);
+    assert.equal(g.save.analytics.events.run_end_manual,1);
+    assert.deepEqual(g.save.analytics.waves,{'6':1});
+    assert(src.includes("if(!event.persisted)this.finalizePendingRunAnalytics()"));
+    g.save.sound=false;g.canShowInterstitial=()=>false;g.audio.startMenuMusic=()=>{};
+    await g.leaveResult();
+    assert.equal(g.save.analytics.events.run_finish,1);
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
