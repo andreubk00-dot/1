@@ -29737,8 +29737,11 @@ func _update_day_night(delta):
         var pc = _world_to_chunk(player.global_position)
         if loaded_chunks.has(pc):
             var did = str(loaded_chunks[pc].get_meta("district_id",""))
-            if did.find("rural") >= 0 or did.find("dacha") >= 0 or did.find("woodland") >= 0 or did.find("military") >= 0:
+            if did.find("rural") >= 0 or did.find("dacha") >= 0 or did.find("woodland") >= 0:
                 open_target = 1.0
+            elif did.find("military") >= 0:
+                # pale concrete parade grounds throw the moonlight back hard
+                open_target = 0.4
     _moon_open = open_target if delta <= 0.0 else move_toward(_moon_open,open_target,delta * 0.25)
     # no moon through rain clouds, half of it when overcast
     var sky = 1.0 if weather_state == "clear" else (0.5 if weather_state == "cloudy" else 0.2)

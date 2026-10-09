@@ -463,7 +463,9 @@ def military():
     alb = clusters(alb, joint, [(84, 100, 50), (98, 112, 58)], 3104, 0.25)
     alb = speckle(alb, road, 0.012, [(146, 142, 132), (100, 98, 90)], 3105)
     alb, hf = potholes(alb, hf, road & ~inter, 3112, 5)
-    gv = soft(noise(3106, 60, 3), 0.55, 0.65)
+    # gravel islands on the military plots (seed 3106 left the grass between
+    # them in a big X that repeated in every military chunk)
+    gv = soft(noise(3126, 46, 3), 0.55, 0.65)
     gravel_t = np.maximum(walk.astype(float), gv * plot)
     gcol = np.array((116, 110, 98), float)[None, None, :] * tone(3107, 3, 0.82, 1.08, 4, 2)[..., None]
     alb = alb * (1 - gravel_t[..., None]) + gcol * gravel_t[..., None]
