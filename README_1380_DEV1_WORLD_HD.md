@@ -756,3 +756,15 @@ QA: `tests/qa_vertical_fence_capture.gd`.
 - **Infected flinch.** A non-fatal hit knocks the body two pixels back along
   the shot, easing home in 0.18 s. Stagger now reels the body from side to side
   in whole pixels instead of rotating the sprite at odd angles.
+
+## dev44 — gestures and the sting of a hit
+
+- **Pick-up.** Taking something from the floor (items, crates, campfire, rain
+  collector, cargo, notes) sends the survivor down on one knee and back up
+  (Die frames 1-2-3-3-3-2-1 over 0.45 s), and the item's own sprite lifts off the
+  floor and drops into the pack in a short arc.
+- **Reach.** Doors, traders and other things at hand: the body leans a pixel or
+  two toward the target and back (0.28 s).
+- **Hit.** A blow jolts the camera away from the attacker (Camera2D offset,
+  whole pixels, settling fast) and flushes the screen edges red. Below 30 health
+  the edges throb with the pulse, faster as health drops (`HurtVignette` layer).

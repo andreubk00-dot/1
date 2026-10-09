@@ -4013,6 +4013,9 @@ func _process(delta):
     shove_cooldown = max(0.0,shove_cooldown - delta)
     weapon_recoil_time = max(0.0,weapon_recoil_time - delta)
     modern_survivor_hit_time = max(0.0,modern_survivor_hit_time - delta)
+    interact_anim = max(0.0,interact_anim - delta)
+    camera_kick = camera_kick.move_toward(Vector2.ZERO,delta * (18.0 + camera_kick.length() * 10.0))
+    _update_hurt_vignette(delta)
     reload_feedback_time = max(0.0,reload_feedback_time - delta)
     if reload_feedback_time <= 0.0:
         reload_feedback = ""
@@ -5817,6 +5820,10 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         if reload_p < 0.0:
             return 0
         return clamp(int(floor(reload_p * 8.0)),0,7)
+    if sheet_name == "Die" and player_death_time <= 0.0:
+        # pick-up: down on one knee and back up (frames 1-2-3-3-3-2-1)
+        var ip = clamp(1.0 - interact_anim / max(0.01,interact_anim_len),0.0,0.999)
+        return [1,2,3,3,3,2,1][int(floor(ip * 7.0))]
     if sheet_name == "Die":
         # the authored fall plays once and the last frame holds
         return clamp(int(floor(player_death_time / PLAYER_DEATH_FALL * float(count))),0,max(1,int(count)) - 1)
@@ -5849,6 +5856,8 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
 func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
     if player_death_time > 0.0:
         return "Die"
+    if interact_anim > 0.0 and interact_kind == "low" and modern_survivor_hit_time <= 0.0:
+        return "Die"                 # the kneel of the fall doubles as a reach to the floor
     if modern_survivor_hit_time > 0.0:
         return "TakeDamage"
 
@@ -6683,6 +6692,10 @@ func _update_player_visuals(delta):
     var impact_drop = Vector2(0,foot_contact * 0.012 * blend * locomotion_strength)
     var pose_offset = Vector2(idle_weight + idle_micro,idle_breath - 1.0)
     pose_offset += planted_shift + forward_mass + impact_drop + visual_motion_impulse * 0.72 + Vector2(0,body_bob)
+    if interact_anim > 0.0 and interact_kind == "reach":
+        # a push or a reach: the body leans a pixel or two toward the target
+        var rp = clamp(1.0 - interact_anim / max(0.01,interact_anim_len),0.0,1.0)
+        pose_offset += interact_dir * sin(rp * PI) * 2.2
     pose_offset.x = round(pose_offset.x * 2.0) * 0.5
     pose_offset.y = round(pose_offset.y * 2.0) * 0.5
 
@@ -6756,6 +6769,8 @@ func _update_player_visuals(delta):
             desired,
             min(1.0,delta * 6.0 + 0.2)
         )
+        # a blow jolts the view away from the attacker, settling fast
+        camera.offset = camera_kick.round()
 
 func _melee_model_texture(id):
     if melee_model_atlas == null:
@@ -6933,6 +6948,131 @@ func _update_weapon_visual():
 
     _update_visible_weapon_mods()
 
+# --- small gestures and the sting of a hit ----------------------------------
+var interact_anim = 0.0
+var interact_anim_len = 0.45
+var interact_kind = ""
+var interact_dir = Vector2.ZERO
+var camera_kick = Vector2.ZERO
+var hurt_flash = 0.0
+var _hurt_rect = null
+var _pickup_fly = []
+const LOW_INTERACTIONS = ["world_item","container","base_campfire","base_rain_collector","supply_event_cargo","story_clue"]
+const HURT_VIGNETTE_SHADER = """
+shader_type canvas_item;
+uniform float flash = 0.0;
+uniform float low = 0.0;
+void fragment() {
+    vec2 d = (UV - 0.5) * vec2(1.6, 1.0);
+    float r = length(d);
+    float edge = smoothstep(0.42, 0.95, r);
+    // coarse 24-step bands keep it in the game's flat-shaded look
+    edge = floor(edge * 24.0) / 24.0;
+    float a = edge * (flash * 0.62 + low * 0.30);
+    COLOR = vec4(0.42, 0.0, 0.0, a);
+}
+"""
+
+func _start_interact_gesture(type:String,target):
+    if not is_instance_valid(target) or player == null:
+        return
+    interact_kind = "low" if type in LOW_INTERACTIONS else "reach"
+    interact_anim_len = 0.45 if interact_kind == "low" else 0.28
+    interact_anim = interact_anim_len
+    var d = target.global_position - player.global_position
+    interact_dir = d.normalized() if d.length() > 0.5 else aim_direction
+
+func _fly_pickup_to_player(node):
+    # the item's own sprite lifts off the floor and drops into the pack
+    var src = null
+    for c in node.get_children():
+        if c is Sprite2D and c.texture != null:
+            src = c
+            break
+    if src == null:
+        return
+    var fly = Sprite2D.new()
+    fly.texture = src.texture
+    fly.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    fly.region_enabled = src.region_enabled
+    fly.region_rect = src.region_rect
+    fly.scale = src.global_scale
+    fly.z_as_relative = false
+    fly.z_index = 21
+    _fx_root().add_child(fly)
+    fly.global_position = src.global_position
+    fly.set_meta("from",src.global_position)
+    fly.set_meta("t",0.0)
+    fly.set_meta("scale0",src.global_scale)
+    _pickup_fly.append(fly)
+
+func _update_pickup_fly(delta):
+    var keep = []
+    for f in _pickup_fly:
+        if not is_instance_valid(f):
+            continue
+        var t = float(f.get_meta("t",0.0)) + delta / 0.32
+        f.set_meta("t",t)
+        if t >= 1.0 or player == null:
+            f.queue_free()
+            continue
+        var a:Vector2 = f.get_meta("from")
+        var b = player.global_position + Vector2(0,-4)
+        var e = t * t * (3.0 - 2.0 * t)
+        f.global_position = (a.lerp(b,e) - Vector2(0,sin(t * PI) * 10.0)).round()
+        f.scale = f.get_meta("scale0") * lerpf(1.0,0.45,e)
+        f.modulate.a = 1.0 - max(0.0,t - 0.7) / 0.3
+        keep.append(f)
+    _pickup_fly = keep
+
+func _hurt_rect_node():
+    if _hurt_rect == null or not is_instance_valid(_hurt_rect):
+        var layer = CanvasLayer.new()
+        layer.name = "HurtVignette"
+        layer.layer = 55
+        add_child(layer)
+        _hurt_rect = ColorRect.new()
+        _hurt_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        _hurt_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+        var mat = ShaderMaterial.new()
+        var sh = Shader.new()
+        sh.code = HURT_VIGNETTE_SHADER
+        mat.shader = sh
+        _hurt_rect.material = mat
+        _hurt_rect.visible = false
+        layer.add_child(_hurt_rect)
+    return _hurt_rect
+
+func _hurt_feedback(amount:float):
+    hurt_flash = clamp(hurt_flash + 0.45 + amount / 30.0,0.0,1.0)
+    var away = Vector2.ZERO
+    var best = 99999.0
+    for e in get_tree().get_nodes_in_group("infected"):
+        if is_instance_valid(e):
+            var dd = e.global_position.distance_to(player.global_position)
+            if dd < best:
+                best = dd
+                away = (player.global_position - e.global_position).normalized()
+    if best > 80.0:
+        away = Vector2.RIGHT.rotated(randf() * TAU)
+    camera_kick = away * clamp(2.5 + amount * 0.25,2.5,6.0)
+
+func _update_hurt_vignette(delta):
+    hurt_flash = max(0.0,hurt_flash - delta * 1.8)
+    # badly hurt: the edges throb with the pulse
+    var low = 0.0
+    if health < 30.0 and health > 0.0:
+        var k = 1.0 - health / 30.0
+        low = k * (0.55 + 0.45 * sin(Time.get_ticks_msec() * 0.001 * lerpf(5.0,8.5,k)))
+    if hurt_flash <= 0.0 and low <= 0.0:
+        if _hurt_rect != null and is_instance_valid(_hurt_rect):
+            _hurt_rect.visible = false
+        return
+    var r = _hurt_rect_node()
+    r.visible = true
+    r.material.set_shader_parameter("flash",hurt_flash)
+    r.material.set_shader_parameter("low",low)
+
 # --- the player's fall -------------------------------------------------------
 # Health at zero no longer snaps straight to the respawn: the survivor
 # staggers and goes down (the authored Die sheet), the world holds its
@@ -7000,6 +7140,9 @@ func _update_death_fade_in(delta):
 
 func _respawn_player():
     player_death_time = 0.0
+    hurt_flash = 0.0
+    camera_kick = Vector2.ZERO
+    interact_anim = 0.0
     # dev9 keeps the game's established non-destructive incapacitation model, but
     # the first clinical High Risk loop now has an explicit recovery leg instead
     # of silently teleporting the player to the generic start position.
@@ -17825,6 +17968,7 @@ func _interact():
         return
 
     var type = str(target.get_meta("interaction_type",""))
+    _start_interact_gesture(type,target)
     if type == "world_item":
         _pickup_world_item(target)
     elif type == "container":
@@ -17876,6 +18020,7 @@ func _pickup_world_item(node):
 
     if moved <= 0:
         return
+    _fly_pickup_to_player(node)
 
     var pickup_key = str(node.get_meta("pickup_key",""))
     var drop_id = int(node.get_meta("drop_id",-1))
@@ -28083,6 +28228,7 @@ func _apply_enemy_hit(base_damage):
     health = max(0.0,health - final_damage)
     modern_survivor_hit_time = modern_survivor_hit_duration
     _play_world_sfx("player_hit",-9.0,0.018)
+    _hurt_feedback(final_damage)
 
     var trauma = final_damage * _injury_zone_trauma_mult(zone)
     _apply_body_injury(zone,trauma)
@@ -28834,6 +28980,7 @@ func _update_combat_traces(delta):
     if player == null:
         return
     _update_corpses(delta)
+    _update_pickup_fly(delta)
     # casings: a short arc (up then down to the floor), one bounce, then rest
     for c in _casings:
         var age = float(c.get_meta("age",0.0)) + delta
