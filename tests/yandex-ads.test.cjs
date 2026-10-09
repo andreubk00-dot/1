@@ -261,6 +261,20 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert(src.includes('На следующий уровень')&&src.includes('Next level'), 'Progress description needs both languages');
     assert(src.includes("max?'':"), 'Maxed upgrades must not show a funding goal');
   });
+  await test('Hidden rewarded placements do not inflate Yandex ad offer metrics',async()=>{
+    const {g}=fixture();const offers=[];
+    g.track=(name,meta)=>{if(name==='reward_ad_offer')offers.push(meta);};
+    g.recordVisibleRewardOffers(true,true,false,10);
+    assert.deepEqual(offers,[],'No SDK should create zero offers');
+    g.recordVisibleRewardOffers(true,false,true,12);
+    assert.deepEqual(offers,[{placement:'revive',wave:12}]);
+    g.recordVisibleRewardOffers(false,true,true,15);
+    assert.deepEqual(offers,[{placement:'revive',wave:12},{placement:'double',wave:15}]);
+    g.recordVisibleRewardOffers(false,false,true,20);
+    assert.equal(offers.length,2,'Ineligible buttons were counted as offers');
+    assert(src.includes('this.recordVisibleRewardOffers(canRevive,canDouble,adAvailable,reached);'));
+    assert(src.includes("classList.toggle('hidden',!canDouble||!adAvailable)"));
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
