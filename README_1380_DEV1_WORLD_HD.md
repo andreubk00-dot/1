@@ -742,3 +742,17 @@ QA: `tests/qa_vertical_fence_capture.gd`.
   shoulders with a whole-pixel twitch held for a beat.
 - **Attack lunge.** Before the swipe the body draws back one pixel, then throws
   itself up to 2–3 px forward and recovers.
+
+## dev43 — the player's fall, infected flinch
+
+- **Player death.** Health at zero no longer teleports straight to the respawn.
+  The survivor goes down on the authored Die sheet (8 frames over ~1 s, the last
+  one held), a blood pool spreads under them, the screen flushes red and then
+  bleeds to black over 2.7 s while the world holds still. Then the usual
+  recovery (`_respawn_player`) runs and the picture fades back in over 1.6 s
+  (`_begin_player_death`, `_update_player_death`, `DeathFade` layer).
+  Input is ignored during the fall; scripted rescues and tests still call
+  `_respawn_player()` directly.
+- **Infected flinch.** A non-fatal hit knocks the body two pixels back along
+  the shot, easing home in 0.18 s. Stagger now reels the body from side to side
+  in whole pixels instead of rotating the sprite at odd angles.

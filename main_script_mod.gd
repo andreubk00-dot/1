@@ -3999,6 +3999,10 @@ func _movement_velocity_step(current_velocity,desired_velocity,delta,running):
 func _process(delta):
     if player == null:
         return
+    if player_death_time > 0.0:
+        _update_player_death(delta)
+        return
+    _update_death_fade_in(delta)
 
     fire_cooldown = max(0.0, fire_cooldown - delta)
     infected_spit_slow_time = max(0.0,infected_spit_slow_time - delta)
@@ -4148,7 +4152,8 @@ func _process(delta):
     _update_infected_death_hazards(delta)
 
     if health <= 0.0:
-        _respawn_player()
+        _begin_player_death()
+        return
 
     var mouse_pos = get_global_mouse_position()
     if qa_visual_mode and qa_locked_aim.length() > 0.01:
@@ -4404,6 +4409,8 @@ func _event_matches_digit(event,key_code):
 
 
 func _unhandled_input(event):
+    if player_death_time > 0.0:
+        return
     if _developer_tools_available() and event.is_action_pressed("developer_panel"):
         _toggle_developer_panel()
         get_viewport().set_input_as_handled()
@@ -5810,6 +5817,9 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         if reload_p < 0.0:
             return 0
         return clamp(int(floor(reload_p * 8.0)),0,7)
+    if sheet_name == "Die":
+        # the authored fall plays once and the last frame holds
+        return clamp(int(floor(player_death_time / PLAYER_DEATH_FALL * float(count))),0,max(1,int(count)) - 1)
     if sheet_name == "TakeDamage":
         if modern_survivor_hit_time <= 0.0 or modern_survivor_hit_duration <= 0.001:
             return 0
@@ -5837,6 +5847,8 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
     return int(floor(normalized * float(count))) % count
 
 func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
+    if player_death_time > 0.0:
+        return "Die"
     if modern_survivor_hit_time > 0.0:
         return "TakeDamage"
 
@@ -6921,7 +6933,73 @@ func _update_weapon_visual():
 
     _update_visible_weapon_mods()
 
+# --- the player's fall -------------------------------------------------------
+# Health at zero no longer snaps straight to the respawn: the survivor
+# staggers and goes down (the authored Die sheet), the world holds its
+# breath, the screen bleeds to black, and only then the recovery runs. Tests
+# and scripted rescues still call _respawn_player() directly.
+const PLAYER_DEATH_FALL = 1.05
+const PLAYER_DEATH_DURATION = 2.7
+var player_death_time = 0.0
+var _death_fade = null
+var _death_fade_in = 0.0
+
+func _death_fade_rect():
+    if _death_fade == null or not is_instance_valid(_death_fade):
+        var layer = CanvasLayer.new()
+        layer.name = "DeathFade"
+        layer.layer = 60
+        add_child(layer)
+        _death_fade = ColorRect.new()
+        _death_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        _death_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+        _death_fade.color = Color(0,0,0,0)
+        layer.add_child(_death_fade)
+    return _death_fade
+
+func _begin_player_death():
+    if player_death_time > 0.0:
+        return
+    player_death_time = 0.001
+    player.velocity = Vector2.ZERO
+    is_sprinting = false
+    is_crouching = false
+    _cancel_reload()
+    _cancel_weapon_cycle()
+    modern_survivor_hit_time = 0.0
+    melee_swing_time = 0.0
+    weapon_recoil_time = 0.0
+    _blood_mark(player.global_position,aim_direction,true)
+    _death_fade_rect()
+
+func _update_player_death(delta):
+    player_death_time += delta
+    player.velocity = Vector2.ZERO
+    movement_anim_blend = max(0.0,movement_anim_blend - delta * 4.0)
+    visual_move_speed = 0.0
+    _update_player_visuals(delta)
+    _update_combat_traces(delta)
+    var t = player_death_time
+    var fade = _death_fade_rect()
+    # a red flush on the blow, then the light goes out
+    var red = clamp(1.0 - t / 0.9,0.0,1.0) * 0.28
+    var dark = smoothstep(1.1,PLAYER_DEATH_DURATION - 0.2,t)
+    fade.color = Color(0.32 * (1.0 - dark),0.0,0.0,max(red,dark))
+    if t >= PLAYER_DEATH_DURATION:
+        player_death_time = 0.0
+        fade.color = Color(0,0,0,1)
+        _respawn_player()
+        _death_fade_in = 1.0
+
+func _update_death_fade_in(delta):
+    if _death_fade_in <= 0.0:
+        return
+    _death_fade_in = max(0.0,_death_fade_in - delta / 1.6)
+    if _death_fade != null and is_instance_valid(_death_fade):
+        _death_fade.color = Color(0,0,0,smoothstep(0.0,1.0,_death_fade_in))
+
 func _respawn_player():
+    player_death_time = 0.0
     # dev9 keeps the game's established non-destructive incapacitation model, but
     # the first clinical High Risk loop now has an explicit recovery leg instead
     # of silently teleporting the player to the generic start position.
@@ -7692,6 +7770,9 @@ func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
         hit_dir = (enemy.global_position - player.global_position).normalized()
     _blood_hit(enemy.global_position,hit_dir,hp <= 0.0)
     if hp > 0.0:
+        # the body snaps back from the hit (visual only, see _update_enemies)
+        enemy.set_meta("hit_recoil",0.18)
+        enemy.set_meta("hit_recoil_dir",hit_dir)
         _play_distance_sfx("infected_hurt",enemy.global_position,-11.5,520.0,0.028)
         _infected_interrupt_special(enemy)
         enemy.set_meta("last_known_position",player.global_position)
@@ -26993,7 +27074,15 @@ func _update_enemies(delta):
             var limp_load = max(0.0,-sin(walk)) if moving_visual else 0.0
             var lean = Vector2(-facing_visual.y,facing_visual.x) * bad_side * round(limp_load * limp_k * 1.6)
             var dip = round(limp_load * limp_k * 1.8) if moving_visual else 0.0
-            visual.position = attack_offset + twitch + lean + Vector2(idle_sway,dip + sin(walk * 2.0) * (0.3 if moving_visual else 0.0))
+            # flinch: knocked two pixels back along the shot, easing home
+            var recoil = max(0.0,float(enemy.get_meta("hit_recoil",0.0)) - delta)
+            enemy.set_meta("hit_recoil",recoil)
+            var flinch = Vector2.ZERO
+            if recoil > 0.0:
+                var rdir = enemy.get_meta("hit_recoil_dir",Vector2.ZERO)
+                if typeof(rdir) == TYPE_VECTOR2:
+                    flinch = (rdir * 2.4 * (recoil / 0.18)).round()
+            visual.position = flinch + attack_offset + twitch + lean + Vector2(idle_sway,dip + sin(walk * 2.0) * (0.3 if moving_visual else 0.0))
             var call_telegraph = _infected_is_calling(enemy)
             var spit_telegraph = _infected_is_spitting(enemy)
             var special_telegraph = call_telegraph or spit_telegraph
@@ -27038,10 +27127,11 @@ func _update_enemies(delta):
                         frame = int(floor(_infected_limp_phase(enemy,walk) * float(INFECTED_WALK_FRAMES))) % INFECTED_WALK_FRAMES
                 infected_sprite.region_rect = Rect2(frame * INFECTED_CELL,row8 * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
 
+            # stagger reels the body from side to side in whole pixels; the
+            # sprite itself never turns at an odd angle
+            visual.rotation = 0.0
             if stagger > 0.0:
-                visual.rotation = sin(stagger * 22.0) * 0.055
-            else:
-                visual.rotation = 0.0
+                visual.position.x += round(sin(stagger * 22.0) * 1.4)
 
         dist = enemy.global_position.distance_to(player.global_position)
         if (
