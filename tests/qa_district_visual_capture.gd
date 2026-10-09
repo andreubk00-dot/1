@@ -1,11 +1,13 @@
 extends SceneTree
 # Visual QA across the open world: for every district one representative
 # (non-POI) chunk is loaded and shot wide and at gameplay zoom.
-# xvfb-run godot --path . --rendering-driver opengl3 --script tests/qa_district_visual_capture.gd -- --qa-output=<dir> [--qa-only=<district_id>]
+# xvfb-run godot --path . --rendering-driver opengl3 --script tests/qa_district_visual_capture.gd -- --qa-output=<dir> [--qa-only=<district_id>] [--qa-hour=13] [--qa-rain=0..1]
 const Main = preload("res://main_script_mod.gd")
 const RegionCatalog = preload("res://world/region_catalog.gd")
 var output = ""
 var only = ""
+var hour = 13.0
+var rain = -1.0
 
 func _initialize():
     for arg in OS.get_cmdline_user_args():
@@ -13,6 +15,10 @@ func _initialize():
             output = arg.trim_prefix("--qa-output=")
         if arg.begins_with("--qa-only="):
             only = arg.trim_prefix("--qa-only=")
+        if arg.begins_with("--qa-hour="):
+            hour = float(arg.trim_prefix("--qa-hour="))
+        if arg.begins_with("--qa-rain="):
+            rain = float(arg.trim_prefix("--qa-rain="))
     call_deferred("run")
 
 func _snap(path:String):
@@ -49,6 +55,9 @@ func run():
     game.add_child(cam)
     cam.enabled = true
     cam.make_current()
+    if rain >= 0.0:
+        game.weather_state = "rain" if rain > 0.5 else "clear"
+        game.weather_timer = 99999.0
     var samples = _sample_chunks()
     for d in samples.keys():
         if only != "" and d != only:
@@ -64,7 +73,7 @@ func run():
                     game._load_chunk(c + Vector2i(dx,dy))
         for i in range(6):
             await process_frame
-        game.world_minutes = 13.0 * 60.0
+        game.world_minutes = hour * 60.0
         cam.global_position = center
         cam.zoom = Vector2(0.62,0.62)
         await _snap("%s/%s_wide.png" % [output,d])
@@ -73,7 +82,7 @@ func run():
             game.player.global_position = Vector2(c) * 768.0 + local + Vector2(0,60)
             for i in range(14):
                 await process_frame
-            game.world_minutes = 13.0 * 60.0
+            game.world_minutes = hour * 60.0
             cam.global_position = Vector2(c) * 768.0 + local
             cam.zoom = Vector2(1.0,1.0)
             await _snap("%s/%s_%s.png" % [output,d,"a" if k == 0 else "b"])

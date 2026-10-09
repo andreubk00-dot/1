@@ -4154,6 +4154,7 @@ func _process(delta):
     _update_doors(delta)
     _update_interior_prop_depth()
     _update_detail_lights(delta)
+    _update_puddle_reflections()
     _update_roofs(delta)
     _update_day_night(delta)
     _update_weather(delta)
@@ -15804,6 +15805,203 @@ func _add_detail_light(parent,pos,color,energy,texture_scale,exterior=false):
         light.add_to_group("exterior_practical_lights")
     parent.add_child(light)
 
+# --- puddles and light reflections ---------------------------------------
+# HD puddles (tools/wa_puddles_hd.py) lie on the roads and in front of lit
+# entrances. Every puddle clips its children to its water mask
+# (CLIP_CHILDREN_AND_DRAW), so the reflections of nearby lamps - mirrored
+# about the lamp's foot, broken into ripple bands - only ever show on water.
+# Their strength follows the night and the lamp's own flicker; rain makes them
+# shimmer.
+const PUDDLE_TEX = "res://art/world_hd/puddles_hd.png"
+var _reflection_tex = null
+var _reflection_shader = null
+# clip_children is not available in the Compatibility renderer: the reflection
+# clips itself against the puddle's alpha in this shader instead
+const PUDDLE_REFLECTION_SHADER = """shader_type canvas_item;
+render_mode blend_add;
+uniform sampler2D mask : filter_nearest;
+uniform vec4 mask_region;   // puddle cell in the atlas, texels (x, y, w, h)
+uniform vec2 mask_size;     // atlas size, texels
+uniform vec2 origin;        // reflection origin in puddle-cell texels
+uniform vec2 scl;           // reflection texel -> puddle-cell texel
+uniform bool flip;
+varying vec2 lv;
+void vertex() { lv = VERTEX; }
+void fragment() {
+    vec2 p = floor(origin + lv * scl);
+    if (flip) p.x = mask_region.z - 1.0 - p.x;
+    float inside = 0.0;
+    if (p.x >= 0.0 && p.y >= 0.0 && p.x < mask_region.z && p.y < mask_region.w) {
+        inside = texture(mask, (mask_region.xy + p + 0.5) / mask_size).a;
+    }
+    vec4 c = texture(TEXTURE, UV) * COLOR;
+    COLOR = vec4(c.rgb, c.a * step(0.5, inside));
+}"""
+
+func _puddle_reflection_texture():
+    if _reflection_tex != null:
+        return _reflection_tex
+    # 8 x 48 texels: a soft column of light broken into horizontal ripple bands,
+    # brightest at the top (near the mirrored lamp), fading down in flat steps
+    var img = Image.create(12,48,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    for y in range(48):
+        if y % 4 == 3:
+            continue
+        var a = 1.0 if y < 16 else (0.78 if y < 30 else 0.5)
+        var half = 5 if y < 6 else (4 if y < 14 else (3 if y < 30 else 2))
+        var cx = 6 + (1 if (y / 4) % 3 == 1 else (-1 if (y / 4) % 3 == 2 else 0))
+        for x in range(cx - half,cx + half):
+            if x >= 0 and x < 12:
+                var edge = x == cx - half or x == cx + half - 1
+                img.set_pixel(x,y,Color(1,1,1,a * (0.55 if edge else 1.0)))
+    _reflection_tex = ImageTexture.create_from_image(img)
+    return _reflection_tex
+
+func _chunk_light_sources(chunk):
+    # [{pos (light, global), ground (foot, global), color, light}]
+    var out = []
+    for light in chunk.find_children("*","PointLight2D",true,false):
+        if not (light.is_in_group("exterior_practical_lights") or light.is_in_group("street_lights")):
+            continue
+        var foot = light.get_parent()
+        if foot == null or not (foot is Node2D):
+            continue
+        var ground_y = foot.global_position.y
+        if light.global_position.y > ground_y - 4.0:
+            continue
+        out.append({"pos":light.global_position,"ground":Vector2(light.global_position.x,ground_y),"color":light.color,"light":light})
+    return out
+
+func _make_puddle(chunk,local_pos:Vector2,variant:int):
+    var tex = AtlasTexture.new()
+    tex.atlas = load(PUDDLE_TEX)
+    tex.region = Rect2((variant % 4) * 112,0,112,56)
+    var p = Sprite2D.new()
+    p.texture = tex
+    p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    p.scale = Vector2(0.5,0.5)
+    p.position = local_pos.round()
+    p.flip_h = variant >= 4
+    p.z_index = 1
+    p.add_to_group("puddles")
+    chunk.add_child(p)
+    return p
+
+func _place_puddles(chunk,coord):
+    if not _hd_exists(PUDDLE_TEX):
+        return
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 83492791 + coord.y * 2654435)) + 31
+    var sources = _chunk_light_sources(chunk)
+    var spots = []
+    # in front of lit entrances / under lamps, where the reflection falls
+    for src in sources:
+        if rng.randf() < 0.55:
+            var h = src["ground"].y - src["pos"].y
+            spots.append(src["ground"] - chunk.global_position + Vector2(rng.randf_range(-8.0,8.0),h * 0.45 + 12.0))
+    # a few on the carriageway
+    for i in range(rng.randi_range(2,4)):
+        var t = rng.randf_range(40.0,728.0)
+        var a = rng.randf_range(312.0,456.0)
+        spots.append(Vector2(a,t) if rng.randf() < 0.5 else Vector2(t,a))
+    var placed = []
+    for sp in spots:
+        # puddles are flat: only the footprints themselves block them, so they
+        # can lie right in front of an entrance (walking through is fine)
+        var blocked = false
+        for child in chunk.get_children():
+            if child.has_meta("world_building"):
+                var bsz:Vector2 = child.get_meta("building_size",Vector2.ZERO)
+                if Rect2(child.position - bsz * 0.5 - Vector2(30,6),bsz + Vector2(60,22)).has_point(sp):
+                    blocked = true
+            elif bool(child.get_meta("world_car",false)) and child.position.distance_to(sp) < 50.0:
+                blocked = true
+        if blocked:
+            continue
+        if sp.x < 28.0 or sp.x > CHUNK_SIZE - 28.0 or sp.y < 14.0 or sp.y > CHUNK_SIZE - 14.0:
+            continue
+        var clash = false
+        for q in placed:
+            if q.distance_to(sp) < 60.0:
+                clash = true
+        if clash:
+            continue
+        if chunk.has_meta("poi_authored") and rng.randf() < 0.5:
+            continue
+        var rail = false
+        for child in chunk.get_children():
+            if bool(child.get_meta("rail_track",false)) and abs(sp.y - CHUNK_SIZE * 0.5) < 50.0:
+                rail = true
+        if rail:
+            continue
+        placed.append(sp)
+        var puddle = _make_puddle(chunk,sp,rng.randi_range(0,7))
+        _add_puddle_reflections(puddle,sources)
+    chunk.set_meta("puddle_count",placed.size())
+
+func _add_puddle_reflections(puddle,sources):
+    var prect = Rect2(puddle.global_position - Vector2(28,14),Vector2(56,28))
+    for src in sources:
+        var h = src["ground"].y - src["pos"].y
+        # mirror the lamp about its foot; the column runs down from there
+        var top = Vector2(src["pos"].x,src["ground"].y + h * 0.45)
+        # the mirrored lamp lies beyond the near edge: the visible streak starts
+        # where the water starts and runs across the puddle toward the viewer
+        if top.y < prect.position.y and prect.position.y - top.y < h * 1.6 + 20.0:
+            top.y = prect.position.y + 2.0
+        var length = clamp(h * 0.8,16.0,26.0)
+        var col_rect = Rect2(top - Vector2(6,0),Vector2(12,length))
+        if not col_rect.intersects(prect):
+            continue
+        var r = Sprite2D.new()
+        r.texture = _puddle_reflection_texture()
+        r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        r.centered = false
+        # puddle children live in puddle space (scale 0.5): convert
+        var local = (top - puddle.global_position) / puddle.scale.x
+        r.position = (local - Vector2(6,0)).round()
+        r.scale = Vector2(1.0,length / 24.0)
+        var c = src["color"]
+        # additive and over-bright: the night CanvasModulate (~0.25) brings the
+        # reflection back to a glint, as bright as the lamp it mirrors
+        if _reflection_shader == null:
+            _reflection_shader = Shader.new()
+            _reflection_shader.code = PUDDLE_REFLECTION_SHADER
+        var mat = ShaderMaterial.new()
+        mat.shader = _reflection_shader
+        var region:Rect2 = puddle.texture.region
+        mat.set_shader_parameter("mask",puddle.texture.atlas)
+        mat.set_shader_parameter("mask_region",Vector4(region.position.x,region.position.y,region.size.x,region.size.y))
+        mat.set_shader_parameter("mask_size",puddle.texture.atlas.get_size())
+        mat.set_shader_parameter("origin",r.position + region.size * 0.5)
+        mat.set_shader_parameter("scl",r.scale)
+        mat.set_shader_parameter("flip",puddle.flip_h)
+        r.material = mat
+        r.modulate = Color(c.r * 5.0,c.g * 4.4,c.b * 3.6,0.0)
+        r.set_meta("light",src["light"])
+        r.set_meta("base_x",r.position.x)
+        r.add_to_group("puddle_reflections")
+        puddle.add_child(r)
+
+func _update_puddle_reflections():
+    var night = _time_night_factor()
+    var wet = 1.0 if weather_state == "rain" else 0.75
+    var t = Time.get_ticks_msec()
+    for r in get_tree().get_nodes_in_group("puddle_reflections"):
+        if not is_instance_valid(r):
+            continue
+        var light = r.get_meta("light",null)
+        var k = 0.0
+        if is_instance_valid(light) and light.visible:
+            var base = float(light.get_meta("base_energy",light.get_meta("night_energy",light.energy)))
+            k = clamp(light.energy / max(0.01,base),0.0,1.4)
+        # rain ripples make the reflection flicker in steps
+        var ripple = 1.0
+        if weather_state == "rain":
+            ripple = [1.0,0.78,0.92,0.66][int(t / 120 + int(r.get_instance_id())) % 4]
+        r.modulate.a = clamp(night * wet * 0.85 * k * ripple,0.0,1.0)
+
 func _update_detail_lights(delta):
     # Slight practical-light instability keeps abandoned interiors from looking
     # like a uniformly lit editor scene. This is visual-only and deterministic.
@@ -19765,6 +19963,7 @@ func _load_chunk(coord):
         _build_procedural_chunk(chunk,coord)
         _decorate_street_furniture(chunk,coord)
     _dress_ground_seams(chunk,coord)
+    _place_puddles(chunk,coord)
 
     _spawn_saved_drops_for_chunk(chunk,coord)
     # Static bodies become queryable after the physics server synchronizes.
@@ -19868,6 +20067,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/world_hd/props_hd.png")
     paths.append("res://art/world_hd/interior_trim_hd.png")
     paths.append("res://art/world_hd/rail_track_hd.png")
+    paths.append(PUDDLE_TEX)
     for path in paths:
         if _hd_exists(str(path)):
             _world_hd_keep.append(load(str(path)))
@@ -24306,7 +24506,9 @@ func _create_car(chunk,pos,color,angle):
         sprite.rotation = rest * 0.6 - angle
         sprite.scale = Vector2(0.5,0.5)
         sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-        sprite.modulate = Color(1,1,1).lerp(color.lightened(0.25),0.8)
+        # paint tone close to the body colour: a pale tint made parked cars glow
+        # white under the night CanvasModulate
+        sprite.modulate = Color(0.86,0.86,0.86).lerp(color.lightened(0.06),0.85)
         car.set_meta("car_model",_car_model_index(pos))
         car.set_meta("car_view",view)
         car.add_child(sprite)
