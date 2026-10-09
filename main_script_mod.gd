@@ -7118,7 +7118,7 @@ func _perform_melee_attack():
 
         var push_dir = enemy.global_position - player.global_position
         _apply_enemy_impulse(enemy,push_dir,knockback,stagger_time)
-        _damage_enemy(enemy,damage)
+        _damage_enemy(enemy,damage,push_dir.normalized())
         hit_count += 1
     if hit_count > 0:
         _play_world_sfx("melee_hit",-9.5,0.025)
@@ -7226,7 +7226,7 @@ func _fire_weapon():
                     impact_hits[enemy_iid] = {"enemy":collider,"hits":0,"dir":shot_dir}
                 impact_hits[enemy_iid]["hits"] = int(impact_hits[enemy_iid].get("hits",0)) + 1
                 impact_hits[enemy_iid]["dir"] = shot_dir
-                _damage_enemy(collider, damage)
+                _damage_enemy(collider, damage, shot_dir)
         if i == int(shot_dirs.size() / 2):
             first_end = end
         if shot_dirs.size() > 1:
@@ -7248,6 +7248,7 @@ func _fire_weapon():
     _emit_ai_sound(origin,noise_radius,"gunshot",_weapon_sound_signature(weapon))
     _play_weapon_shot_audio(current_weapon_id,weapon,iid)
     _apply_weapon_fire_fx(weapon)
+    _eject_casing(origin,aim_direction,shot_dirs.size() > 1)
     muzzle_flash.visible = true
     muzzle_time = 0.055
 
@@ -7663,11 +7664,14 @@ func _spawn_temp_tracer(origin,end,lifetime):
     timer.timeout.connect(line.queue_free)
 
 
-func _damage_enemy(enemy, amount):
+func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
     if not is_instance_valid(enemy):
         return
     var hp = float(enemy.get_meta("hp", 70.0)) - amount
     enemy.set_meta("hp", hp)
+    if hit_dir == Vector2.ZERO and player != null:
+        hit_dir = (enemy.global_position - player.global_position).normalized()
+    _blood_hit(enemy.global_position,hit_dir,hp <= 0.0)
     if hp > 0.0:
         _play_distance_sfx("infected_hurt",enemy.global_position,-11.5,520.0,0.028)
         _infected_interrupt_special(enemy)
@@ -28365,6 +28369,237 @@ void fragment() {
 var _wet_ground_mat = null
 var _ground_wet = 0.0
 
+# 1.38: combat traces. A hit throws a spray of pixel droplets away from the
+# shooter and leaves a splatter on the floor behind the target (a pool where
+# one falls); the player bleeds the same way when the infected reach them.
+# Every shot ejects a brass casing (a red shotgun hull for the shotgun) that
+# arcs out to the right of the gun, bounces once and stays on the ground.
+# Running on dry ground kicks up dust at the heels. Floor marks come from
+# pools and fade out after a few minutes.
+const BLOOD_POOL = 70
+const CASING_POOL = 60
+const BLOOD_LIFE = 240.0
+const CASING_LIFE = 150.0
+var fx_layer = null
+var _blood_marks = []
+var _casings = []
+var _blood_tex = []
+var _casing_tex = {}
+var _dust_timer = 0.0
+var _last_health_fx = -1.0
+
+func _fx_root():
+    if fx_layer == null:
+        fx_layer = Node2D.new()
+        fx_layer.name = "CombatTraces"
+        add_child(fx_layer)
+    return fx_layer
+
+func _make_blood_textures():
+    # three splatter shapes and a pool, flattened by the 3/4 view (HD texels)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = 4417
+    for v in range(4):
+        var w = 28 if v < 3 else 34
+        var h = 16 if v < 3 else 18
+        var img = Image.create(w,h,false,Image.FORMAT_RGBA8)
+        img.fill(Color(0,0,0,0))
+        var blobs = 5 if v < 3 else 3
+        var pts = []
+        for i in range(blobs):
+            var c = Vector2(rng.randf_range(8,w - 8),rng.randf_range(5,h - 5)) if v < 3 else Vector2(w * 0.5 + rng.randf_range(-6,6),h * 0.5 + rng.randf_range(-2,2))
+            var rr = rng.randf_range(2.0,5.5) if v < 3 else rng.randf_range(6.0,9.0)
+            pts.append([c,rr])
+        for y in range(h):
+            for x in range(w):
+                for b in pts:
+                    var d = Vector2(x + 0.5,(y + 0.5) * 1.6) - Vector2(b[0].x,b[0].y * 1.6)
+                    if d.length() < b[1]:
+                        var dark = d.length() < b[1] * 0.55
+                        img.set_pixel(x,y,Color(0.24,0.03,0.03,0.92) if dark else Color(0.36,0.05,0.04,0.82))
+        # flung droplets trailing to the right (the sprite is flipped/turned per hit)
+        if v < 3:
+            for i in range(6):
+                var px = rng.randi_range(w / 2,w - 1)
+                var py = rng.randi_range(2,h - 3)
+                img.set_pixel(px,py,Color(0.32,0.04,0.04,0.9))
+        _blood_tex.append(ImageTexture.create_from_image(img))
+
+func _blood_mark(pos:Vector2,dir:Vector2,pool:bool):
+    if _blood_tex.is_empty():
+        _make_blood_textures()
+    var m = null
+    if _blood_marks.size() >= BLOOD_POOL:
+        m = _blood_marks.pop_front()
+    else:
+        m = Sprite2D.new()
+        m.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        m.scale = Vector2(0.5,0.5)
+        m.z_as_relative = false
+        m.z_index = -47                 # on floors and puddles, under props
+        _fx_root().add_child(m)
+    m.texture = _blood_tex[3] if pool else _blood_tex[randi() % 3]
+    m.flip_h = dir.x < 0.0
+    m.flip_v = randf() < 0.5
+    # thrown along the shot, scattered a little either side of it
+    var side = Vector2(-dir.y,dir.x) * randf_range(-9.0,9.0)
+    var off = Vector2.ZERO if pool else dir * randf_range(6.0,24.0) + side
+    m.global_position = (pos + off + Vector2(0,10)).round()
+    m.scale = Vector2(0.5,0.5) * (1.0 if pool else randf_range(0.7,1.0))
+    m.modulate = Color(1,1,1,1)
+    m.set_meta("age",0.0)
+    m.visible = true
+    _blood_marks.append(m)
+
+func _blood_spray(pos:Vector2,dir:Vector2,amount:int):
+    var p = CPUParticles2D.new()
+    p.one_shot = true
+    p.explosiveness = 0.95
+    p.amount = amount
+    p.lifetime = 0.45
+    p.local_coords = false
+    p.z_as_relative = false
+    p.z_index = 30
+    var img = Image.create(2,2,false,Image.FORMAT_RGBA8)
+    img.fill(Color(1,1,1,1))
+    p.texture = ImageTexture.create_from_image(img)
+    p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    p.scale_amount_min = 0.5
+    p.scale_amount_max = 1.0
+    p.direction = dir if dir != Vector2.ZERO else Vector2.RIGHT
+    p.spread = 32.0
+    p.initial_velocity_min = 40.0
+    p.initial_velocity_max = 110.0
+    p.gravity = Vector2(0,260)
+    p.damping_min = 30.0
+    p.damping_max = 60.0
+    p.color = Color(0.42,0.05,0.05,1.0)
+    p.global_position = pos + Vector2(0,-8)
+    _fx_root().add_child(p)
+    p.emitting = true
+    get_tree().create_timer(0.8).timeout.connect(p.queue_free)
+
+func _blood_hit(pos:Vector2,dir:Vector2,fatal:bool):
+    _blood_spray(pos,dir,14 if fatal else 8)
+    _blood_mark(pos,dir,false)
+    if fatal:
+        _blood_mark(pos,dir,true)
+
+func _make_casing_texture(shell:bool) -> ImageTexture:
+    # brass case 3 x 1 texels with a lit end, or a red shotgun hull 4 x 2 with brass base
+    var img = Image.create(4,2,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    if shell:
+        for x in range(4):
+            for y in range(2):
+                img.set_pixel(x,y,Color(0.80,0.62,0.30) if x == 0 else Color(0.62,0.12,0.10))
+    else:
+        img.set_pixel(0,0,Color(0.98,0.86,0.50))
+        img.set_pixel(1,0,Color(0.84,0.66,0.30))
+        img.set_pixel(2,0,Color(0.66,0.50,0.22))
+    return ImageTexture.create_from_image(img)
+
+func _eject_casing(origin:Vector2,aim:Vector2,shell:bool):
+    var key = "shell" if shell else "brass"
+    if not _casing_tex.has(key):
+        _casing_tex[key] = _make_casing_texture(shell)
+    var c = null
+    if _casings.size() >= CASING_POOL:
+        c = _casings.pop_front()
+    else:
+        c = Sprite2D.new()
+        c.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        c.scale = Vector2(0.5,0.5)
+        c.z_as_relative = false
+        _fx_root().add_child(c)
+    c.texture = _casing_tex[key]
+    var side = Vector2(-aim.y,aim.x)
+    if side.x < 0.0:
+        side = -side                        # ejection port on the right of the gun
+    var start = origin - aim * 10.0
+    c.global_position = start.round()
+    c.z_index = 30
+    c.rotation = 0.0
+    c.modulate = Color(1,1,1,1)
+    c.visible = true
+    c.set_meta("age",0.0)
+    c.set_meta("flight",0.0)
+    c.set_meta("from",start)
+    c.set_meta("to",start + side * randf_range(14.0,24.0) - aim * randf_range(2.0,8.0) + Vector2(0,12))
+    c.set_meta("spin",randf_range(10.0,18.0) * (1.0 if randf() < 0.5 else -1.0))
+    _casings.append(c)
+
+func _update_combat_traces(delta):
+    if player == null:
+        return
+    # casings: a short arc (up then down to the floor), one bounce, then rest
+    for c in _casings:
+        var age = float(c.get_meta("age",0.0)) + delta
+        c.set_meta("age",age)
+        var f = float(c.get_meta("flight",0.0))
+        if f < 1.0:
+            f = min(1.0,f + delta / 0.38)
+            c.set_meta("flight",f)
+            var a:Vector2 = c.get_meta("from")
+            var b:Vector2 = c.get_meta("to")
+            var lift = sin(f * PI) * 14.0 + (sin(clamp((f - 0.8) / 0.2,0.0,1.0) * PI) * 3.0 if f > 0.8 else 0.0)
+            c.global_position = (a.lerp(b,f) - Vector2(0,lift)).round()
+            # pixel art turns in quarter steps, never at odd angles
+            c.rotation = round(f * float(c.get_meta("spin",12.0)) / (PI * 0.5)) * PI * 0.5
+            if f >= 1.0:
+                c.z_index = -47
+        elif age > CASING_LIFE:
+            c.modulate.a = max(0.0,1.0 - (age - CASING_LIFE) / 10.0)
+    for m in _blood_marks:
+        var age = float(m.get_meta("age",0.0)) + delta
+        m.set_meta("age",age)
+        if age > BLOOD_LIFE:
+            m.modulate.a = max(0.0,1.0 - (age - BLOOD_LIFE) / 30.0)
+    # the player bleeds when an infected lands a blow
+    if _last_health_fx >= 0.0 and health < _last_health_fx - 2.5:
+        for e in get_tree().get_nodes_in_group("infected"):
+            if is_instance_valid(e) and e.global_position.distance_to(player.global_position) < 48.0:
+                _blood_hit(player.global_position,(player.global_position - e.global_position).normalized(),false)
+                break
+    _last_health_fx = health
+    # dust at the heels when running on dry ground
+    _dust_timer -= delta
+    if is_sprinting and velocity_for_fx().length() > 40.0 and _ground_wet < 0.4 and not _high_risk_floor_active() and _dust_timer <= 0.0:
+        _dust_timer = 0.16
+        _dust_puff(player.global_position + Vector2(0,12),velocity_for_fx())
+
+func velocity_for_fx() -> Vector2:
+    return player.velocity if player is CharacterBody2D else Vector2.ZERO
+
+func _dust_puff(pos:Vector2,vel:Vector2):
+    var p = CPUParticles2D.new()
+    p.one_shot = true
+    p.explosiveness = 0.8
+    p.amount = 6
+    p.lifetime = 0.7
+    p.local_coords = false
+    p.z_as_relative = false
+    p.z_index = 8
+    var img = Image.create(2,2,false,Image.FORMAT_RGBA8)
+    img.fill(Color(1,1,1,1))
+    p.texture = ImageTexture.create_from_image(img)
+    p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    p.direction = -vel.normalized() + Vector2(0,-0.4)
+    p.spread = 40.0
+    p.initial_velocity_min = 8.0
+    p.initial_velocity_max = 20.0
+    p.gravity = Vector2(0,-6)
+    p.scale_amount_min = 1.0
+    p.scale_amount_max = 2.0
+    var ramp = Gradient.new()
+    ramp.set_color(0,Color(0.74,0.68,0.57,0.85))
+    ramp.set_color(1,Color(0.70,0.64,0.54,0.0))
+    p.color_ramp = ramp
+    p.global_position = pos
+    _fx_root().add_child(p)
+    p.emitting = true
+    get_tree().create_timer(0.9).timeout.connect(p.queue_free)
+
 # 1.38: life in the dead town. Small flocks of crows settle on open ground a
 # little way from the player and peck about; walking up on them, a shot or a
 # loud noise puts them up, and they flap off into the sky and away. They keep
@@ -29014,6 +29249,7 @@ func _update_weather_visuals(delta):
     _update_footprints(delta)
     _update_crows(delta)
     _update_leaves(delta)
+    _update_combat_traces(delta)
 
     var wet_goal = 1.0 if weather_state == "rain" else 0.0
     var prev_wet = _ground_wet
