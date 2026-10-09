@@ -279,7 +279,7 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     const doc=document,oldHidden=doc.hidden;
     let clock=1000000,day='2026-10-08',resumed=0;
     const TimedGame=new Function('BALANCE','$','fmt','now','dayKey','document','requestAnimationFrame',
-      'return ('+section('  class Game {',"\\n\\n  window.addEventListener('DOMContentLoaded'").trim()+')')(
+      'return ('+section('  class Game {',"\n\n  window.addEventListener('DOMContentLoaded'").trim()+')')(
       BALANCE,$,String,()=>clock,()=>day,doc,()=>0);
     const g=Object.create(TimedGame.prototype);
     g.save={analytics:{totalPlayMs:0,firstSessionDay:day,playDays:[day],events:{},retention:{d1:false,d3:false,d7:false}}};
