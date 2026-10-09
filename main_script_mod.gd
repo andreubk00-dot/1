@@ -2789,6 +2789,32 @@ func _show_import_not_ready_screen() -> void:
     push_warning("OSTATOK startup paused: Godot imported-resource cache is not ready; wait for editor import to finish")
     print("OSTATOK IMPORT GUARD: WAITING FOR GODOT 4.7.2 IMPORT")
 
+# 1.38 dev48: the interface speaks the world's pixel language. DejaVu Sans Bold
+# (fonts/, free licence in fonts/DejaVu_LICENSE.txt, full Cyrillic) is drawn
+# without antialiasing, snapped to whole screen pixels by the autohinter -
+# the same 2-texels-per-unit grid as the HD world art. The light autohinter
+# keeps small capitals intact (normal hinting broke Н into П at 8 px).
+const PIXEL_UI_FONT = "res://fonts/DejaVuSans-Bold.ttf"
+var pixel_ui_font = null
+
+func _apply_pixel_ui_font():
+    if pixel_ui_font != null or not ResourceLoader.exists(PIXEL_UI_FONT):
+        return
+    var f = load(PIXEL_UI_FONT)
+    if not (f is FontFile):
+        return
+    f.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+    f.hinting = TextServer.HINTING_LIGHT
+    f.force_autohinter = true
+    f.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+    # carrying rounding remainders opened one-pixel gaps inside words at the
+    # small HUD sizes (ГРЯ ЗЬ); whole-pixel advances keep the letters even
+    f.keep_rounding_remainders = false
+    f.generate_mipmaps = false
+    pixel_ui_font = f
+    ThemeDB.get_default_theme().default_font = f
+    ThemeDB.fallback_font = f
+
 func _ready():
     # Keep application/config/name stable: Godot derives the existing user:// path from it.
     DisplayServer.window_set_title("OSTATOK %s" % str(ProjectSettings.get_setting("application/config/version","unknown")))
@@ -2798,6 +2824,7 @@ func _ready():
         set_process(false)
         set_physics_process(false)
         return
+    _apply_pixel_ui_font()
     _load_data()
     _create_weapon_audio_layer()
     _create_world_audio_layer()

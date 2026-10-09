@@ -820,3 +820,17 @@ Measured with a per-call profiler on a scripted night walk (600 frames):
 - **Dark street lamps.** A lamp at zero energy (by day, or a dead one) stays an
   enabled Light2D drawn over its whole rect; it is switched off while it gives
   no light (`_cull_dark_lights`).
+
+## dev48 — pixel interface font
+
+- The whole interface now uses **DejaVu Sans Bold** (`fonts/`, free licence in
+  `fonts/DejaVu_LICENSE.txt`, full Cyrillic) drawn **without antialiasing**, its
+  stems snapped to whole screen pixels by the light autohinter: the text sits
+  on the same 2-texels-per-unit grid as the HD world art instead of being the
+  only smooth thing on screen. Set once as the default theme font in
+  `_apply_pixel_ui_font()` before the UI is built, so every panel, button,
+  tooltip and the region map follow without per-label changes.
+- Settings chosen by comparison renders: normal hinting broke small capitals
+  (Н drawn as П at 8 px); carried rounding remainders opened one-pixel gaps
+  inside words at the HUD's smallest sizes - whole-pixel advances keep them
+  even. Liberation / FreeSans broke digits when rendered aliased.
