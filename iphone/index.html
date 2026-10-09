@@ -2580,7 +2580,7 @@ window.ED_BALANCE = Object.freeze({
       window.addEventListener('beforeunload',()=>{this.checkpointPlaytime();this.save.lastSeen=now();this.persist(true);});
       const parkGame=()=>{this.checkpointPlaytime();this.handleExternalPause(true,'visibility');this.save.lastSeen=now();this.persist(true);};
       document.addEventListener('visibilitychange',()=>{if(document.hidden)parkGame();else{this.resumePlaytime();this.handleExternalPause(false,'visibility');}});
-      window.addEventListener('pagehide',parkGame);
+      window.addEventListener('pagehide',event=>{if(!event.persisted)this.finalizePendingRunAnalytics();parkGame();});
       window.addEventListener('pageshow',()=>{if(!document.hidden){this.resumePlaytime();this.handleExternalPause(false,'visibility');}});
       window.addEventListener('focus',()=>{if(!document.hidden)this.handleExternalPause(false,'visibility');});
     }
@@ -3585,7 +3585,17 @@ window.ED_BALANCE = Object.freeze({
         if(!this.inRun&&this.run===r&&!r.resultDoubled){$('doubleRewardBtn').disabled=false;$('reviveBtn').disabled=false;}
       }
     }
-    async leaveResult(){if(this.resultAdBusy||this.bridge.adInProgress)return;const r=this.run,reached=r?.reached||0,shouldAd=this.canShowInterstitial(reached);if(r){this.track('run_finish',this.runOutcomeMeta(r));this.persist();}this.rmbBoost=false;this.rmbPointerId=null;$('resultScreen').classList.add('hidden');this.run=null;this.paused=false;this.showScreen('homeScreen');this.renderHome();if(this.save.sound)this.audio.startMenuMusic();if(shouldAd){this.track('interstitial_offer',{wave:reached,run:this.save.runs});const shown=await this.bridge.fullscreen();this.track(shown?'interstitial_shown':'interstitial_missed',{wave:reached,run:this.save.runs});this.persist();}}
+    finalizePendingRunAnalytics(){
+      const r=this.run;
+      // A result screen can be closed without using its Back to Menu button.
+      // Never finalize while an ad/revive is unresolved or a run is still active.
+      if(!r||this.inRun||r.analyticsFinalized||this.resultAdBusy||this.bridge?.adInProgress)return false;
+      r.analyticsFinalized=true;
+      this.track('run_finish',this.runOutcomeMeta(r));
+      this.persist();
+      return true;
+    }
+    async leaveResult(){if(this.resultAdBusy||this.bridge.adInProgress)return;const r=this.run,reached=r?.reached||0,shouldAd=this.canShowInterstitial(reached);if(r)this.finalizePendingRunAnalytics();this.rmbBoost=false;this.rmbPointerId=null;$('resultScreen').classList.add('hidden');this.run=null;this.paused=false;this.showScreen('homeScreen');this.renderHome();if(this.save.sound)this.audio.startMenuMusic();if(shouldAd){this.track('interstitial_offer',{wave:reached,run:this.save.runs});const shown=await this.bridge.fullscreen();this.track(shown?'interstitial_shown':'interstitial_missed',{wave:reached,run:this.save.runs});this.persist();}}
 
     claimReturnReward(){
       if(now()<(this.save.nextChestAt||0))return;const rc=BALANCE.retentionEconomy||{},scaled=Math.min(this.save.streak||1,rc.chestStreakCap||14),s=(rc.chestShardBase||18)+Math.floor(Math.random()*((rc.chestShardRandom||12)+1))+scaled,g=Math.random()<(rc.chestGemChance||.20)?1:0;this.save.shards+=s;this.save.gems+=g;this.save.nextChestAt=now()+6*60*60*1000;const rewardText=`+${s} 🔶${g?`   +${g} 💎`:''}`;this.celebrateReward(rewardText,g?'💎':'🔶');this.persist();this.renderHome();this.toast(g?this.t.chestReward.replace('{s}',s).replace('{g}',g):(this.lang==='ru'?`Контейнер: +${s} осколков`:`Container: +${s} shards`));
