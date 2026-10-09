@@ -16,6 +16,7 @@ outline every sprite in the game has is added.
 import math
 import os
 import random
+import sys
 
 import bpy
 import bmesh
@@ -372,6 +373,11 @@ def to_sprite(img, cell=192, colours=40, outline=True, shadow=True):
         g[1:] |= A[:-1]; g[:-1] |= A[1:]; g[:, 1:] |= A[:, :-1]; g[:, :-1] |= A[:, 1:]
         e = g & ~A
         r2[e] = OUTLINE + (255,)
+        # the ring must not trace the cast shadow: at night the shadow fades
+        # and a ring left around it reads as a hard silhouette
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+        from wa_shadow_outline_fix import strip_shadow_ring
+        strip_shadow_ring(r2)
         # darken inner silhouette edge slightly for a drawn look
         pim = Image.fromarray(r2, 'RGBA')
     return pim

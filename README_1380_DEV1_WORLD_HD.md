@@ -781,3 +781,16 @@ QA: `tests/qa_vertical_fence_capture.gd`.
   onto the good leg (up to 2 px), stronger the worse the leg.
 - **Spent.** Fatigue above 70 or health below 35: standing, the body sways
   slowly from foot to foot (`_body_state_offset`).
+
+## dev46 — bug hunt: ink ring around baked shadows
+
+- A full day/night capture pass over all twelve districts turned up a ghost
+  outline around every parked car at night. Cause: the outline pass in
+  `tools/blender/bk.py::to_sprite` also ringed the baked cast shadow. By day
+  the ring read as part of the shadow; at night `SUN_SHADOW_SHADER` fades the
+  shadow and the ring stayed behind as a hard silhouette.
+- `tools/wa_shadow_outline_fix.py` strips outline pixels that touch no body
+  pixel but sit at a shadow: transparent at the outer edge, shadow inside.
+  Applied to `world_cars_hd_v1` (1362 px), `vehicles_hd_v1` (6161 px) and
+  `hr_props_v1` (45 px). `to_sprite` now runs the same pass, so a re-bake
+  cannot bring the ring back.
