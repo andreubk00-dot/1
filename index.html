@@ -2829,7 +2829,13 @@ window.ED_BALANCE = Object.freeze({
     checkpointPlaytime(){
       if(!this.sessionActiveAt)return;const delta=now()-this.sessionActiveAt;this.sessionActiveAt=0;if(delta>0&&delta<21600000){const a=this.save.analytics||(this.save.analytics=structuredClone(DEFAULT_SAVE.analytics));a.totalPlayMs=(a.totalPlayMs||0)+delta;}
     }
-    resumePlaytime(){if(!this.sessionActiveAt)this.sessionActiveAt=now();}
+    resumePlaytime(){
+      // The page may become visible while an SDK ad is still covering the game.
+      if(document.hidden||this.externalPauseReasons?.size)return;
+      if(!this.sessionActiveAt)this.sessionActiveAt=now();
+      // Returning to a still-open tab on another UTC day also counts for retention.
+      this.initRetentionTelemetry();
+    }
     analyticsSummary(){
       const a=this.save.analytics||{},e=a.events||{},starts=e.run_start||0,fin=e.run_finish||0;return {sessions:a.sessions||0,playDays:(a.playDays||[]).length,totalPlayMinutes:Math.round((a.totalPlayMs||0)/60000),retention:{...(a.retention||{})},runs:{started:starts,finished:fin,finishRate:starts?Math.round(fin/starts*100):0},funnel:{tutorialOpen:e.tutorial_open||0,tutorialComplete:e.tutorial_complete||0,firstRun:e.funnel_first_run_start||0,firstManual:e.launch_goal_manual||0,firstUpgrade:e.launch_goal_upgrade||0,firstPulse:e.launch_goal_pulse||0,wave5:e.launch_goal_wave5||0,firstRelic:e.launch_goal_relic||0,firstBoss:e.launch_goal_boss||0,firstLab:e.first_lab_upgrade||0},commander:{level:this.save.commander?.level||1,shots:this.save.stats?.manualShots||0,hits:this.save.stats?.manualHits||0,accuracy:(this.save.stats?.manualShots||0)?Math.round((this.save.stats.manualHits||0)/(this.save.stats.manualShots||1)*100):0,weakHits:this.save.stats?.weakHits||0,modes:this.save.stats?.commanderModes||0,orbs:this.save.stats?.energyOrbs||0,interrupts:this.save.stats?.threatInterrupted||0,precisionBest:this.save.stats?.precisionBest||0,reactive:{mines:this.save.stats?.minesDetonated||0,nodes:this.save.stats?.nodesStabilized||0,sappers:this.save.stats?.sapperInterrupted||0,anchors:this.save.stats?.bossAnchors||0}},ads:{rewardOffers:e.reward_ad_offer||0,rewardAttempts:e.reward_ad_attempt||0,rewards:e.reward_ad_reward||0,interstitialOffers:e.interstitial_offer||0,interstitialShown:e.interstitial_shown||0}};
     }
@@ -3294,6 +3300,7 @@ window.ED_BALANCE = Object.freeze({
     handleExternalPause(active,source='visibility'){
       if(!this.externalPauseReasons)this.externalPauseReasons=new Set();
       if(active){
+        this.checkpointPlaytime(); // Exclude advertisements and background pauses from active playtime.
         if(this.run){this.run.holdFire=false;this.run.aim=null;}
         this.setRmbBoost(false);
         if(!this.externalPauseReasons.size)this.externalPauseWasPaused=!!this.paused;
@@ -3308,6 +3315,7 @@ window.ED_BALANCE = Object.freeze({
       if(this.externalPauseReasons.size){this.externalPause=true;this.pauseInternal(true);return;}
       if(!this.externalPause)return;
       this.externalPause=false;
+      this.resumePlaytime();
       const resume=this.inRun&&!this.externalPauseWasPaused&&!this.pauseOverlay;
       this.externalPauseWasPaused=false;
       if(resume){this.pauseInternal(false);this.bridge.gameplayStart();}
