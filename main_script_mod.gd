@@ -15927,6 +15927,47 @@ func _chunk_light_sources(chunk):
         out.append({"pos":light.global_position,"ground":Vector2(light.global_position.x,ground_y),"color":light.color,"light":light})
     return out
 
+# Rain on the water: drops land on a grid of cells (one cell = 14 x 8 texels),
+# each cell restarts every ~0.7 s at a hashed spot and phase, about half of them
+# per round; a drop is a flattened pixel ring growing 1 -> 4 texels and fading.
+# One shared material: "rain" is set once per weather change.
+const PUDDLE_SHADER = """shader_type canvas_item;
+uniform float rain = 0.0;
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void fragment() {
+    vec4 c = texture(TEXTURE, UV);   // COLOR already carries texture x modulate
+    if (rain > 0.01 && c.a > 0.5) {
+        vec2 px = floor(UV / TEXTURE_PIXEL_SIZE);
+        vec2 cell = floor(px / vec2(14.0, 8.0));
+        float ph = h2(cell);
+        float tt = TIME / 0.7 + ph;
+        float round_i = floor(tt);
+        float t = fract(tt);
+        if (h2(cell + round_i * 1.37) < 0.55 * rain) {
+            vec2 ctr = cell * vec2(14.0, 8.0) + floor(vec2(h2(cell + round_i) * 8.0 + 3.0, h2(cell - round_i) * 4.0 + 2.0));
+            vec2 d = px - ctr;
+            float r = 1.0 + floor(t * 3.0);              // 1, 2, 3
+            vec2 ro = vec2(2.0 * r, r) + 0.5;            // flattened by the 3/4 view
+            vec2 ri = max(ro - vec2(1.4, 1.0), vec2(0.01));
+            float eo = dot(d / ro, d / ro);
+            float ei = dot(d / ri, d / ri);
+            if (eo <= 1.0 && (ei > 1.0 || r < 1.5)) {
+                COLOR = vec4(0.70, 0.76, 0.82, max(COLOR.a, 0.85 * (1.0 - t * 0.7)));
+            }
+        }
+    }
+}"""
+var _puddle_mat = null
+
+func _puddle_material():
+    if _puddle_mat == null:
+        var sh = Shader.new()
+        sh.code = PUDDLE_SHADER
+        _puddle_mat = ShaderMaterial.new()
+        _puddle_mat.shader = sh
+        _puddle_mat.set_shader_parameter("rain",1.0 if weather_state == "rain" else 0.0)
+    return _puddle_mat
+
 func _make_puddle(chunk,local_pos:Vector2,variant:int,big:bool = false):
     var tex = AtlasTexture.new()
     tex.atlas = load(PUDDLE_TEX)
@@ -15939,6 +15980,7 @@ func _make_puddle(chunk,local_pos:Vector2,variant:int,big:bool = false):
     p.position = local_pos.round()
     p.flip_h = variant >= 4
     p.z_index = 1
+    p.material = _puddle_material()
     # still water does not scatter lamp light like the pavement does: it stays
     # dark and shows the lamp only as a reflection
     p.light_mask = 0
@@ -16113,6 +16155,8 @@ func _update_puddle_reflections():
         _puddle_reflection_follow(r,night,wet)
         if rain_changed and r.material != null:
             r.material.set_shader_parameter("rain",rain_value)
+    if rain_changed and _puddle_mat != null:
+        _puddle_mat.set_shader_parameter("rain",rain_value)
 
 func _update_detail_lights(delta):
     # Slight practical-light instability keeps abandoned interiors from looking
@@ -25060,7 +25104,31 @@ func _lamp_post_material():
         _lamp_post_mat.shader = sh
     return _lamp_post_mat
 
+# Public streets: carriageway 299..469, pavements 274..299 / 469..494 on both
+# axes (tools/wa_ground_districts.py). A lamp post belongs on the verge just
+# outside the pavement, never on the asphalt or the walkway.
+const STREET_BAND_MIN = 274.0
+const STREET_BAND_MAX = 494.0
+const LAMP_VERGE = [264.0,504.0]
+
+func _lamp_kerb_position(chunk,pos:Vector2) -> Vector2:
+    # settlements lay out their own streets; compound yards cover the road
+    if chunk == null or chunk.has_meta("faction_settlement") or bool(chunk.get_meta("poi_masks_public_road",false)):
+        return pos
+    var out = pos
+    for axis in [0,1]:
+        var v = pos[axis]
+        if v >= STREET_BAND_MIN and v < STREET_BAND_MAX:
+            out[axis] = LAMP_VERGE[0] if abs(v - LAMP_VERGE[0]) <= abs(v - LAMP_VERGE[1]) else LAMP_VERGE[1]
+    return out
+
 func _create_lamp(chunk,pos):
+    pos = _lamp_kerb_position(chunk,pos)
+    # the post's footing is clean: no blood pool or litter decal under it
+    if chunk != null:
+        for d in chunk.get_children():
+            if d.has_meta("ground_decal") and d.position.distance_to(pos + Vector2(0,4)) < 20.0:
+                d.queue_free()
     var lamp = Node2D.new()
     lamp.position = pos
     lamp.z_index = 5
