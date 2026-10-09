@@ -14518,6 +14518,7 @@ func _hd_prop_sprite(kind:String,parent,pos:Vector2,z_value:int,scale_value:floa
     sprite.set_meta("world_prop_kind",kind)
     sprite.set_meta("world_prop_scale",0.5)
     sprite.set_meta("world_prop_hd",true)
+    sprite.material = _sun_shadow_material()
     parent.add_child(sprite)
     return sprite
 
@@ -16202,10 +16203,18 @@ func _update_puddle_reflections():
     if _lamp_post_mat != null:
         _lamp_post_mat.set_shader_parameter("hide",clamp(night * 1.2,0.0,1.0))
     var wind_k = clamp(0.25 + wind_speed_kmh / 25.0,0.25,1.4)
+    _sun_hide = _sun_shadow_fade()
+    if _sun_shadow_mat != null:
+        _sun_shadow_mat.set_shader_parameter("hide",_sun_hide)
+    for blob in get_tree().get_nodes_in_group("sun_blob_shadows"):
+        if is_instance_valid(blob):
+            blob.modulate.a = 1.0 - _sun_hide * 0.8
     if _tree_sway_mat != null:
         _tree_sway_mat.set_shader_parameter("wind",wind_k)
+        _tree_sway_mat.set_shader_parameter("hide",_sun_hide)
     for m in _veg_sway_mats.values():
         m.set_shader_parameter("wind",wind_k)
+        m.set_shader_parameter("hide",_sun_hide)
     # the moon gets in through clear skies; cloud, rain and fog dull it
     var moon_in = night * (1.0 if weather_state == "clear" else (0.5 if weather_state == "cloudy" else 0.25)) * (1.0 - fog_density * 0.5)
     for wp in get_tree().get_nodes_in_group("window_light_patches"):
@@ -24801,7 +24810,9 @@ func _create_car(chunk,pos,color,angle):
 
     # Cars use a dedicated transparent game sprite instead of the old matte-backed atlas cell.
     # This avoids the "pasted rectangle" artifact while preserving the same collision footprint.
-    _ellipse(Vector2(0,9),28,5,Color(0.01,0.012,0.012,0.30),car)
+    var blob = _ellipse(Vector2(0,9),28,5,Color(0.01,0.012,0.012,0.30),car)
+    if blob != null:
+        blob.add_to_group("sun_blob_shadows")
     var sprite = Sprite2D.new()
     var car_atlas = load("res://car_v4.png")
     var hd_cars = load("res://art/vehicles/world_cars_hd_v1.png") if _hd_exists("res://art/vehicles/world_cars_hd_v1.png") else null
@@ -24835,6 +24846,7 @@ func _create_car(chunk,pos,color,angle):
         # paint tone close to the body colour: a pale tint made parked cars glow
         # white under the night CanvasModulate
         sprite.modulate = Color(0.55,0.55,0.55).lerp(color,0.9)
+        sprite.material = _sun_shadow_material()
         car.set_meta("car_model",_car_model_index(pos))
         car.set_meta("car_view",view)
         car.add_child(sprite)
@@ -24956,6 +24968,7 @@ uniform float wind = 0.3;
 uniform float base_row = 140.0;   // cell row where the plant stops moving
 uniform float span = 110.0;       // rows over which the sway builds up
 uniform float amp = 3.0;          // texels at full wind, at the very top
+uniform float hide = 0.0;         // sun shadow fade (baked shadow texels)
 varying float phase;
 varying vec4 tint;
 void vertex() {
@@ -24969,8 +24982,38 @@ void fragment() {
     k = k * sqrt(k);
     float s = sin(TIME * 1.1 + phase) * 0.65 + sin(TIME * 2.7 + phase * 1.7) * 0.35;
     float shift = floor(s * wind * amp * k + 0.5);
-    COLOR = texture(TEXTURE, UV - vec2(shift * TEXTURE_PIXEL_SIZE.x, 0.0)) * tint;
+    vec4 c = texture(TEXTURE, UV - vec2(shift * TEXTURE_PIXEL_SIZE.x, 0.0));
+    if (c.a > 0.0 && c.a < 0.95) c.a *= 1.0 - hide;   // the baked ground shadow
+    COLOR = c * tint;
 }"""
+# Baked ground shadows (flat alpha steps below 0.95 in the prop, tree, shrub
+# and car atlases) follow the sun: full by day, softer under cloud, rain or
+# fog, almost gone at night but for a faint contact shadow.
+const SUN_SHADOW_SHADER = """shader_type canvas_item;
+uniform float hide = 0.0;
+void fragment() {
+    vec4 c = COLOR;
+    if (c.a > 0.0 && c.a < 0.95) c.a *= 1.0 - hide;
+    COLOR = c;
+}"""
+var _sun_shadow_mat = null
+var _sun_hide = 0.0
+
+func _sun_shadow_material():
+    if _sun_shadow_mat == null:
+        var sh = Shader.new()
+        sh.code = SUN_SHADOW_SHADER
+        _sun_shadow_mat = ShaderMaterial.new()
+        _sun_shadow_mat.shader = sh
+        _sun_shadow_mat.set_shader_parameter("hide",_sun_hide)
+    return _sun_shadow_mat
+
+func _sun_shadow_fade() -> float:
+    var night = _time_night_factor()
+    var overcast = 0.0 if weather_state == "clear" else (0.5 if weather_state == "cloudy" else 1.0)
+    overcast = max(overcast,fog_density)
+    return clamp(night * 0.85 + overcast * 0.35 * (1.0 - night),0.0,0.88)
+
 var _tree_sway_mat = null
 var _sway_shader = null
 var _veg_sway_mats = {}
