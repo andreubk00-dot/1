@@ -79,6 +79,28 @@ async function smoke(profile){
   const result=await page.evaluate(()=>{
     const g=window.__ENDLESS_DEFENDERS__;g.save.tutorialDone=true;
     g.audio.enabled=false;g.startRun(false);
+    // The affordance must work without hover on a 320px touch display.
+    const upgradeButton=document.querySelector('[data-unit="0"]');
+    const unit=g.run.units[0],cost=g.unitUpgradeCost(unit),beforeLevel=unit.level;
+    g.run.energy=Math.max(0,cost-9);g.updateBattleHud();
+    const unavailable={status:upgradeButton.querySelector('.unit-affordance')?.textContent,
+      next:upgradeButton.querySelector('.unit-next-level')?.textContent,
+      blocked:upgradeButton.classList.contains('needs-energy'),
+      label:upgradeButton.getAttribute('aria-label')};
+    g.run.energy=cost+1;g.updateBattleHud();
+    const available={status:upgradeButton.querySelector('.unit-affordance')?.textContent,
+      ready:upgradeButton.classList.contains('can-upgrade'),
+      label:upgradeButton.getAttribute('aria-label')};
+    upgradeButton.click();
+    const purchased={level:unit.level,energy:g.run.energy,
+      next:document.querySelector('[data-unit="0"] .unit-next-level')?.textContent,
+      status:document.querySelector('[data-unit="0"] .unit-affordance')?.textContent};
+    const cardRects=[...document.querySelectorAll('[data-unit]')].map(btn=>{
+      const card=btn.getBoundingClientRect(),meta=btn.querySelector('.unit-upgrade-meta');
+      return {left:card.left,right:card.right,width:card.width,
+        metaWidth:meta?.clientWidth||0,metaScroll:meta?.scrollWidth||0};
+    });
+    const upgrade={cost,beforeLevel,unavailable,available,purchased,cardRects};
     const before=g.run.skillCd;g.usePulse();
     const pulse=g.run.skillCd>before&&g.run.skills===1;
     g.setRmbBoost(true);const speed=g.effectiveSpeed();
@@ -86,12 +108,30 @@ async function smoke(profile){
     g.save.shards=1234;g.persist(true);
     const skill=document.getElementById('skillBtn').getBoundingClientRect();
     const canvas=document.getElementById('gameCanvas').getBoundingClientRect();
-    return {running:g.inRun,wave:g.run.wave,pulse,speed,ended,saveVersion:g.save.version,
+    return {upgrade,running:g.inRun,wave:g.run.wave,pulse,speed,ended,saveVersion:g.save.version,
       skill:{width:skill.width,left:skill.left,right:skill.right},
       canvas:{width:canvas.width,height:canvas.height},width:innerWidth,
       scrollWidth:document.documentElement.scrollWidth};
   });
   assert(result.running&&result.wave===1,'Battle did not start');
+  assert.equal(result.upgrade.unavailable.blocked,true,'Insufficient-energy state not visible');
+  assert.equal(result.upgrade.unavailable.status,'+9⚡','Missing energy must show exact shortfall');
+  assert(result.upgrade.unavailable.next.includes(String(result.upgrade.beforeLevel+1)),'Next level hidden');
+  assert(result.upgrade.unavailable.label.includes('9'),'Accessible shortage label is missing');
+  assert.equal(result.upgrade.available.ready,true,'Affordable upgrade not highlighted');
+  assert.equal(result.upgrade.available.status,'✓','Available upgrade lacks visible ready mark');
+  assert(result.upgrade.available.label.includes('доступно'),'Affordable aria label missing');
+  assert.equal(result.upgrade.purchased.level,result.upgrade.beforeLevel+1,'Unit upgrade did not apply');
+  assert.equal(result.upgrade.purchased.energy,1,'Unit upgrade energy debit changed');
+  assert(result.upgrade.purchased.next.includes(String(result.upgrade.beforeLevel+2)),
+    'Next-level indicator did not advance after purchase');
+  assert(result.upgrade.cardRects.length===3,'Lost defender upgrade buttons');
+  for(const rect of result.upgrade.cardRects){
+    assert(rect.width>25&&rect.left>=-4&&rect.right<=result.width+4,
+      'Upgrade button outside viewport: '+JSON.stringify(rect));
+    assert(rect.metaScroll<=rect.metaWidth+3,
+      'Upgrade hint overflows compact card: '+JSON.stringify(rect));
+  }
   assert(result.pulse,'Pulse action failed');
   assert.equal(result.speed,3,'RMB boost does not select 3x');
   assert.equal(result.ended,1,'RMB boost stuck');
