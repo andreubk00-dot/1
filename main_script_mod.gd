@@ -954,6 +954,11 @@ var hud_interaction_key_badge = null
 var hud_interaction_key_label = null
 var hud_feedback_panel = null
 var hud_feedback_label = null
+# Transient view-only loot display. Does not touch saved inventory data.
+var hud_pickup_panel = null
+var hud_pickup_items = null
+var hud_pickup_timer = 0.0
+var hud_pickup_recent = []
 var hud_vital_bars = {}
 var hud_vital_values = {}
 var hud_status_label = null
@@ -4171,9 +4176,9 @@ func _process(delta):
         # Check entry into the actual home, even without crossing a chunk boundary.
         _update_expedition_progress()
 
+    # LMB hold uses each gun's established fire_cooldown and never auto-targets.
     if not inventory_open and not trader_open and not contract_open:
-        var w = weapon_defs.get(current_weapon_id, {})
-        if not region_map_open and not developer_panel_open and equipped_melee_id == "" and bool(w.get("automatic", false)) and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+        if not region_map_open and not developer_panel_open and equipped_melee_id == "" and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
             _fire_weapon()
 
     if tracer_time > 0.0:
@@ -4185,6 +4190,12 @@ func _process(delta):
         muzzle_time -= delta
         if muzzle_time <= 0.0 and muzzle_flash != null:
             muzzle_flash.visible = false
+
+    if hud_pickup_timer > 0.0:
+        hud_pickup_timer = max(0.0,hud_pickup_timer - delta)
+        if hud_pickup_timer <= 0.0 and hud_pickup_panel != null:
+            hud_pickup_panel.visible = false
+            hud_pickup_recent.clear()
 
     if autosave_time >= 10.0:
         autosave_time = 0.0
@@ -12810,7 +12821,7 @@ func _create_hud():
     # reactions, recovery notices and action feedback are actually visible to players.
     hud_feedback_panel = Panel.new()
     hud_feedback_panel.name = "SurvivalFeedback"
-    hud_feedback_panel.position = Vector2(110,158)
+    hud_feedback_panel.position = Vector2(110,218)
     hud_feedback_panel.size = Vector2(420,40)
     hud_feedback_panel.z_index = 20
     hud_feedback_panel.add_theme_stylebox_override("panel",_hud_panel_style(true))
@@ -12826,6 +12837,29 @@ func _create_hud():
     hud_feedback_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     hud_feedback_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+    hud_pickup_panel = Panel.new()
+    hud_pickup_panel.name = "LootReveal"
+    hud_pickup_panel.position = Vector2(140,130)
+    hud_pickup_panel.size = Vector2(360,92)
+    hud_pickup_panel.z_index = 24
+    hud_pickup_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    hud_pickup_panel.visible = false
+    var loot_style = StyleBoxFlat.new()
+    loot_style.bg_color = Color(0.035,0.055,0.075,0.93)
+    loot_style.border_color = Color(0.59,0.70,0.60,0.85)
+    loot_style.set_border_width_all(1)
+    loot_style.set_corner_radius_all(8)
+    hud_pickup_panel.add_theme_stylebox_override("panel",loot_style)
+    hud_world_root.add_child(hud_pickup_panel)
+    hud_pickup_items = HBoxContainer.new()
+    hud_pickup_items.name = "LootItems"
+    hud_pickup_items.position = Vector2(8,8)
+    hud_pickup_items.size = Vector2(344,76)
+    hud_pickup_items.alignment = BoxContainer.ALIGNMENT_CENTER
+    hud_pickup_items.add_theme_constant_override("separation",7)
+    hud_pickup_items.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    hud_pickup_panel.add_child(hud_pickup_items)
+
     debug_label = Label.new()
     debug_label.position = Vector2(160,18)
     debug_label.size = Vector2(320,66)
@@ -12836,6 +12870,52 @@ func _create_hud():
     debug_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     debug_label.visible = false
     canvas.add_child(debug_label)
+
+
+func _show_pickup_reveal(item_id:String,count:int) -> void:
+    if count <= 0 or hud_pickup_panel == null or hud_pickup_items == null or not item_defs.has(item_id):
+        return
+    hud_pickup_recent.append({"id":item_id,"count":count})
+    if hud_pickup_recent.size() > 3:
+        hud_pickup_recent.pop_front()
+    for child in hud_pickup_items.get_children():
+        hud_pickup_items.remove_child(child)
+        child.queue_free()
+    for item in hud_pickup_recent:
+        var id = str(item.get("id",""))
+        var rarity = str(ITEM_RARITY.get(id,"common"))
+        var rarity_color = Color(str(RARITY_INFO.get(rarity,{}).get("color","#b8bbb1")))
+        var card = PanelContainer.new()
+        card.custom_minimum_size = Vector2(105,72)
+        card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        var style = StyleBoxFlat.new()
+        style.bg_color = Color(0.08,0.12,0.15,0.97)
+        style.border_color = rarity_color
+        style.set_border_width_all(1)
+        style.set_corner_radius_all(5)
+        card.add_theme_stylebox_override("panel",style)
+        hud_pickup_items.add_child(card)
+        var content = VBoxContainer.new()
+        content.alignment = BoxContainer.ALIGNMENT_CENTER
+        content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        card.add_child(content)
+        var icon = TextureRect.new()
+        icon.custom_minimum_size = Vector2(94,44)
+        icon.texture = _make_item_icon(id)
+        icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+        icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        content.add_child(icon)
+        var title = Label.new()
+        title.text = "%s ×%d" % [str(item_defs[id].get("short",item_defs[id].get("name",id))),int(item.get("count",1))]
+        title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        title.add_theme_font_size_override("font_size",8)
+        title.add_theme_color_override("font_color",rarity_color)
+        title.clip_text = true
+        title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        content.add_child(title)
+    hud_pickup_timer = 2.0
+    hud_pickup_panel.visible = true
 
 
 func _update_hud():
@@ -17349,6 +17429,8 @@ func _take_selected_container():
     container_states[active_container_key] = state
     _target_farm_note_container_change(active_container_key,false)
     _award_container_discovery(active_container_key,moved)
+    if moved > 0:
+        _show_pickup_reveal(id,moved)
     call_deferred("_refresh_inventory_ui")
 
 func _store_selected_inventory():
@@ -17727,6 +17809,7 @@ func _pickup_world_item(node):
                     dropped_items.remove_at(i)
                     break
         node.queue_free()
+    _show_pickup_reveal(id,moved)
     _refresh_inventory_ui()
 
 
