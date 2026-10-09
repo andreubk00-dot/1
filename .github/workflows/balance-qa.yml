@@ -73,6 +73,8 @@ jobs:
             curl -fsS http://127.0.0.1:4173/ >/dev/null && curl -fsS http://127.0.0.1:4174/ >/dev/null && break
             sleep 1
           done
+      - name: Guard low-power paused and background canvas rendering
+        run: node tests/mobile-render-pause-v1824.test.cjs
       - name: Test PC and mobile UX in Chromium and WebKit
         run: node tests/browser-smoke.cjs
       - name: Upload browser screenshots
