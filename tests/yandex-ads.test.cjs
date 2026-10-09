@@ -48,6 +48,58 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     const f=fixture();let p=f.bridge.fullscreen();f.callbacks().onOpen();f.callbacks().onClose(false);assert.equal(await p,false);assert.equal(f.g.save.lastFullscreenAt,0);
     p=f.bridge.fullscreen();f.callbacks().onClose(true);assert.equal(await p,true);assert.equal(f.g.save.lastFullscreenAt,1000000000);
   });
+  await test('Manually ended run never offers a rewarded revive',async()=>{
+    const f=fixture();f.g.run.manualEnd=true;
+    await f.g.reviveRun();
+    assert.equal(f.requests(),0);
+    assert.equal(f.g.run.revived,false);
+  });
+  await test('Rewarded revive requires a real qualifying wave',async()=>{
+    const f=fixture();f.g.run.reached=1;
+    await f.g.reviveRun();
+    assert.equal(f.requests(),0);
+  });
+  await test('Double reward requires actual wave and earned shards',async()=>{
+    const f=fixture();f.g.run.reached=1;
+    await f.g.doubleResult();assert.equal(f.requests(),0);
+    f.g.run.reached=10;f.g.run.earnedShards=0;
+    await f.g.doubleResult();assert.equal(f.requests(),0);
+    assert.equal(f.g.save.shards,1000);
+  });
+  await test('Double reward blocks subsequent revive on the same result',async()=>{
+    const f=fixture(),pending=f.g.doubleResult();
+    f.callbacks().onRewarded();f.callbacks().onClose(true);await pending;
+    await f.g.reviveRun();
+    assert.equal(f.requests(),1);
+    assert.equal(f.g.run.revived,false);
+    assert.equal(f.g.run.resultDoubled,true);
+  });
+  await test('Fullscreen onOpen without verified showing never consumes session quota',async()=>{
+    const f=fixture();f.g.sessionInterstitials=0;
+    const p=f.bridge.fullscreen();
+    f.callbacks().onOpen();f.callbacks().onClose(false);
+    assert.equal(await p,false);
+    assert.equal(f.g.sessionInterstitials,0);
+    assert.equal(f.g.save.lastFullscreenAt,0);
+  });
+  await test('Only confirmed fullscreen views increment session quota once',async()=>{
+    const f=fixture();f.g.sessionInterstitials=0;
+    const p=f.bridge.fullscreen();
+    f.callbacks().onOpen();f.callbacks().onOpen();
+    f.callbacks().onClose(true);f.callbacks().onClose(true);
+    assert.equal(await p,true);
+    assert.equal(f.g.sessionInterstitials,1);
+    assert.equal(f.g.save.lastFullscreenAt,1000000000);
+  });
+  await test('Rejected rewarded ad leaves both result buttons available',async()=>{
+    const f=fixture(),p=f.g.doubleResult();
+    assert.equal($('doubleRewardBtn').disabled,true);
+    f.callbacks().onError('no-fill');await p;
+    assert.equal(f.g.resultAdBusy,false);
+    assert.equal($('doubleRewardBtn').disabled,false);
+    assert.equal($('reviveBtn').disabled,false);
+    assert.equal(f.g.save.shards,1000);
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
