@@ -3531,9 +3531,24 @@ window.ED_BALANCE = Object.freeze({
       const list=await this.bridge.pendingPurchases();for(const p of list||[])await this.applyPurchase(p);
     }
     async applyPurchase(p){
-      if(!p?.productID)return;const id=p.productID;if(this.save.purchases[p.purchaseToken]){if(id!=='no_interstitial')await this.bridge.consume(p.purchaseToken);return;}
-      const grants={crystals_80:{gems:80},crystals_250:{gems:250},supporter_pack:{gems:180,shards:500},no_interstitial:{noInterstitial:true}};const g=grants[id];if(!g)return;
-      if(g.gems)this.save.gems+=g.gems;if(g.shards)this.save.shards+=g.shards;if(g.noInterstitial)this.save.noInterstitial=true;this.save.purchases[p.purchaseToken]=true;await this.bridge.saveCloud(this.save,true);if(!g.noInterstitial)await this.bridge.consume(p.purchaseToken);this.persist(true);this.renderHome();
+      // Currency can only be granted for an actual token returned by Yandex Payments.
+      if(!p?.productID||typeof p.purchaseToken!=='string'||!p.purchaseToken.trim())return;
+      const id=p.productID,token=p.purchaseToken;
+      const grants={crystals_80:{gems:80},crystals_250:{gems:250},supporter_pack:{gems:180,shards:500},no_interstitial:{noInterstitial:true}};
+      const grant=grants[id];if(!grant)return;
+      if(!this.save.purchases||typeof this.save.purchases!=='object')this.save.purchases={};
+      if(!this.save.purchases[token]){
+        if(grant.gems)this.save.gems+=grant.gems;
+        if(grant.shards)this.save.shards+=grant.shards;
+        if(grant.noInterstitial)this.save.noInterstitial=true;
+        // Mark before any asynchronous work, so reentrant purchase callbacks are idempotent.
+        this.save.purchases[token]=true;
+        this.persist(true);this.renderHome();
+      }
+      // Consumption is destructive. Keep pending purchases recoverable until an
+      // authoritative cloud save succeeds, including after a previous retry failed.
+      const cloudSaved=await this.bridge.saveCloud(this.save,true);
+      if(cloudSaved&&!grant.noInterstitial)await this.bridge.consume(token);
     }
 
     timeUntil(ts){const d=Math.max(0,ts-now()),h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000);return `${h}:${String(m).padStart(2,'0')}`;}
