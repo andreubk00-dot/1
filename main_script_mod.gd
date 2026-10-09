@@ -12890,6 +12890,12 @@ func _show_pickup_reveal(item_id:String,count:int) -> void:
     hud_pickup_recent.append({"id":item_id,"count":count})
     if hud_pickup_recent.size() > 3:
         hud_pickup_recent.pop_front()
+    # Keep one-item rewards compact; grow only when several distinct items drop.
+    var card_total = hud_pickup_recent.size()
+    var panel_width = 16.0 + float(card_total * 105 + max(0,card_total - 1) * 7)
+    hud_pickup_panel.size = Vector2(panel_width,92)
+    hud_pickup_panel.position = Vector2((640.0 - panel_width) * 0.5,130)
+    hud_pickup_items.size = Vector2(panel_width - 16.0,76)
     for child in hud_pickup_items.get_children():
         hud_pickup_items.remove_child(child)
         child.queue_free()
