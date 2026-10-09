@@ -4176,10 +4176,9 @@ func _process(delta):
         # Check entry into the actual home, even without crossing a chunk boundary.
         _update_expedition_progress()
 
-    # LMB hold uses each gun's established fire_cooldown and never auto-targets.
-    if not inventory_open and not trader_open and not contract_open:
-        if not region_map_open and not developer_panel_open and equipped_melee_id == "" and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-            _fire_weapon()
+    # LMB hold uses each gun's existing cooldown and the mouse aim direction.
+    if _can_hold_fire_from_pointer(Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)):
+        _fire_weapon()
 
     if tracer_time > 0.0:
         tracer_time -= delta
@@ -4469,8 +4468,12 @@ func _unhandled_input(event):
         return
 
     if event is InputEventMouseButton:
-        if event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not inventory_open and not trader_open and not contract_open:
-            _primary_attack()
+        if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+            if equipped_melee_id != "":
+                if not inventory_open and not trader_open and not contract_open and not region_map_open and not developer_panel_open and not rest_open and not crafting_open and not base_build_open and not mod_panel_open:
+                    _primary_attack()
+            elif _can_hold_fire_from_pointer(true):
+                _primary_attack()
 
     elif event is InputEventKey:
         if event.pressed and not event.echo:
@@ -7162,6 +7165,15 @@ func _perform_shove():
         affected += 1
 
     _alert_enemies(player.global_position,55.0)
+
+
+func _can_hold_fire_from_pointer(held:bool) -> bool:
+    # Keep shots out of inventory, rest, crafting and every full-screen overlay.
+    # Weapon fire rate, ammo checks and reload restrictions remain _fire_weapon's job.
+    return held and equipped_melee_id == "" and weapon_defs.has(current_weapon_id) \
+        and not inventory_open and not trader_open and not contract_open \
+        and not region_map_open and not developer_panel_open \
+        and not rest_open and not crafting_open and not base_build_open and not mod_panel_open
 
 
 func _primary_attack():
@@ -16881,7 +16893,20 @@ func _take_all_container():
 
     var state = container_states[active_container_key]
     var entries = state.get("items",[])
+    var before_take = {}
+    for entry in entries:
+        var id = str(entry.get("id",""))
+        before_take[id] = int(before_take.get(id,0)) + int(entry.get("qty",1))
     var moved = _transfer_all_entries(entries,inventory_entries,INV_W,INV_H)
+    if moved > 0:
+        var remaining_by_id = {}
+        for entry in entries:
+            var id = str(entry.get("id",""))
+            remaining_by_id[id] = int(remaining_by_id.get(id,0)) + int(entry.get("qty",1))
+        for id in before_take:
+            var gained = int(before_take[id]) - int(remaining_by_id.get(id,0))
+            if gained > 0:
+                _show_pickup_reveal(str(id),gained)
     state["items"] = entries
     container_states[active_container_key] = state
     _target_farm_note_container_change(active_container_key,false)
