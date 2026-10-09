@@ -3528,7 +3528,14 @@ window.ED_BALANCE = Object.freeze({
     }
 
     async processPendingPurchases(){
-      const list=await this.bridge.pendingPurchases();for(const p of list||[])await this.applyPurchase(p);
+      const list=await this.bridge.pendingPurchases();
+      for(const p of list||[]){
+        try{await this.applyPurchase(p);}
+        catch(e){
+          // Leave failed receipts unconsumed for the next SDK recovery attempt.
+          console.warn('Pending purchase recovery failed',e);
+        }
+      }
     }
     async applyPurchase(p){
       // Currency can only be granted for an actual token returned by Yandex Payments.
