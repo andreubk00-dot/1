@@ -100,6 +100,37 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert.equal($('reviveBtn').disabled,false);
     assert.equal(f.g.save.shards,1000);
   });
+  await test('Synced v1.8.24 UI and save version are present in the Yandex package',async()=>{
+    assert(src.includes('<title>Бесконечные защитники — Яндекс Игры v1.8.24</title>'));
+    assert(src.includes('window.ED_YANDEX_BUILD=true;'));
+    assert(src.includes('<script src="/sdk.js"></script>'));
+    assert(src.includes('out.version=21'),'Save migration to schema 21 missing');
+    assert(src.includes('id="collectionSquadSummary"'),'Selected squad summary missing');
+    assert(src.includes('unit-upgrade-meta'),'Battle upgrade energy indicator missing');
+    assert(src.includes('.boss-hud:not(.hidden) ~ .boss-objective{top:140px}'),
+      'Narrow-phone boss help clearance missing');
+    assert.equal(typeof Game.prototype.squadSummaryData,'function');
+    assert.equal(typeof Game.prototype.activeSynergy,'function');
+    assert.equal(typeof Game.prototype.unitUpgradeCost,'function');
+    assert(!src.includes('onrender.com/'),'Standalone promo link must not leak to Yandex');
+  });
+  await test('No ad API cannot claim a revival or doubled reward',async()=>{
+    const f=fixture();f.bridge.ysdk=null;
+    await f.g.reviveRun();await f.g.doubleResult();
+    assert.equal(f.requests(),0);
+    assert.equal(f.g.save.shards,1000);
+    assert.equal(f.g.run.revived,false);
+    assert.equal(f.g.run.resultDoubled,false);
+    assert.equal(f.g.save.quests.doubleAds,0);
+  });
+  await test('SDK reward controls are hidden until actual rewarded ads exist',async()=>{
+    const a="const adAvailable=!!this.bridge.ysdk?.adv?.showRewardedVideo;";
+    assert(src.includes(a));
+    assert(src.includes("classList.toggle('hidden',!canDouble||!adAvailable)"));
+    assert(src.includes("classList.toggle('hidden',!canRevive||!adAvailable)"));
+    assert(src.includes("if(!this.ysdk?.adv?.showRewardedVideo)return false;"),
+      'Yandex builds may not grant phantom rewards');
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
