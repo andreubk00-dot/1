@@ -3,9 +3,9 @@
 Row 0: four puddle shapes, 112 x 56 texels each (56 x 28 world units).
 Row 1 (y 56): four large ones, 160 x 80 texels (80 x 40 units), laid under
 street lamps where the light pours onto the wet pavement. All flattened by
-the 3/4 view. Dark still water that lets the ground show through faintly, a
-wet darker rim where the ground is soaked, and a pale sky sheen along the far
-(upper) edge. The alpha is the water mask: a shader clips light reflections
+the 3/4 view. Still water mirroring the overcast sky (grey-blue, deeper in the middle,
+darker under the near bank), a wet darker rim where the ground is soaked,
+and a pale sky sheen along the far (upper) edge. The alpha is the water mask: a shader clips light reflections
 to it (clip_children does not work in Compatibility), so they stay on water.
 
     python3 tools/wa_puddles_hd.py <project_dir>
@@ -47,16 +47,20 @@ def cell(m):
         # soaked rim one texel outside the water
         rim = (np.roll(m, 1, 0) | np.roll(m, -1, 0) | np.roll(m, 1, 1) | np.roll(m, -1, 1) |
                np.roll(m, 2, 0) | np.roll(m, -2, 0)) & ~m
-        a[rim] = (14, 16, 18, 70)
-        a[m] = (34, 40, 46, 150)
+        a[rim] = (22, 20, 18, 96)
+        # water mirrors the overcast sky: a grey-blue, not a black hole
+        a[m] = (78, 86, 94, 205)
         # depth: the middle a little darker
         core = m & np.roll(m, 3, 0) & np.roll(m, -3, 0) & np.roll(m, 4, 1) & np.roll(m, -4, 1)
-        a[core] = (26, 32, 38, 170)
+        a[core] = (64, 72, 82, 215)
+        # a darker band under the near (lower) bank: the bank's reflection
+        near = m & ~np.roll(m, -3, 0)
+        a[near] = (52, 58, 64, 220)
         # sky sheen along the upper (far) edge, broken into pixel dashes
         top = m & ~np.roll(m, 2, 0)
         xs = np.arange(w)[None, :].repeat(h, 0)
         sheen = top & ((xs // 3) % 3 != 0)
-        a[sheen] = (140, 154, 166, 190)
+        a[sheen] = (176, 188, 198, 230)
     return a
 
 

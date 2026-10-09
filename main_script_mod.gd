@@ -20253,6 +20253,7 @@ func _build_ground(chunk,coord):
     ground_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     ground_sprite.position = Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5)
     ground_sprite.z_index = -20
+    ground_sprite.material = _wet_ground_material()
     chunk.add_child(ground_sprite)
     _add_ground_edge_blends(chunk,coord,district_ground)
 
@@ -24849,7 +24850,7 @@ func _vegetation_sway(sprite,kind:int):
     else:
         return
     if not _veg_sway_mats.has(key):
-        _veg_sway_mats[key] = _sway_material(54.0,40.0,1.6) if key == "bush" else _sway_material(58.0,34.0,2.6)
+        _veg_sway_mats[key] = _sway_material(57.0,46.0,2.8) if key == "bush" else _sway_material(58.0,34.0,2.8)
     sprite.material = _veg_sway_mats[key]
 
 var _fence_mesh_tex = null
@@ -27591,6 +27592,42 @@ void fragment() {
 }"""
 var rain_splash_layer = null
 
+# Wet ground: as rain sets in the ground darkens and cools; hard surfaces
+# (asphalt, paving, concrete: dark, unsaturated texels) darken more and catch
+# sparse 1 x 6 texel glints of the sky. "wet" eases up in ~20 s of rain and
+# dries over ~1.5 min. One shared material on every chunk ground.
+const WET_GROUND_SHADER = """shader_type canvas_item;
+uniform float wet = 0.0;
+varying vec2 wpos;
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
+void fragment() {
+    vec4 c = COLOR;
+    if (wet > 0.001) {
+        float lum = dot(c.rgb, vec3(0.30, 0.59, 0.11));
+        float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+        float hard = (sat < 0.09 && lum < 0.6) ? 1.0 : 0.0;
+        c.rgb *= 1.0 - wet * (0.12 + 0.10 * hard);
+        c.rgb *= mix(vec3(1.0), vec3(0.96, 1.0, 1.05), wet);
+        vec2 tp = floor(wpos * 2.0);
+        if (hard > 0.5 && h2(vec2(tp.x, floor(tp.y / 6.0))) > 0.94) {
+            c.rgb += vec3(0.06, 0.07, 0.08) * wet;
+        }
+    }
+    COLOR = c;
+}"""
+var _wet_ground_mat = null
+var _ground_wet = 0.0
+
+func _wet_ground_material():
+    if _wet_ground_mat == null:
+        var sh = Shader.new()
+        sh.code = WET_GROUND_SHADER
+        _wet_ground_mat = ShaderMaterial.new()
+        _wet_ground_mat.shader = sh
+        _wet_ground_mat.set_shader_parameter("wet",_ground_wet)
+    return _wet_ground_mat
+
 func _create_weather_visuals():
     rain_splash_layer = Polygon2D.new()
     rain_splash_layer.name = "RainSplashes"
@@ -27676,6 +27713,12 @@ func _lamp_flicker_gate(t:float,phase:float) -> float:
 func _update_weather_visuals(delta):
     var indoors = _high_risk_floor_active()
     var raining = weather_state == "rain" and not indoors
+
+    var wet_goal = 1.0 if weather_state == "rain" else 0.0
+    var prev_wet = _ground_wet
+    _ground_wet = wet_goal if delta <= 0.0 else move_toward(_ground_wet,wet_goal,delta * (1.0 / 20.0 if wet_goal > _ground_wet else 1.0 / 90.0))
+    if _wet_ground_mat != null and (abs(_ground_wet - prev_wet) > 0.0001 or delta <= 0.0):
+        _wet_ground_mat.set_shader_parameter("wet",_ground_wet)
 
     if is_instance_valid(rain_splash_layer):
         rain_splash_layer.visible = raining

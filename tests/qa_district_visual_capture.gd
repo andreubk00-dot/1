@@ -75,6 +75,7 @@ func run():
             await process_frame
         game.world_minutes = hour * 60.0
         game._update_day_night(0.0)          # settle eased light (moonlight) at once
+        game._update_weather_visuals(0.0)    # and the eased wet ground
         cam.global_position = center
         cam.zoom = Vector2(0.62,0.62)
         await _snap("%s/%s_wide.png" % [output,d])
