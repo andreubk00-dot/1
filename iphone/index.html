@@ -3629,7 +3629,7 @@ window.ED_BALANCE = Object.freeze({
       const steps=Math.max(1,Math.ceil(simDt/.033));
       for(let i=0;i<steps&&this.inRun&&!this.paused&&this.run;i++)this.update(simDt/steps);
     }
-    loop(ts){const dt=Math.min(.05,(ts-this.lastFrame)/1000||0);this.lastFrame=ts;this.stepCombat(dt);if(!$('battleScreen').classList.contains('hidden'))this.draw();this.samplePerformance(ts);this.animId=requestAnimationFrame(t=>this.loop(t));}
+    loop(ts){const dt=Math.min(.05,(ts-this.lastFrame)/1000||0);this.lastFrame=ts;this.stepCombat(dt);if(!document.hidden&&!this.paused&&!this.externalPause&&!$('battleScreen').classList.contains('hidden'))this.draw();this.samplePerformance(ts);this.animId=requestAnimationFrame(t=>this.loop(t));}
   }
 
   window.addEventListener('DOMContentLoaded',()=>{ const game=new Game(); window.__ENDLESS_DEFENDERS__=game; game.init(); });
