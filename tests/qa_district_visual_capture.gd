@@ -1,13 +1,14 @@
 extends SceneTree
 # Visual QA across the open world: for every district one representative
 # (non-POI) chunk is loaded and shot wide and at gameplay zoom.
-# xvfb-run godot --path . --rendering-driver opengl3 --script tests/qa_district_visual_capture.gd -- --qa-output=<dir> [--qa-only=<district_id>] [--qa-hour=13] [--qa-rain=0..1]
+# xvfb-run godot --path . --rendering-driver opengl3 --script tests/qa_district_visual_capture.gd -- --qa-output=<dir> [--qa-only=<district_id>] [--qa-hour=13] [--qa-rain=0..1] [--qa-fog=0..1]
 const Main = preload("res://main_script_mod.gd")
 const RegionCatalog = preload("res://world/region_catalog.gd")
 var output = ""
 var only = ""
 var hour = 13.0
 var rain = -1.0
+var fog = -1.0
 
 func _initialize():
     for arg in OS.get_cmdline_user_args():
@@ -19,6 +20,8 @@ func _initialize():
             hour = float(arg.trim_prefix("--qa-hour="))
         if arg.begins_with("--qa-rain="):
             rain = float(arg.trim_prefix("--qa-rain="))
+        if arg.begins_with("--qa-fog="):
+            fog = float(arg.trim_prefix("--qa-fog="))
     call_deferred("run")
 
 func _snap(path:String):
@@ -58,6 +61,8 @@ func run():
     if rain >= 0.0:
         game.weather_state = "rain" if rain > 0.5 else "clear"
         game.weather_timer = 99999.0
+    if fog >= 0.0:
+        game._qa_fog = fog
     var samples = _sample_chunks()
     for d in samples.keys():
         if only != "" and d != only:

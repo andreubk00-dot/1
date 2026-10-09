@@ -7746,6 +7746,8 @@ func _player_visibility_multiplier():
         visibility *= 0.74
     elif weather_state == "cloudy":
         visibility *= 0.90
+    # fog: thick fog halves how far the infected can make the player out
+    visibility *= lerpf(1.0,0.5,fog_density)
 
     # Player movement affects how easy the silhouette is to notice.
     if move_direction.length() <= 0.05:
@@ -27177,6 +27179,8 @@ func _apply_enemy_hit(base_damage):
     )
 
 func _weather_display_name():
+    if fog_density > 0.35 and weather_state != "rain":
+        return "ТУМАН"
     if weather_state == "rain":
         return "ДОЖДЬ"
     if weather_state == "cloudy":
@@ -27619,6 +27623,120 @@ void fragment() {
 var _wet_ground_mat = null
 var _ground_wet = 0.0
 
+# 1.38: fog. Some nights roll a fog in that hangs on into the morning, the
+# rain leaves a mist behind, and the fields and woods hold it thicker than the
+# town. It is drawn in the world (so the night darkens it and lamps glow in
+# it) as slow, wind-drifted banks of world-space noise; the player stands in a
+# ragged clear pocket that shrinks as it thickens. Pixel look: the density is
+# cut into flat alpha steps with a 4 x 4 ordered dither on the HD texel grid.
+# Beyond the pocket the infected are hidden in it, and it halves how far they
+# can make out the player.
+const FOG_SHADER = """shader_type canvas_item;
+uniform float density = 0.0;
+uniform vec2 player = vec2(0.0);
+uniform float clear_r = 220.0;
+uniform vec2 drift = vec2(0.0);
+uniform vec3 fog_col = vec3(0.74, 0.77, 0.78);
+varying vec2 wpos;
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float bayer4(vec2 p) {
+    vec2 q = mod(p, 4.0);
+    int x = int(q.x);
+    int y = int(q.y);
+    int i = y * 4 + x;
+    float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    return (m[i] + 0.5) / 16.0;
+}
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
+void fragment() {
+    vec2 tp = floor(wpos * 2.0);            // HD texel grid
+    vec2 w = tp * 0.5;
+    // banks: two octaves drifting with the wind, the slow one stretched sideways
+    float n = vn((w + drift) / vec2(260.0, 150.0)) * 0.65 + vn((w + drift * 1.7) / vec2(90.0, 60.0)) * 0.35;
+    float bank = smoothstep(0.2, 0.9, n);
+    // the clear pocket around the player, its edge ragged by the same noise
+    float d = length((w - player) * vec2(1.0, 1.25));
+    float r = clear_r * (0.85 + 0.3 * n);
+    float pocket = smoothstep(r, r + 110.0, d);
+    float a = density * (0.42 + 0.48 * bank) * (0.2 + 0.8 * pocket);
+    a = clamp(a * 1.15, 0.0, 0.92);
+    // flat steps + ordered dither: crisp pixel fog, no smooth gradient
+    float steps = 7.0;
+    float q = floor(a * steps + bayer4(tp)) / steps;
+    COLOR = vec4(fog_col, q);
+}"""
+var fog_layer = null
+var fog_density = 0.0
+var _qa_fog = -1.0
+var _since_rain = 999.0
+
+func _fog_target() -> float:
+    if _qa_fog >= 0.0:
+        return _qa_fog
+    var hour = world_minutes / 60.0
+    # a foggy night belongs to the morning after it
+    var day = world_day + (1 if hour >= 20.0 else 0)
+    var foggy = (day * 7919 + 13) % 100 < 40
+    var strength = 0.62 + float((day * 104729) % 36) / 100.0
+    var k = 0.0
+    if hour >= 20.0:
+        k = smoothstep(20.0,23.0,hour)
+    elif hour < 7.5:
+        k = 1.0
+    elif hour < 10.0:
+        k = 1.0 - (hour - 7.5) / 2.5
+    var target = strength * k if foggy else 0.0
+    # mist left behind by the rain
+    if weather_state != "rain" and _since_rain < 45.0:
+        target = max(target,0.42 * (1.0 - _since_rain / 45.0))
+    if weather_state == "rain":
+        target *= 0.4
+    # open country holds it, the town thins it
+    if player != null and not _high_risk_floor_active():
+        var pc = _world_to_chunk(player.global_position)
+        if loaded_chunks.has(pc):
+            var did = str(loaded_chunks[pc].get_meta("district_id",""))
+            if did.find("rural") >= 0 or did.find("dacha") >= 0 or did.find("woodland") >= 0:
+                target *= 1.15
+            elif did.find("military") < 0:
+                target *= 0.9
+    return clamp(target,0.0,1.0)
+
+func _update_fog(delta):
+    if weather_state == "rain":
+        _since_rain = 0.0
+    else:
+        _since_rain += delta
+    var target = _fog_target()
+    if _high_risk_floor_active():
+        target = 0.0
+    fog_density = target if delta <= 0.0 else move_toward(fog_density,target,delta * 0.05)
+    if not is_instance_valid(fog_layer):
+        return
+    fog_layer.visible = fog_density > 0.01
+    if not fog_layer.visible:
+        return
+    var cam = get_viewport().get_camera_2d()
+    var center = cam.get_screen_center_position() if cam != null else player.global_position
+    var half = get_viewport().get_visible_rect().size * 0.5 / (cam.zoom if cam != null else Vector2.ONE) + Vector2(24,24)
+    fog_layer.global_position = center.round()
+    fog_layer.polygon = PackedVector2Array([Vector2(-half.x,-half.y),Vector2(half.x,-half.y),Vector2(half.x,half.y),Vector2(-half.x,half.y)])
+    var m = fog_layer.material
+    m.set_shader_parameter("density",fog_density)
+    m.set_shader_parameter("player",player.global_position)
+    # thick fog closes the pocket in to arm's length plus a few steps
+    m.set_shader_parameter("clear_r",lerpf(300.0,72.0,fog_density))
+    var drift = m.get_shader_parameter("drift")
+    if drift == null:
+        drift = Vector2.ZERO
+    m.set_shader_parameter("drift",drift + Vector2(-(3.0 + wind_speed_kmh * 0.35),-0.8) * delta)
+
 func _wet_ground_material():
     if _wet_ground_mat == null:
         var sh = Shader.new()
@@ -27640,6 +27758,17 @@ func _create_weather_visuals():
     rain_splash_layer.material = splash_mat
     rain_splash_layer.visible = false
     add_child(rain_splash_layer)
+    fog_layer = Polygon2D.new()
+    fog_layer.name = "FogBanks"
+    fog_layer.z_as_relative = false
+    fog_layer.z_index = 80
+    var fog_shader = Shader.new()
+    fog_shader.code = FOG_SHADER
+    var fog_mat = ShaderMaterial.new()
+    fog_mat.shader = fog_shader
+    fog_layer.material = fog_mat
+    fog_layer.visible = false
+    add_child(fog_layer)
     weather_visual_root = Node2D.new()
     weather_visual_root.name = "WeatherVisuals"
     weather_visual_root.z_as_relative = false
@@ -27713,6 +27842,8 @@ func _lamp_flicker_gate(t:float,phase:float) -> float:
 func _update_weather_visuals(delta):
     var indoors = _high_risk_floor_active()
     var raining = weather_state == "rain" and not indoors
+
+    _update_fog(delta)
 
     var wet_goal = 1.0 if weather_state == "rain" else 0.0
     var prev_wet = _ground_wet
