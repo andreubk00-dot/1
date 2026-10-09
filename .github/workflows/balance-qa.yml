@@ -42,6 +42,10 @@ jobs:
         run: node tests/economy-guard-v1823.test.cjs
       - name: Verify long-term contract progress display
         run: node tests/progression-goal-v1824.test.cjs
+      - name: Guard recurring economy reward claims and save compatibility
+        run: node tests/economy-rewards-v1824.test.cjs
+      - name: Audit calendar reward impact on defender unlocks
+        run: node tests/economy-calendar-v1824.test.cjs
       - name: Run deterministic complete-run simulations
         run: |
           for profile in fresh progressed veteran; do
@@ -49,6 +53,8 @@ jobs:
               node tests/simulate-runs.cjs "$profile" "$seed" 1
             done
           done
+      - name: Verify combat difficulty gates across squad progression
+        run: node tests/combat-pacing-v1824.test.cjs
       - name: Serve both static builds
         run: |
           nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory pc > /tmp/pc-http.log 2>&1 &
