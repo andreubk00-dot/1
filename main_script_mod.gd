@@ -857,6 +857,7 @@ var world_minutes = 19.5 * 60.0
 var world_day = 1
 var day_speed = 4.0
 var canvas_modulate = null
+var _moon_open = 0.0
 var player_light = null
 
 var weather_state = "clear"
@@ -14741,7 +14742,48 @@ func _tall_facade_window(parent,style,state,pos):
     if sprite != null:
         sprite.set_meta("window_state",int(state))
         sprite.add_to_group("architecture_windows")
+        if int(state) == 3:
+            _add_window_glow(sprite)
     return sprite
+
+# Lit windows: the warm panes of the "lit" window cell, drawn again additively
+# and over-bright so they glow through the night CanvasModulate instead of
+# sinking to a dull brown. Only the pane texels (warm, bright) are emitted.
+const WINDOW_GLOW_SHADER = """shader_type canvas_item;
+render_mode blend_add;
+uniform vec3 tint = vec3(3.6, 3.0, 2.2);
+void fragment() {
+    vec4 c = texture(TEXTURE, UV);
+    float pane = (c.r > 0.62 && c.g > 0.42 && c.b < 0.62 && c.r > c.b + 0.25) ? 1.0 : 0.0;
+    COLOR = vec4(c.rgb * tint, c.a * pane * COLOR.a);
+}"""
+var _window_glow_shader = null
+
+func _add_window_glow(window_sprite,night_only:bool = false):
+    if _window_glow_shader == null:
+        _window_glow_shader = Shader.new()
+        _window_glow_shader.code = WINDOW_GLOW_SHADER
+    var g = Sprite2D.new()
+    g.texture = window_sprite.texture
+    if night_only and window_sprite.texture is AtlasTexture:
+        # the lit cell (column 3) of the same window style over the dark panes
+        var lit = AtlasTexture.new()
+        lit.atlas = window_sprite.texture.atlas
+        var r:Rect2 = window_sprite.texture.region
+        lit.region = Rect2(r.size.x * 3.0,r.position.y,r.size.x,r.size.y)
+        g.texture = lit
+    g.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    var mat = ShaderMaterial.new()
+    mat.shader = _window_glow_shader
+    g.material = mat
+    g.light_mask = 0
+    g.modulate = Color(1,1,1,0)
+    # one in five is a stove or a candle behind the curtain: it breathes
+    var h = abs(hash(str(window_sprite.get_parent().get_instance_id()) + str(window_sprite.position)))
+    g.set_meta("candle",h % 5 == 0)
+    g.set_meta("phase",float(h % 1000) * 0.01)
+    g.add_to_group("window_glows")
+    window_sprite.add_child(g)
 
 func _window_x_selected(values,x):
     for value in values:
@@ -14856,6 +14898,9 @@ func _build_tall_facade(facade,sign_text,size,building_id,door_x,fh,profile = ""
                     window_sprite.add_to_group("breachable_window_visuals")
                 if state == 3 or (state == 0 and (seed_value + k + row) % 5 == 0):
                     _add_detail_light(facade,Vector2(wx,wy + 6.0),Color(1.0,0.70,0.40),0.30,0.40,true)
+                    # dark by day, someone home at night: the panes light up
+                    if state == 0 and is_instance_valid(window_sprite) and not is_breach_window:
+                        _add_window_glow(window_sprite,true)
             if style == 6 and state == 0 and h % 2 == 0:
                 _facade_atlas_sprite(facade,"res://facade_features_v1.png",Rect2(7 * 64,0,64,48),Vector2(wx,wy - 5.0),0.6)
     if profile == "checkpoint":
@@ -16053,6 +16098,15 @@ func _update_puddle_reflections():
     _puddle_rain_state = rain_value
     if _lamp_post_mat != null:
         _lamp_post_mat.set_shader_parameter("hide",clamp(night * 1.2,0.0,1.0))
+    var tw = Time.get_ticks_msec() * 0.001
+    for g in get_tree().get_nodes_in_group("window_glows"):
+        if not is_instance_valid(g):
+            continue
+        var a = night * 0.85
+        if bool(g.get_meta("candle",false)):
+            var ph = float(g.get_meta("phase",0.0))
+            a *= 0.78 + sin(tw * 2.3 + ph) * 0.1 + sin(tw * 7.1 + ph * 1.9) * 0.06
+        g.modulate.a = clamp(a,0.0,1.0)
     for r in get_tree().get_nodes_in_group("puddle_reflections"):
         if not is_instance_valid(r):
             continue
@@ -18397,6 +18451,11 @@ func _set_tall_window_state(sprite,style,state):
     tex.region = Rect2(clamp(int(state),0,3) * 48 * k,clamp(int(style),0,6) * 40 * k,48 * k,40 * k)
     sprite.texture = tex
     sprite.set_meta("window_state",clamp(int(state),0,3))
+    for g in sprite.get_children():
+        if g.is_in_group("window_glows"):
+            g.queue_free()
+    if clamp(int(state),0,3) == 3:
+        _add_window_glow(sprite)
 
 func _window_condition_max(rec):
     return WINDOW_MAX_CONDITION + (40.0 if bool(rec.get("reinforced",false)) else 0.0)
@@ -29230,18 +29289,36 @@ func _update_day_night(delta):
     elif hour < 7.0:
         brightness = lerpf(0.245,0.82,(hour - 5.0) / 2.0)
 
+    # 1.38: moonlight. Out in the fields, the dachas and the woods nothing
+    # blocks the sky: the night there is a touch lighter and colder than in the
+    # town, so dirt roads, plots and tree lines still read. Eased so crossing
+    # a district border never pops.
+    var night_mix = clamp((0.82 - brightness) / (0.82 - 0.245),0.0,1.0)
+    var open_target = 0.0
+    if player != null and not _high_risk_floor_active():
+        var pc = _world_to_chunk(player.global_position)
+        if loaded_chunks.has(pc):
+            var did = str(loaded_chunks[pc].get_meta("district_id",""))
+            if did.find("rural") >= 0 or did.find("dacha") >= 0 or did.find("woodland") >= 0 or did.find("military") >= 0:
+                open_target = 1.0
+    _moon_open = open_target if delta <= 0.0 else move_toward(_moon_open,open_target,delta * 0.25)
+    # no moon through rain clouds, half of it when overcast
+    var sky = 1.0 if weather_state == "clear" else (0.5 if weather_state == "cloudy" else 0.2)
+    var moon = _moon_open * night_mix * sky
+    brightness += 0.065 * moon
+
     if canvas_modulate != null:
         var weather_dim = 1.0
-        var blue_shift = 1.0
+        var blue_shift = 1.0 + 0.12 * moon
         if weather_state == "cloudy":
             weather_dim = 0.90
-            blue_shift = 1.04
+            blue_shift += 0.04
         elif weather_state == "rain":
             weather_dim = 0.86
-            blue_shift = 1.10
+            blue_shift += 0.10
 
         canvas_modulate.color = Color(
-            brightness * 0.93 * weather_dim,
+            brightness * (0.93 - 0.07 * moon) * weather_dim,
             brightness * 0.96 * weather_dim,
             min(1.0,brightness * 1.04 * weather_dim * blue_shift),
             1.0
