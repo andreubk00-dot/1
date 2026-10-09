@@ -2884,8 +2884,28 @@ window.ED_BALANCE = Object.freeze({
     }
 
     coachData(key){const c=CONTEXT_COACHES[key];if(!c)return null;const t=c[this.lang]||c.ru;return {icon:c.icon,kicker:t[0],title:t[1],text:t[2],tip:t[3]||''};}
-    showCoach(key){if(!key||this.save.coachSeen?.[key])return false;const d=this.coachData(key),el=$('coachScreen');if(!d||!el)return false;this.save.coachSeen=this.save.coachSeen||{};this.save.coachSeen[key]=true;$('coachIcon').textContent=d.icon;$('coachKicker').textContent=d.kicker;$('coachTitle').textContent=d.title;$('coachText').textContent=d.text;$('coachContinueText').textContent=this.lang==='ru'?'Понятно':'Got it';const tip=$('coachTip');if(d.tip){tip.textContent=d.tip;tip.classList.remove('hidden');}else tip.classList.add('hidden');el.classList.remove('hidden');this.persist();this.track('coach_seen',{key});return true;}
-    closeCoach(){$('coachScreen')?.classList.add('hidden');}
+    showCoach(key){
+      // Opening a tip is not the same as reading it: acknowledge only on Continue.
+      if(!key||this.save.coachSeen?.[key]||this.coachPendingKey)return false;
+      const d=this.coachData(key),el=$('coachScreen');if(!d||!el)return false;
+      this.coachPendingKey=key;
+      $('coachIcon').textContent=d.icon;$('coachKicker').textContent=d.kicker;
+      $('coachTitle').textContent=d.title;$('coachText').textContent=d.text;
+      $('coachContinueText').textContent=this.lang==='ru'?'Понятно':'Got it';
+      const tip=$('coachTip');
+      if(d.tip){tip.textContent=d.tip;tip.classList.remove('hidden');}else tip.classList.add('hidden');
+      el.classList.remove('hidden');this.track('coach_seen',{key});return true;
+    }
+    closeCoach(){
+      const el=$('coachScreen');if(!el||el.classList.contains('hidden'))return;
+      el.classList.add('hidden');
+      const key=this.coachPendingKey;this.coachPendingKey=null;
+      if(key){
+        this.save.coachSeen=this.save.coachSeen||{};
+        this.save.coachSeen[key]=true;
+        this.persist();
+      }
+    }
     updateProgressiveHome(){
       const bw=this.save.bestWave||0,bosses=this.save.stats?.bosses||0,journeyDone=!!this.save.journey?.bonusClaimed;const rules={returnPanel:bw>=1,dailyBtn:bw>=1,challengePanel:bw>=10,journeyPanel:!journeyDone,weeklyPanel:bw>=10,seasonPanel:bosses>=1,loyaltyPanel:(this.save.streak||0)>=3,metaPanel:bw>=10||(this.save.meta?.level||1)>1,commanderPanel:bw>=3||(this.save.stats?.manualHits||0)>=5,achievementPanel:bosses>=1||Object.keys(this.save.achievements||{}).length>0};
       for(const [id,show] of Object.entries(rules))$(id)?.classList.toggle('progression-hidden',!show);
