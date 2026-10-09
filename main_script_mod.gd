@@ -7871,6 +7871,7 @@ func _emit_ai_sound(origin,radius,kind = "generic",strength = 1.0,source_enemy =
     var base_radius = max(0.0,float(radius))
     if base_radius <= 0.0:
         return
+    _scare_crows(origin,base_radius * (1.0 if kind == "gunshot" else 0.45))
 
     var weather_mult = _sound_weather_multiplier(kind)
     var source_strength = max(0.05,float(strength))
@@ -27711,6 +27712,206 @@ void fragment() {
 var _wet_ground_mat = null
 var _ground_wet = 0.0
 
+# 1.38: life in the dead town. Small flocks of crows settle on open ground a
+# little way from the player and peck about; walking up on them, a shot or a
+# loud noise puts them up, and they flap off into the sky and away. They keep
+# to daylight and dry or drizzly hours. Wind blows dry leaves along the ground
+# (not in the rain, when the leaves lie wet). Both live around the player,
+# not in the chunks, so they cost chunk loads nothing.
+const CROW_MAX = 9
+var crow_layer = null
+var _crows = []
+var _crow_tex = null
+var _crow_spawn_timer = 2.0
+var leaf_emitter = null
+
+func _make_crow_texture() -> ImageTexture:
+    # 4 frames of 12 x 9 texels: peck down, head up, wings up, wings down
+    var frames = [
+        ["............","............","............","....####....","...######.g.","..#######...","...#####....","....#..#....","....#..#...."],
+        ["............","............","........#g..","....#####...","...######...","..#######...","...#####....","....#..#....","....#..#...."],
+        ["#..........#","##........##",".##..##..##.","..###g####..","...######...","....####....","............","............","............"],
+        ["............","............","............","..###g####..",".##########.","##..####..##","#..........#","............","............"]]
+    var img = Image.create(48,9,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    for f in range(4):
+        for y in range(9):
+            for x in range(12):
+                var ch = frames[f][y][x]
+                if ch == "#":
+                    img.set_pixel(f * 12 + x,y,Color(0.07,0.07,0.08,1.0))
+                elif ch == "g":
+                    img.set_pixel(f * 12 + x,y,Color(0.45,0.44,0.40,1.0))
+    return ImageTexture.create_from_image(img)
+
+func _crow_sprite():
+    if _crow_tex == null:
+        _crow_tex = _make_crow_texture()
+    var s = Sprite2D.new()
+    var t = AtlasTexture.new()
+    t.atlas = _crow_tex
+    t.region = Rect2(0,0,12,9)
+    s.texture = t
+    s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    s.scale = Vector2(0.5,0.5)
+    return s
+
+func _crow_spot_free(pos:Vector2) -> bool:
+    var c = _world_to_chunk(pos)
+    if not loaded_chunks.has(c):
+        return false
+    var chunk = loaded_chunks[c]
+    if chunk.has_meta("faction_settlement"):
+        return false
+    var local = pos - chunk.global_position
+    return not _tree_overlaps_building(chunk,local) and _puddle_under(pos) == null
+
+func _spawn_crow_flock():
+    var hour = world_minutes / 60.0
+    if hour < 6.5 or hour > 19.5 or weather_state == "rain" or fog_density > 0.5:
+        return
+    var cam = get_viewport().get_camera_2d()
+    var center = cam.get_screen_center_position() if cam != null else player.global_position
+    var rng = RandomNumberGenerator.new()
+    rng.randomize()
+    for attempt in range(8):
+        var ang = rng.randf() * TAU
+        var at = center + Vector2(cos(ang),sin(ang) * 0.7) * rng.randf_range(170.0,300.0)
+        if at.distance_to(player.global_position) < 140.0 or not _crow_spot_free(at):
+            continue
+        var n = rng.randi_range(1,4)
+        for i in range(n):
+            if _crows.size() >= CROW_MAX:
+                return
+            var crow = Node2D.new()
+            crow.global_position = (at + Vector2(rng.randf_range(-14,14),rng.randf_range(-8,8))).round()
+            crow.z_as_relative = false
+            crow.z_index = 8
+            var shadow = _ellipse(Vector2(0,1),2.5,1.0,Color(0,0,0,0.25),crow)
+            var spr = _crow_sprite()
+            spr.position = Vector2(0,-2)
+            spr.flip_h = rng.randf() < 0.5
+            crow.add_child(spr)
+            crow.set_meta("spr",spr)
+            crow.set_meta("shadow",shadow)
+            crow.set_meta("state","ground")
+            crow.set_meta("t",rng.randf() * 3.0)
+            crow.set_meta("next_hop",rng.randf_range(0.6,2.4))
+            crow_layer.add_child(crow)
+            _crows.append(crow)
+        return
+
+func _scare_crows(origin:Vector2,radius:float):
+    for crow in _crows:
+        if is_instance_valid(crow) and str(crow.get_meta("state","")) == "ground" and crow.global_position.distance_to(origin) < radius:
+            _crow_take_off(crow,origin)
+
+func _crow_take_off(crow,from:Vector2):
+    var away = (crow.global_position - from).normalized()
+    if away.length() < 0.1:
+        away = Vector2(1,0)
+    # up and away, a little spread so a flock fans out
+    var dir = (away + Vector2(randf_range(-0.4,0.4),randf_range(-0.4,0.1))).normalized()
+    crow.set_meta("state","fly")
+    crow.set_meta("vel",dir * randf_range(70.0,95.0))
+    crow.set_meta("alt",0.0)
+    crow.get_meta("spr").flip_h = dir.x < 0.0
+
+func _update_crows(delta):
+    if crow_layer == null:
+        crow_layer = Node2D.new()
+        crow_layer.name = "Crows"
+        add_child(crow_layer)
+    if player == null or _high_risk_floor_active():
+        return
+    _crow_spawn_timer -= delta
+    if _crow_spawn_timer <= 0.0:
+        _crow_spawn_timer = randf_range(6.0,14.0)
+        if _crows.size() < CROW_MAX - 2:
+            _spawn_crow_flock()
+    var keep = []
+    for crow in _crows:
+        if not is_instance_valid(crow):
+            continue
+        var spr = crow.get_meta("spr")
+        var t = float(crow.get_meta("t",0.0)) + delta
+        crow.set_meta("t",t)
+        var state = str(crow.get_meta("state","ground"))
+        if state == "ground":
+            # pecking: head down / up, now and then a hop
+            spr.texture.region = Rect2((0 if int(t * 3.0) % 3 != 0 else 1) * 12,0,12,9)
+            var hop = float(crow.get_meta("next_hop",1.0)) - delta
+            if hop <= 0.0:
+                hop = randf_range(0.8,2.6)
+                var step = Vector2(randf_range(-5,5),randf_range(-3,3))
+                crow.global_position = (crow.global_position + step).round()
+                spr.flip_h = step.x < 0.0
+            crow.set_meta("next_hop",hop)
+            if crow.global_position.distance_to(player.global_position) < 70.0:
+                _crow_take_off(crow,player.global_position)
+            if crow.global_position.distance_to(player.global_position) > 700.0:
+                crow.queue_free()
+                continue
+        else:
+            var vel:Vector2 = crow.get_meta("vel")
+            var alt = float(crow.get_meta("alt",0.0)) + delta * 22.0
+            crow.set_meta("alt",alt)
+            crow.global_position += vel * delta
+            spr.position = Vector2(0,-2.0 - alt).round()
+            spr.texture.region = Rect2((2 if int(t * 10.0) % 2 == 0 else 3) * 12,0,12,9)
+            var sh = crow.get_meta("shadow")
+            if is_instance_valid(sh):
+                sh.modulate.a = clamp(1.0 - alt / 40.0,0.0,1.0)
+            # high in the air the bird draws over the roofs
+            crow.z_index = 8 if alt < 14.0 else 70
+            if alt > 90.0 or crow.global_position.distance_to(player.global_position) > 700.0:
+                crow.queue_free()
+                continue
+        keep.append(crow)
+    _crows = keep
+
+func _update_leaves(delta):
+    if leaf_emitter == null:
+        leaf_emitter = CPUParticles2D.new()
+        leaf_emitter.name = "WindLeaves"
+        leaf_emitter.local_coords = false
+        leaf_emitter.z_as_relative = false
+        leaf_emitter.z_index = -40
+        var img = Image.create(2,2,false,Image.FORMAT_RGBA8)
+        img.fill(Color(1,1,1,1))
+        leaf_emitter.texture = ImageTexture.create_from_image(img)
+        leaf_emitter.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        leaf_emitter.amount = 14
+        leaf_emitter.lifetime = 5.0
+        leaf_emitter.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+        leaf_emitter.direction = Vector2(-1,0)
+        leaf_emitter.spread = 18.0
+        leaf_emitter.gravity = Vector2(0,0)
+        leaf_emitter.angular_velocity_min = 0.0
+        leaf_emitter.angular_velocity_max = 0.0
+        leaf_emitter.scale_amount_min = 0.5
+        leaf_emitter.scale_amount_max = 0.5
+        var ramp = Gradient.new()
+        ramp.set_color(0,Color(0.80,0.45,0.18,0.0))
+        ramp.set_color(1,Color(0.62,0.36,0.16,0.0))
+        ramp.add_point(0.1,Color(0.80,0.45,0.18,0.9))
+        ramp.add_point(0.85,Color(0.66,0.40,0.18,0.9))
+        leaf_emitter.color_ramp = ramp
+        var hue = Gradient.new()
+        hue.set_color(0,Color(1.0,1.0,1.0))
+        hue.set_color(1,Color(0.85,0.9,0.55))
+        leaf_emitter.color_initial_ramp = hue
+        add_child(leaf_emitter)
+    var cam = get_viewport().get_camera_2d()
+    var center = cam.get_screen_center_position() if cam != null else player.global_position
+    var half = get_viewport().get_visible_rect().size * 0.5 / (cam.zoom if cam != null else Vector2.ONE)
+    leaf_emitter.global_position = center + Vector2(half.x * 0.6,0)
+    leaf_emitter.emission_rect_extents = Vector2(half.x * 0.6,half.y)
+    var gust = clamp(wind_speed_kmh / 20.0,0.2,1.0)
+    leaf_emitter.initial_velocity_min = 18.0 * gust
+    leaf_emitter.initial_velocity_max = 40.0 * gust
+    leaf_emitter.emitting = weather_state != "rain" and _ground_wet < 0.4 and not _high_risk_floor_active()
+
 # 1.38: footprints and splashes. Every 13 units a walker (the player and the
 # infected near them) sets down a boot: left, right, left, aimed along the
 # step. On wet ground, and for a few steps after wading through a puddle,
@@ -28158,6 +28359,8 @@ func _update_weather_visuals(delta):
     _update_fog(delta)
     _prefetch_high_risk_art(delta)
     _update_footprints(delta)
+    _update_crows(delta)
+    _update_leaves(delta)
 
     var wet_goal = 1.0 if weather_state == "rain" else 0.0
     var prev_wet = _ground_wet
