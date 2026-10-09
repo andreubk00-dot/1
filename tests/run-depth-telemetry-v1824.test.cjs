@@ -45,5 +45,28 @@ assert.deepEqual(g.save.analytics.waves,{});
   assert.equal(summary.runs.manual,1);assert.equal(summary.runs.defeats,1);
   assert.equal(summary.runs.results,2);
   assert.equal(summary.runs.finished,2);
+  // A hard navigation away from the result screen must retain the final outcome.
+  g.save.runs=3;
+  g.run={wave:7,reached:7,completed:6,startedAt:clock-12000,manualEnd:true,firstRun:false};
+  g.inRun=false;g.resultAdBusy=false;
+  g.bridge.adInProgress=true;
+  assert.equal(g.finalizePendingRunAnalytics(),false,'An unresolved SDK ad must block finalization');
+  g.bridge.adInProgress=false;g.resultAdBusy=true;
+  assert.equal(g.finalizePendingRunAnalytics(),false,'An unresolved reward must block finalization');
+  g.resultAdBusy=false;g.inRun=true;
+  assert.equal(g.finalizePendingRunAnalytics(),false,'Active play is not a finalized run');
+  g.inRun=false;
+  const previousPersists=persists;
+  assert.equal(g.finalizePendingRunAnalytics(),true,'Unloading a result should finalize telemetry');
+  assert.equal(g.save.analytics.events.run_finish,3);
+  assert.equal(g.save.analytics.events.run_end_manual,2);
+  assert.deepEqual(g.save.analytics.waves,{'1':1,'7':1,'10':1});
+  assert.equal(persists,previousPersists+1,'Finalized outcome must be stored');
+  assert.equal(g.finalizePendingRunAnalytics(),false,'Double pagehide finalizes only once');
+  await g.leaveResult();
+  assert.equal(g.save.analytics.events.run_finish,3,'Back to menu after pagehide duplicated finalization');
+  assert(pc.includes("if(!event.persisted)this.finalizePendingRunAnalytics()"),
+    'The pagehide event must finalize only non-bfcache unloads');
+  // The saved session schema remains the same, since the idempotency flag is run-local.
   console.log('PASS final run depths, revived run dedupe, exit reasons, summary and PC/mobile parity');
 })().catch(e=>{console.error(e);process.exitCode=1;});
