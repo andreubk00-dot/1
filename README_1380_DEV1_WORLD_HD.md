@@ -768,3 +768,16 @@ QA: `tests/qa_vertical_fence_capture.gd`.
 - **Hit.** A blow jolts the camera away from the attacker (Camera2D offset,
   whole pixels, settling fast) and flushes the screen edges red. Below 30 health
   the edges throb with the pulse, faster as health drops (`HurtVignette` layer).
+
+## dev45 — body language
+
+- **Breath.** Outside below +4 °C the survivor's breath hangs in small pale puffs
+  in front of the face, drifting forward and up and fading in about a second;
+  quicker and doubled when out of breath, denser the colder it is, none in
+  shelter (`_update_breath`). Facing away, the puffs draw behind the head.
+- **Cold.** With the core below 36.2 °C the body shivers: a fine, fast jitter in
+  half pixels that grows as it cools.
+- **Hurt leg.** Legs below 60 % condition: on every other step the body sinks
+  onto the good leg (up to 2 px), stronger the worse the leg.
+- **Spent.** Fatigue above 70 or health below 35: standing, the body sways
+  slowly from foot to foot (`_body_state_offset`).

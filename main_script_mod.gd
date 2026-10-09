@@ -6692,6 +6692,7 @@ func _update_player_visuals(delta):
     var impact_drop = Vector2(0,foot_contact * 0.012 * blend * locomotion_strength)
     var pose_offset = Vector2(idle_weight + idle_micro,idle_breath - 1.0)
     pose_offset += planted_shift + forward_mass + impact_drop + visual_motion_impulse * 0.72 + Vector2(0,body_bob)
+    pose_offset += _body_state_offset(phase,blend)
     if interact_anim > 0.0 and interact_kind == "reach":
         # a push or a reach: the body leans a pixel or two toward the target
         var rp = clamp(1.0 - interact_anim / max(0.01,interact_anim_len),0.0,1.0)
@@ -6947,6 +6948,81 @@ func _update_weapon_visual():
         )
 
     _update_visible_weapon_mods()
+
+# --- body language: cold, hurt legs, breath ---------------------------------
+var _breath_t = 0.0
+var _breath_puffs = []
+var _breath_tex = null
+
+func _body_state_offset(phase:float,blend:float) -> Vector2:
+    var off = Vector2.ZERO
+    var t = Time.get_ticks_msec() * 0.001
+    # chilled through: a fine, fast shiver that grows as the core cools
+    var cold = clamp((36.2 - body_temperature) / 1.8,0.0,1.0)
+    if cold > 0.0:
+        var jit = sin(t * 47.0) * sin(t * 3.1 + 0.6)
+        off.x += round(jit * (0.6 + cold * 1.2) * 2.0) * 0.5
+    # a hurt leg: the body sinks onto the good one, every other step
+    var legs = float(body_condition.get("legs",100.0))
+    var limp = clamp((60.0 - legs) / 45.0,0.0,1.0)
+    if limp > 0.0 and blend > 0.1:
+        off.y += round(max(0.0,sin(phase)) * limp * 2.4 * blend)
+    # worn out or badly hurt: standing, the body sways from foot to foot
+    var spent = max(clamp((fatigue - 70.0) / 30.0,0.0,1.0),clamp((35.0 - health) / 35.0,0.0,1.0))
+    if spent > 0.0 and blend < 0.5:
+        off.x += round(sin(t * 0.9) * spent * 1.4 * (1.0 - blend))
+    return off
+
+func _update_breath(delta):
+    # cold air outside: breath hangs in small puffs in front of the face,
+    # quicker and bigger when out of breath
+    var keep = []
+    for b in _breath_puffs:
+        if not is_instance_valid(b):
+            continue
+        var age = float(b.get_meta("age",0.0)) + delta
+        b.set_meta("age",age)
+        if age >= 1.1:
+            b.queue_free()
+            continue
+        var v:Vector2 = b.get_meta("vel")
+        b.position += v * delta
+        b.set_meta("vel",v * (1.0 - delta * 1.8) + Vector2(0,-6.0) * delta)
+        var k = age / 1.1
+        b.modulate.a = float(b.get_meta("a0",0.3)) * (1.0 - k) * min(1.0,age * 8.0)
+        b.scale = Vector2.ONE * 0.5 * (1.0 + floor(k * 3.0) * 0.5)
+        keep.append(b)
+    _breath_puffs = keep
+    if player == null or is_sheltered or ambient_temperature > 4.0 or player_death_time > 0.0:
+        return
+    var pant = clamp(1.0 - stamina / 50.0,0.0,1.0)
+    _breath_t -= delta
+    if _breath_t > 0.0:
+        return
+    _breath_t = lerpf(2.6,0.9,pant) * randf_range(0.85,1.15)
+    if _breath_tex == null:
+        var img = Image.create(8,6,false,Image.FORMAT_RGBA8)
+        for y in range(6):
+            for x in range(8):
+                var d = Vector2((x - 3.5) / 4.0,(y - 2.5) / 3.0).length()
+                if d < 1.0:
+                    img.set_pixel(x,y,Color(0.92,0.94,0.97,1.0 if d < 0.55 else 0.55))
+        _breath_tex = ImageTexture.create_from_image(img)
+    var cold_k = clamp((4.0 - ambient_temperature) / 12.0,0.3,1.0)
+    for i in range(1 + int(pant > 0.5)):
+        var b = Sprite2D.new()
+        b.texture = _breath_tex
+        b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        b.z_as_relative = false
+        b.z_index = 22
+        _fx_root().add_child(b)
+        var face = aim_direction if aim_direction.length() > 0.1 else Vector2.DOWN
+        b.z_index = 19 if face.y < -0.3 else 22      # behind the head when facing away
+        b.global_position = (player.global_position + Vector2(0,-15) + face * 5.0).round()
+        b.set_meta("vel",face * randf_range(9.0,14.0) * (1.0 + pant * 0.6) + Vector2(randf_range(-2.0,2.0),0))
+        b.set_meta("a0",lerpf(0.22,0.42,cold_k))
+        b.modulate.a = 0.0
+        _breath_puffs.append(b)
 
 # --- small gestures and the sting of a hit ----------------------------------
 var interact_anim = 0.0
@@ -28981,6 +29057,7 @@ func _update_combat_traces(delta):
         return
     _update_corpses(delta)
     _update_pickup_fly(delta)
+    _update_breath(delta)
     # casings: a short arc (up then down to the floor), one bounce, then rest
     for c in _casings:
         var age = float(c.get_meta("age",0.0)) + delta
