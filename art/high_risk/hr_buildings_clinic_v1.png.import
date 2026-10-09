@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/hr_buildings_clinic_v1.png-abffa36c098aefaaaa
 
 [params]
 
-compress/mode=0
+compress/mode=3
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

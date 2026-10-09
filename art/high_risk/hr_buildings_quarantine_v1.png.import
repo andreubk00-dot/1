@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/hr_buildings_quarantine_v1.png-edbcb9c6fa7266
 
 [params]
 
-compress/mode=0
+compress/mode=3
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
