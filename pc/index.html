@@ -1143,6 +1143,19 @@ canvas { touch-action:none; }
 .unit-card.can-upgrade{border-color:#73e9b5!important;background:linear-gradient(160deg,rgba(22,68,66,.94),rgba(11,30,40,.95))!important;box-shadow:inset 0 0 0 1px rgba(105,244,181,.18)}
 .unit-card.can-upgrade .unit-cost{color:#7ef9b8}
 .unit-card.needs-energy .unit-cost{color:#c9c8de}
+
+/* Boss mechanics take priority over decorative combo UI on portrait phones.
+   Prevent lengthy boss labels/weak-point instructions from colliding with HUD. */
+@media (max-width:520px) and (orientation:portrait){
+  .boss-hud:not(.hidden) ~ .combo-hud{display:none!important}
+  .boss-hud-head{min-width:0}
+  .boss-hud-head span{min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .boss-hud-head b{display:none!important}
+  .boss-objective{box-sizing:border-box;max-width:calc(100% - 12px)}
+  .boss-objective b{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .boss-objective small{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+}
+
 /* Compact, always-visible next level and exact missing energy: useful on touch screens without hover. */
 .unit-upgrade-meta{display:flex;align-items:center;justify-content:space-between;gap:3px;margin-top:3px;min-width:0;line-height:1.2;font-size:9px;font-weight:800;color:#bfd2e6;white-space:nowrap}
 .unit-next-level{color:#9ebdd3}.unit-affordance{color:#efc5a3}.unit-affordance.ready{color:#7ef9b8}
