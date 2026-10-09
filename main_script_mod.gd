@@ -27628,6 +27628,52 @@ void fragment() {
 var _wet_ground_mat = null
 var _ground_wet = 0.0
 
+# High-risk sites draw their buildings from four 4K model atlases. Loaded on
+# the spot, the first building of a site stalled its chunk by ~200 ms. When
+# the player comes within three chunks of a site, its atlas is loaded on a
+# worker thread instead, and held while the player stays near.
+const HR_ATLAS_PREFETCH_RANGE = 3
+var _hr_atlas_pending = {}
+var _hr_atlas_held = {}
+var _hr_prefetch_timer = 0.0
+
+func _hr_atlas_path(site:String) -> String:
+    return "res://art/high_risk/hr_buildings_%s_v1.png" % site
+
+func _prefetch_high_risk_art(delta):
+    _hr_prefetch_timer -= delta
+    if _hr_prefetch_timer > 0.0 or player == null:
+        return
+    _hr_prefetch_timer = 0.5
+    var pc = _world_to_chunk(player.global_position)
+    var wanted = {}
+    for poi in RegionCatalog.POIS:
+        var site = str(HighRiskBuildingModels.SITE_KEYS.get(str(poi.get("id","")),""))
+        if site == "":
+            continue
+        var anchor:Vector2i = poi.get("coord",Vector2i(99999,99999))
+        for offset in poi.get("footprint",[Vector2i.ZERO]):
+            var c = anchor + offset
+            if max(abs(c.x - pc.x),abs(c.y - pc.y)) <= HR_ATLAS_PREFETCH_RANGE:
+                wanted[_hr_atlas_path(site)] = true
+                break
+    for path in wanted.keys():
+        if _hr_atlas_held.has(path) or _hr_atlas_pending.has(path) or not ResourceLoader.exists(path):
+            continue
+        if ResourceLoader.load_threaded_request(path) == OK:
+            _hr_atlas_pending[path] = true
+    for path in _hr_atlas_pending.keys():
+        var st = ResourceLoader.load_threaded_get_status(path)
+        if st == ResourceLoader.THREAD_LOAD_LOADED:
+            _hr_atlas_held[path] = ResourceLoader.load_threaded_get(path)
+            _hr_atlas_pending.erase(path)
+        elif st == ResourceLoader.THREAD_LOAD_FAILED or st == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+            _hr_atlas_pending.erase(path)
+    # let go of the atlases of sites the player has left far behind
+    for path in _hr_atlas_held.keys():
+        if not wanted.has(path):
+            _hr_atlas_held.erase(path)
+
 # 1.38: fog. Some nights roll a fog in that hangs on into the morning, the
 # rain leaves a mist behind, and the fields and woods hold it thicker than the
 # town. It is drawn in the world (so the night darkens it and lamps glow in
@@ -27849,6 +27895,7 @@ func _update_weather_visuals(delta):
     var raining = weather_state == "rain" and not indoors
 
     _update_fog(delta)
+    _prefetch_high_risk_art(delta)
 
     var wet_goal = 1.0 if weather_state == "rain" else 0.0
     var prev_wet = _ground_wet
