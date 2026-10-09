@@ -57,6 +57,8 @@ func run() -> void:
     var before = game.inventory_entries.duplicate(true)
     game._show_pickup_reveal("bandage",2)
     check(game.hud_pickup_panel.visible,"First pickup should show loot cards")
+    check(game.hud_pickup_panel.size.x == 121.0,"Single item should not have a wide empty popup")
+    check(game.hud_pickup_panel.position.x == (640.0 - 121.0) * 0.5,"Single item not centered")
     check(game.hud_pickup_items.get_child_count() == 1,"First pickup card missing")
     var first_card = game.hud_pickup_items.get_child(0)
     var first_content = first_card.get_child(0)
@@ -67,6 +69,7 @@ func run() -> void:
     game._show_pickup_reveal("akm",1)
     check(game.hud_pickup_items.get_child_count() == 3,
         "Multiple pickups must show three icon cards")
+    check(game.hud_pickup_panel.size.x == 345.0,"Three-item popup should fit exact width")
     game._show_pickup_reveal("water_clean",1)
     check(game.hud_pickup_items.get_child_count() == 3,
         "Loot overlay must cap visual cards to three")
