@@ -275,6 +275,38 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert(src.includes('this.recordVisibleRewardOffers(canRevive,canDouble,adAvailable,reached);'));
     assert(src.includes("classList.toggle('hidden',!canDouble||!adAvailable)"));
   });
+  await test('Ads and hidden tabs do not inflate playtime; next-day return is recorded',async()=>{
+    const doc=document,oldHidden=doc.hidden;
+    let clock=1000000,day='2026-10-08',resumed=0;
+    const TimedGame=new Function('BALANCE','$','fmt','now','dayKey','document','requestAnimationFrame',
+      'return ('+section('  class Game {',"\\n\\n  window.addEventListener('DOMContentLoaded'").trim()+')')(
+      BALANCE,$,String,()=>clock,()=>day,doc,()=>0);
+    const g=Object.create(TimedGame.prototype);
+    g.save={analytics:{totalPlayMs:0,firstSessionDay:day,playDays:[day],events:{},retention:{d1:false,d3:false,d7:false}}};
+    g.sessionActiveAt=clock-10000;g.inRun=true;g.paused=false;g.pauseOverlay=false;
+    g.externalPause=false;g.externalPauseWasPaused=false;g.externalPauseReasons=new Set();
+    g.run={holdFire:true,aim:{x:300,y:200}};g.setRmbBoost=()=>{};g.pauseInternal=()=>{};
+    g.bridge={gameplayStop:()=>{},gameplayStart:()=>{resumed++;}};g.audio={resume:()=>{}};
+    g.track=name=>{const e=g.save.analytics.events;e[name]=(e[name]||0)+1;};
+    try{
+      g.handleExternalPause(true,'ad');
+      assert.equal(g.save.analytics.totalPlayMs,10000);
+      assert.equal(g.sessionActiveAt,0);
+      clock+=60000;doc.hidden=true;g.handleExternalPause(true,'visibility');
+      doc.hidden=false;day='2026-10-09';
+      g.resumePlaytime();g.handleExternalPause(false,'visibility');
+      assert.equal(g.sessionActiveAt,0);
+      assert.equal(g.save.analytics.events.session_day||0,0);
+      clock+=30000;g.handleExternalPause(false,'ad');
+      assert.equal(g.sessionActiveAt,clock);
+      assert.equal(g.save.analytics.events.session_day,1);
+      assert.equal(g.save.analytics.events.retention_d1,1);
+      g.resumePlaytime();assert.equal(g.save.analytics.events.session_day,1);
+      clock+=2000;g.checkpointPlaytime();
+      assert.equal(g.save.analytics.totalPlayMs,12000);
+      assert.equal(resumed,1);
+    }finally{doc.hidden=oldHidden;}
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
