@@ -834,3 +834,21 @@ Measured with a per-call profiler on a scripted night walk (600 frames):
   (Н drawn as П at 8 px); carried rounding remainders opened one-pixel gaps
   inside words at the HUD's smallest sizes - whole-pixel advances keep them
   even. Liberation / FreeSans broke digits when rendered aliased.
+
+## dev49 — bug hunt: interiors of the high-risk sites
+
+- **Rain indoors.** The rain streaks are drawn over everything; inside a
+  building the roof fades away and they kept falling on the room floor. They
+  (and the small splash marks) are now blanked over the interior of the
+  building the player stands in and still fall outside its walls
+  (`_rain_dry_rects`). The check runs after a streak moves, so one that just
+  wrapped to the top is judged where it is drawn.
+- **Stair well on a partition.** The ground-floor stair of a high-risk site
+  comes from the site catalogue at a fixed spot, while the rooms are planned
+  per building - in the quarantine centre's isolation block the well sat on a
+  partition T-joint with the wall running through it. `_stair_spot_in_building`
+  moves the 76x58 well to the nearest spot clear of partitions, doorways and
+  the entrance hall, and records it as keep-clear so furniture settles off it.
+- **Stair label.** "ЛЕСТНИЦА • ИЗОЛЯЦИОННЫЙ БЛОК" ran past the well; it is now
+  split at the bullet into two centred lines, stepped down until it fits.
+- Partition audit (radius 10): 1003 buildings, 0 issues.

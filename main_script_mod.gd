@@ -19604,8 +19604,63 @@ func _create_high_risk_floor_transition(parent,pos:Vector2,poi_id:String,target_
     _rect(Vector2.ZERO,Vector2(76,58),Color(0.10,0.12,0.115,0.92),node)
     _rect(Vector2.ZERO,Vector2(70,52),Color(0.22,0.24,0.22,0.58),node)
     _layout_stair_marks(node,Vector2(-22,15),8)
-    _create_world_label(node,Vector2(-34,-22),label_text,6,Color("d8cfad"))
+    # "ЛЕСТНИЦА • ИЗОЛЯЦИОННЫЙ БЛОК" ran past the well: one part per line,
+    # centred, stepped down until the widest line fits inside it
+    var label = _create_world_label(node,Vector2(-34,-22),label_text.replace(" • ","\n"),6,Color("d8cfad"))
+    label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    for fs in [6,5,4]:
+        label.add_theme_font_size_override("font_size",fs)
+        label.reset_size()
+        if label.get_minimum_size().x <= 70.0:
+            break
+    label.size = label.get_minimum_size()
+    label.position = Vector2(-round(label.size.x * 0.5),-27)
     return node
+
+func _stair_spot_in_building(chunk,pos:Vector2) -> Vector2:
+    # a ground-floor stair well comes from the site catalogue at a fixed spot,
+    # but the rooms are planned per building: keep the 76x58 well off every
+    # partition, doorway and the entrance hall, nearest free spot in the room
+    var half = Vector2(38,29)
+    for b in chunk.get_children():
+        if not b.has_meta("world_building") or not b.has_meta("partitions"):
+            continue
+        var size:Vector2 = b.get_meta("building_size",Vector2.ZERO)
+        var local = pos - b.position
+        if not Rect2(-size * 0.5,size).has_point(local):
+            continue
+        var blocked = []
+        for w in b.get_meta("partitions",[]):
+            blocked.append(w.grow(6.0))
+        for g in b.get_meta("partition_gaps",[]) + b.get_meta("keep_clear",[]):
+            blocked.append(g)
+        var inner = Rect2(-size * 0.5 + Vector2(16,20),size - Vector2(32,30))
+        var best = null
+        for step in range(0,40):
+            for d in [Vector2(0,0),Vector2(1,0),Vector2(-1,0),Vector2(0,1),Vector2(0,-1),Vector2(1,1),Vector2(-1,1),Vector2(1,-1),Vector2(-1,-1)]:
+                if step == 0 and d != Vector2.ZERO:
+                    continue
+                var c = local + d * float(step) * 6.0
+                var r = Rect2(c - half,half * 2.0)
+                if not inner.encloses(r):
+                    continue
+                var hit = false
+                for z in blocked:
+                    if r.intersects(z):
+                        hit = true
+                        break
+                if not hit:
+                    best = c
+                    break
+            if best != null:
+                break
+        if best == null:
+            return pos
+        var kc = b.get_meta("keep_clear",[])
+        kc.append(Rect2(best - half,half * 2.0).grow(4.0))
+        b.set_meta("keep_clear",kc)
+        return b.position + best
+    return pos
 
 func _multifloor_prop(root,kind:String,pos:Vector2,scale_value = 0.55,z_value = 3):
     var sprite = _archetype_prop(root,kind,pos,scale_value,z_value)
@@ -21955,7 +22010,7 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
     if not vertical_entry.is_empty():
         _create_high_risk_floor_transition(
             chunk,
-            vertical_entry.get("pos",Vector2(384,384)),
+            _stair_spot_in_building(chunk,vertical_entry.get("pos",Vector2(384,384))),
             poi_id,
             int(vertical_entry.get("target_floor",2)),
             1,
@@ -26448,6 +26503,7 @@ func _create_world_label(chunk,pos,txt,size,col):
     label.modulate = col
     label.z_index = 3
     chunk.add_child(label)
+    return label
 
 func _add_static_rect(parent,center,size):
     var body = StaticBody2D.new()
@@ -29780,6 +29836,23 @@ func _wet_ground_material():
         _wet_ground_mat.set_shader_parameter("wet",_ground_wet)
     return _wet_ground_mat
 
+func _rain_dry_rects() -> Array:
+    var out = []
+    if player == null:
+        return out
+    var p = player.global_position
+    for rec in roof_records:
+        var r = rec.get("rect",Rect2())
+        if r is Rect2 and r.has_point(p):
+            out.append(r)
+    return out
+
+func _point_in_rects(p:Vector2,rects:Array) -> bool:
+    for r in rects:
+        if r.has_point(p):
+            return true
+    return false
+
 func _create_weather_visuals():
     rain_splash_layer = Polygon2D.new()
     rain_splash_layer.name = "RainSplashes"
@@ -29902,6 +29975,10 @@ func _update_weather_visuals(delta):
             rain_splash_layer.polygon = PackedVector2Array([Vector2(-half.x,-half.y),Vector2(half.x,-half.y),Vector2(half.x,half.y),Vector2(-half.x,half.y)])
             rain_splash_layer.material.set_shader_parameter("rain",1.0)
 
+    # inside a building the roof fades away, but the rain streaks (drawn over
+    # everything) kept falling on the room's floor: blank them over the
+    # building the player stands in, keep them outside its walls
+    var dry_rects = _rain_dry_rects() if raining else []
     for i in range(rain_lines.size()):
         var line = rain_lines[i]
         if not is_instance_valid(line):
@@ -29920,6 +29997,10 @@ func _update_weather_visuals(delta):
 
         if line.position.x < -190.0:
             line.position.x = 185.0
+        # after the move: a streak that just wrapped to the top is judged where
+        # it is now drawn, not where it was
+        if not dry_rects.is_empty():
+            line.visible = not _point_in_rects(line.global_position,dry_rects)
 
     var t = Time.get_ticks_msec() * 0.001
     var fog_target = 0.0
@@ -29949,7 +30030,7 @@ func _update_weather_visuals(delta):
         var splash = rain_splashes[i]
         if not is_instance_valid(splash):
             continue
-        splash.visible = raining
+        splash.visible = raining and not _point_in_rects(splash.global_position,dry_rects)
         if not raining:
             continue
         var phase = float(splash.get_meta("phase",0.0))
