@@ -14760,6 +14760,7 @@ void fragment() {
     COLOR = vec4(c.rgb * tint, c.a * pane * COLOR.a);
 }"""
 var _window_glow_shader = null
+var _window_glow_mat = null
 
 func _add_window_glow(window_sprite,night_only:bool = false):
     if _window_glow_shader == null:
@@ -14775,9 +14776,11 @@ func _add_window_glow(window_sprite,night_only:bool = false):
         lit.region = Rect2(r.size.x * 3.0,r.position.y,r.size.x,r.size.y)
         g.texture = lit
     g.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    var mat = ShaderMaterial.new()
-    mat.shader = _window_glow_shader
-    g.material = mat
+    # one shared material: every pane glows alike, only modulate differs
+    if _window_glow_mat == null:
+        _window_glow_mat = ShaderMaterial.new()
+        _window_glow_mat.shader = _window_glow_shader
+    g.material = _window_glow_mat
     g.light_mask = 0
     g.modulate = Color(1,1,1,0)
     # one in five is a stove or a candle behind the curtain: it breathes
@@ -15918,8 +15921,10 @@ void fragment() {
 func _chunk_light_sources(chunk):
     # [{pos (light, global), ground (foot, global), color, light}]
     var out = []
-    for light in chunk.find_children("*","PointLight2D",true,false):
-        if not (light.is_in_group("exterior_practical_lights") or light.is_in_group("street_lights")):
+    # the two light groups are small; walking them beats searching the chunk tree
+    var lights = get_tree().get_nodes_in_group("street_lights") + get_tree().get_nodes_in_group("exterior_practical_lights")
+    for light in lights:
+        if not is_instance_valid(light) or not chunk.is_ancestor_of(light):
             continue
         var foot = light.get_parent()
         if foot == null or not (foot is Node2D):
