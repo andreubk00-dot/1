@@ -24180,8 +24180,110 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             _archetype_prop(building,"cabinet",Vector2(-size.x*0.22,back_y),0.48)
 
     _decorate_world_content_variant_interior(building,archetype_id,data,size)
+    _furnish_interior(building,layout,size,building_id)
     building.set_meta("authored_layout",layout)
     building.set_meta("layout_version",3)
+
+# 1.38: the layouts above give each room its signature pieces; on the wider
+# floors that left a few props on a bare slab. This pass fills free spots
+# along the walls with what such a place would hold, then drops litter on the
+# floor. Deterministic per building; keeps clear of walls, the doorway and
+# the pieces already placed. Clinics are left as authored.
+const INTERIOR_FILL = {
+    "storage":[["crate",0.52],["supply_crate",0.54],["cardboard_boxes",0.50],["barrel",0.50],["metal_shelving",0.58],["gas_can",0.48]],
+    "military":[["cot",0.52],["locker",0.50],["ammo_crate",0.50],["supply_crate",0.52],["desk",0.46],["chair",0.44]],
+    "home":[["chair",0.46],["tipped_chair",0.44],["cabinet",0.48],["old_mattress",0.44],["cardboard_boxes",0.46],["desk",0.46]],
+    "retail":[["retail_shelf",0.58],["cardboard_boxes",0.48],["chair",0.44],["tipped_chair",0.44],["crate",0.48]],
+    "work":[["tool_case",0.52],["gas_can",0.48],["barrel",0.50],["crate",0.50],["metal_shelving",0.58],["filing_cabinet",0.48]]
+}
+const INTERIOR_LITTER = ["floor_papers","newspapers","debris","wooden_debris","shattered_glass"]
+
+func _interior_fill_set(layout:String) -> String:
+    if layout in ["warehouse","rail_store","mil_store","shed","forest_shed"]:
+        return "storage"
+    if layout in ["barracks","checkpoint","comms"]:
+        return "military"
+    if layout in ["panel_block","panel_entry","dacha","country_house","forester"]:
+        return "home"
+    if layout in ["grocery","pharmacy","cafe"]:
+        return "retail"
+    if layout in ["garage_row","workshop","repair_bay","service_shop","factory_admin","rail_service","utility"]:
+        return "work"
+    return ""
+
+func _furnish_interior(building,layout:String,size:Vector2,building_id):
+    var set_key = _interior_fill_set(layout)
+    if set_key == "":
+        return
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(hash(str(building_id) + ":furnish")) + 1
+    var walls = []
+    var taken = []
+    for c in building.get_children():
+        if c is StaticBody2D:
+            for sh in c.get_children():
+                if sh is CollisionShape2D and sh.shape is RectangleShape2D:
+                    var sz = sh.shape.size
+                    walls.append(Rect2(c.position - sz * 0.5,sz).grow(9.0))
+        elif c is Sprite2D and c.texture != null and c.z_index >= 2:
+            taken.append(c.position)
+    var door_x = float(building.get_meta("door_local_x",0.0))
+    var hx = size.x * 0.5
+    var hy = size.y * 0.5
+    var slots = []
+    var x = -hx + 26.0
+    while x < hx - 24.0:
+        slots.append(Vector2(x,-hy + 30.0))           # along the back wall
+        x += 30.0
+    var y = -hy + 56.0
+    while y < hy - 34.0:
+        slots.append(Vector2(-hx + 22.0,y))            # along the side walls
+        slots.append(Vector2(hx - 22.0,y))
+        y += 28.0
+    # shuffle deterministically
+    for i in range(slots.size() - 1,0,-1):
+        var j = rng.randi_range(0,i)
+        var t = slots[i]
+        slots[i] = slots[j]
+        slots[j] = t
+    var wanted = clamp(int(size.x * size.y / 5200.0),2,7)
+    var kinds = INTERIOR_FILL[set_key]
+    var placed = 0
+    for sp in slots:
+        if placed >= wanted:
+            break
+        if abs(sp.x - door_x) < 36.0 and sp.y > hy - 56.0:
+            continue
+        var bad = false
+        for r in walls:
+            if r.has_point(sp):
+                bad = true
+                break
+        if not bad:
+            for q in taken:
+                if q.distance_to(sp) < 30.0:
+                    bad = true
+                    break
+        if bad:
+            continue
+        var item = kinds[rng.randi_range(0,kinds.size() - 1)]
+        var spr = _archetype_prop(building,str(item[0]),sp.round(),float(item[1]))
+        if is_instance_valid(spr):
+            spr.flip_h = rng.randf() < 0.5 and not _interior_prop_uses_depth(str(item[0]))
+            spr.set_meta("interior_fill",set_key)
+            taken.append(sp)
+            placed += 1
+    # litter on the open floor
+    for i in range(rng.randi_range(2,4)):
+        var lp = Vector2(rng.randf_range(-hx + 26.0,hx - 26.0),rng.randf_range(-hy + 40.0,hy - 30.0)).round()
+        var bad = false
+        for r in walls:
+            if r.has_point(lp):
+                bad = true
+        if bad:
+            continue
+        _archetype_prop(building,INTERIOR_LITTER[rng.randi_range(0,INTERIOR_LITTER.size() - 1)],lp,rng.randf_range(0.36,0.46),2)
+    building.set_meta("interior_fill_count",placed)
 
 func _decorate_world_content_variant_interior(building,archetype_id,data,size):
     if building == null or not data.has("content_variant"):
