@@ -35,6 +35,23 @@ function game(){
  for(const method of ['track','toast','persist','renderHome','renderCollection','celebrateReward'])g[method]=()=>{};
  return g;
 }
+// A boss on the wrong wave/source must never advance fragment pity.
+{
+ const g=game(),s=g.save;
+ g.rollDefenderFragment('aegis',30);
+ g.rollDefenderFragment('leech',50);
+ assert.equal(s.defenderParts.prism||0,0);
+ assert.equal(s.defenderPity.prism||0,0);
+ g.unlockDefender('prism');
+ assert(!s.unlocked.includes('prism'),'Unqualified defender unlocked');
+ // Seed 1000 starts above the 30% Prism drop chance; test miss then pity.
+ rng=1000;g.rollDefenderFragment('aegis',40);
+ assert.equal(s.defenderPity.prism,1,'Eligible miss did not advance pity');
+ s.defenderPity.prism=2;
+ g.rollDefenderFragment('aegis',40);
+ assert.equal(s.defenderParts.prism,1,'Third eligible boss did not guarantee fragment');
+ assert.equal(s.defenderPity.prism,0,'Fragment drop did not reset pity');
+}
 const lookup=Array(126);{const g=game();let kills=0,xp=0;for(let n=1;n<=125;n++){
  kills+=g.waveEnemyCount(n);
  xp+=e.seasonXpWaveBase+Math.floor(n/e.seasonXpWaveStep);
