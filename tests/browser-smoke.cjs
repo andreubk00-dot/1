@@ -139,6 +139,70 @@ async function smoke(profile){
   assert(result.skill.width>10&&result.skill.left>=-3&&result.skill.right<=result.width+3,
     'Impulse offscreen: '+JSON.stringify(result.skill));
   assert(result.scrollWidth<=result.width+6,'Horizontal overflow: '+JSON.stringify(result));
+  // Exercise the LIVE boss-objective renderer without simulating free boss
+  // victories: waiting, an open weak point, and an urgent boss anchor.
+  const bossLayout=await page.evaluate(()=>{
+    const g=window.__ENDLESS_DEFENDERS__,hud=document.getElementById('bossHud'),
+      combo=document.getElementById('comboHud'),name=document.getElementById('bossName'),
+      ability=document.getElementById('bossAbility'),frame=document.querySelector('.battle-frame'),
+      objective=document.getElementById('bossObjective');
+    const previous={hudHidden:hud.classList.contains('hidden'),
+      comboHidden:combo.classList.contains('hidden'),
+      interactives:g.run.interactives,outerName:name.textContent,outerAbility:ability.textContent};
+    const spec=g.bossSpec(100),enemy={boss:spec,hp:100,maxHp:100,weakCooldown:1.6,weakOpen:0};
+    hud.classList.remove('hidden');combo.classList.remove('hidden');
+    name.textContent=spec.name;ability.textContent=spec.ability;
+    const rect=el=>{const v=el.getBoundingClientRect();return {
+      left:v.left,right:v.right,top:v.top,bottom:v.bottom,width:v.width,height:v.height};};
+    const snap=()=>{
+      const title=document.getElementById('bossObjectiveTitle');
+      return {boss:rect(hud),objective:rect(objective),frame:rect(frame),
+        units:rect(document.getElementById('unitCards')),
+        pulse:rect(document.getElementById('skillBtn')),
+        commander:rect(document.getElementById('commanderCombatHud')),
+        combo:rect(combo),comboDisplay:getComputedStyle(combo).display,
+        objectiveDisplay:getComputedStyle(objective).display,
+        title:title.textContent,kind:objective.className,
+        objectiveText:document.getElementById('bossObjectiveText').textContent};
+    };
+    g.run.interactives=[];g.updateBossObjective(enemy);const waiting=snap();
+    enemy.weakOpen=1.2;g.updateBossObjective(enemy);const weak=snap();
+    g.run.interactives=[{type:'anchor',boss:enemy,resolved:false,life:2,maxLife:5}];
+    g.updateBossObjective(enemy);const urgent=snap();
+    return {waiting,weak,urgent,portrait:innerWidth<=520&&innerHeight>innerWidth,
+      hasName:!!spec.name,previous};
+  });
+  const overlap=(a,b)=>Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left))*
+    Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+  assert(bossLayout.hasName,'Boss specification could not be rendered');
+  assert(bossLayout.waiting.kind.includes('coach'),'Initial boss teaching state missing');
+  assert(bossLayout.weak.kind.includes('weak'),'Open weak-point state missing');
+  assert(bossLayout.urgent.kind.includes('urgent'),'Boss anchor alert missing');
+  assert(bossLayout.weak.title.includes('СЛАБУЮ'),'Weak-point cue not localized');
+  assert(bossLayout.urgent.title.includes('ЯКОР'),'Urgent boss anchor cue not localized');
+  for(const phase of [bossLayout.waiting,bossLayout.weak,bossLayout.urgent]){
+    assert.equal(phase.objectiveDisplay,'grid','Boss weak-point guide is invisible');
+    assert(phase.objective.width>100&&phase.objective.height>=25,'Boss guide collapsed');
+    assert(phase.objective.left>=phase.frame.left-2&&phase.objective.right<=phase.frame.right+2,
+      'Boss guide outside battlefield');
+    assert(phase.objective.top>=phase.boss.bottom+2,
+      'Boss name/health overlaps weak-point cue: '+JSON.stringify(phase));
+    assert(overlap(phase.objective,phase.units)<2&&overlap(phase.objective,phase.pulse)<2,
+      'Boss guide blocks upgrade or Pulse controls');
+    assert(overlap(phase.objective,phase.commander)<2,
+      'Boss guide blocks Commander controls');
+    if(bossLayout.portrait){
+      assert.equal(phase.comboDisplay,'none','Combo badge obscures boss cue on phone');
+      assert(overlap(phase.objective,phase.combo)<2||phase.comboDisplay==='none');
+    }
+  }
+  await page.screenshot({path:'screenshots/'+profile.name+'-boss.png',fullPage:true});
+  await page.evaluate(()=>{
+    const g=window.__ENDLESS_DEFENDERS__,hud=document.getElementById('bossHud'),
+      combo=document.getElementById('comboHud');
+    hud.classList.add('hidden');combo.classList.add('hidden');
+    g.run.interactives=[];g.updateBossObjective(null);g.updateBattleHud();
+  });
   await page.screenshot({path:'screenshots/'+profile.name+'.png',fullPage:true});
   await page.reload({waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>!!window.__ENDLESS_DEFENDERS__,null,{timeout:25000});
