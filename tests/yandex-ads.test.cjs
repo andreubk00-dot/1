@@ -242,6 +242,17 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     reopened.closeCoach();assert.equal(acks,1);
     assert.equal(reopened.showCoach('resources'),false);
   });
+  await test('Cosmetic critical glint obeys mobile FX budget',async()=>{
+    const {g}=fixture();g.run.effects=[];g.save.lowFx=false;g.autoLowFx=false;
+    g.spawnCritGlint(320,240);assert.equal(g.run.effects.filter(f=>f.type==='crit').length,1);
+    for(let i=0;i<30;i++)g.spawnCritGlint(320,240);
+    assert.equal(g.run.effects.filter(f=>f.type==='crit').length,5);
+    g.run.effects=[];g.save.lowFx=true;g.spawnCritGlint(320,240);
+    assert.equal(g.run.effects.length,0);
+    g.save.lowFx=false;g.run.enemies=new Array(72).fill(null);g.spawnCritGlint(320,240);
+    assert.equal(g.run.effects.length,0);
+    assert(src.includes("if(p.crit){this.spawnRing(e.x,e.y,'#ffe27d',5,32,.2);this.spawnCritGlint(e.x,e.y);}"));
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
