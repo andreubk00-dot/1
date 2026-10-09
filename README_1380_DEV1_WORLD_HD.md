@@ -911,3 +911,20 @@ authors and pages are listed in `audio/CREDITS_CC0.md`, and
   stride, the knee lifted higher through the swing, clearer heel-strike and
   toe-off, more spring in the body, a stronger hip / shoulder counter-swing,
   more arm and weapon sway.
+
+## dev53 — the survivor no longer shakes and rocks
+
+- Measured the sprite against the player root frame by frame: cold and tired
+  (34.8 degC, fatigue 95) it moved over a 9-pixel range and jumped on 92 of
+  240 frames. Two causes:
+  - dev45 body language was far too strong: shivering from 36.2 degC (most
+    nights and every rain) at up to two units, seven times a second, and a
+    1.4-unit sway when tired. Now: shivering only below 35.6 degC, in short
+    fits one screen pixel wide with calm between; the tired / hurt sway only
+    standing, past fatigue 80 or below 25 health, one pixel, slow; the limp a
+    pixel (two for a wrecked leg).
+  - The pose offset was rounded to half units and then to the screen-pixel
+    grid again, mapping each half step to 1, 3 or 4 pixels. One rounding now,
+    to whole screen pixels.
+- Same conditions after the fix: 1 pixel range; normal walking and standing
+  move the figure by at most one pixel (breathing).

@@ -6738,8 +6738,10 @@ func _update_player_visuals(delta):
         # a push or a reach: the body leans a pixel or two toward the target
         var rp = clamp(1.0 - interact_anim / max(0.01,interact_anim_len),0.0,1.0)
         pose_offset += interact_dir * sin(rp * PI) * 2.2
-    pose_offset.x = round(pose_offset.x * 2.0) * 0.5
-    pose_offset.y = round(pose_offset.y * 2.0) * 0.5
+    # one rounding, to whole screen pixels (0.5 world units / visual scale);
+    # rounding to 0.5 here and to the pixel grid again at the sprite mapped
+    # each half-step to 1, 3 or 4 pixels and the figure twitched
+    pose_offset = pose_offset.snapped(Vector2.ONE * (0.5 / PLAYER_VISUAL_SCALE))
 
     pv_shadow.position = Vector2(
         -1 + side_shift * 0.04,
@@ -6996,22 +6998,25 @@ var _breath_puffs = []
 var _breath_tex = null
 
 func _body_state_offset(phase:float,blend:float) -> Vector2:
+    # Body language in whole screen pixels and kept small: dev45 shivered from
+    # 36.2 degC (most nights and every rain) at up to two units seven times a
+    # second and swayed 1.4 units when tired - the figure shook and rocked.
     var off = Vector2.ZERO
     var t = Time.get_ticks_msec() * 0.001
-    # chilled through: a fine, fast shiver that grows as the core cools
-    var cold = clamp((36.2 - body_temperature) / 1.8,0.0,1.0)
-    if cold > 0.0:
-        var jit = sin(t * 47.0) * sin(t * 3.1 + 0.6)
-        off.x += round(jit * (0.6 + cold * 1.2) * 2.0) * 0.5
-    # a hurt leg: the body sinks onto the good one, every other step
+    var px = 0.5 / PLAYER_VISUAL_SCALE          # one screen pixel in visual space
+    # truly chilled (below 35.6 degC): short shivering fits, one pixel wide,
+    # with calm between them
+    var cold = clamp((35.6 - body_temperature) / 1.4,0.0,1.0)
+    if cold > 0.0 and sin(t * 1.3) > 0.55 - cold * 0.5:
+        off.x += px * (1.0 if sin(t * 52.0) > 0.0 else 0.0)
+    # a badly hurt leg: the body sinks a pixel onto the good one every other step
     var legs = float(body_condition.get("legs",100.0))
-    var limp = clamp((60.0 - legs) / 45.0,0.0,1.0)
-    if limp > 0.0 and blend > 0.1:
-        off.y += round(max(0.0,sin(phase)) * limp * 2.4 * blend)
-    # worn out or badly hurt: standing, the body sways from foot to foot
-    var spent = max(clamp((fatigue - 70.0) / 30.0,0.0,1.0),clamp((35.0 - health) / 35.0,0.0,1.0))
-    if spent > 0.0 and blend < 0.5:
-        off.x += round(sin(t * 0.9) * spent * 1.4 * (1.0 - blend))
+    if legs < 45.0 and blend > 0.1 and sin(phase) > 0.35:
+        off.y += px * (2.0 if legs < 20.0 else 1.0)
+    # exhausted or badly hurt, standing still: a slow one-pixel sway
+    var spent = max(clamp((fatigue - 80.0) / 20.0,0.0,1.0),clamp((25.0 - health) / 25.0,0.0,1.0))
+    if spent > 0.0 and blend < 0.2:
+        off.x += px * round(sin(t * 0.7) * spent)
     return off
 
 func _update_breath(delta):
