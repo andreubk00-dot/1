@@ -63,6 +63,8 @@ jobs:
         run: node tests/combat-contract-ladder-v1824.test.cjs
       - name: Audit mastery stars, blueprint supply, Core XP and Lab affordability
         run: node tests/mastery-resource-ladder-v1824.test.cjs
+      - name: Verify selected-squad synergy UI matches live combat logic
+        run: node tests/squad-clarity-v1824.test.cjs
       - name: Serve both static builds
         run: |
           nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory pc > /tmp/pc-http.log 2>&1 &
