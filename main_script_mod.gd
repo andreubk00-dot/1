@@ -4154,10 +4154,11 @@ func _process(delta):
     _update_doors(delta)
     _update_interior_prop_depth()
     _update_detail_lights(delta)
-    _update_puddle_reflections()
     _update_roofs(delta)
     _update_day_night(delta)
     _update_weather(delta)
+    # after the weather pass has set this frame's street-lamp energy (flicker)
+    _update_puddle_reflections()
     _update_ambience_audio(delta)
     _update_exterior_atmosphere(delta)
     _update_base_system(delta)
@@ -16026,10 +16027,22 @@ func _add_puddle_reflections(puddle,sources):
         r.modulate = Color(1,1,1,0.0)
         r.light_mask = 0
         r.set_meta("light",src["light"])
+        var mine = src["light"].get_meta("puddle_reflections",[])
+        mine.append(r)
+        src["light"].set_meta("puddle_reflections",mine)
         r.add_to_group("puddle_reflections")
         puddle.add_child(r)
 
 var _puddle_rain_state = -1.0
+
+func _puddle_reflection_follow(r,night:float,wet:float):
+    # the reflection is exactly as bright as its lamp right now (flicker included)
+    var light = r.get_meta("light",null)
+    var k = 0.0
+    if is_instance_valid(light) and light.visible:
+        var base = float(light.get_meta("base_energy",light.get_meta("night_energy",light.energy)))
+        k = clamp(light.energy / max(0.01,base),0.0,1.3)
+    r.modulate.a = clamp(night * wet * k,0.0,1.0)
 
 func _update_puddle_reflections():
     var night = _time_night_factor()
@@ -16043,12 +16056,7 @@ func _update_puddle_reflections():
     for r in get_tree().get_nodes_in_group("puddle_reflections"):
         if not is_instance_valid(r):
             continue
-        var light = r.get_meta("light",null)
-        var k = 0.0
-        if is_instance_valid(light) and light.visible:
-            var base = float(light.get_meta("base_energy",light.get_meta("night_energy",light.energy)))
-            k = clamp(light.energy / max(0.01,base),0.0,1.3)
-        r.modulate.a = clamp(night * wet * k,0.0,1.0)
+        _puddle_reflection_follow(r,night,wet)
         if rain_changed and r.material != null:
             r.material.set_shader_parameter("rain",rain_value)
 
@@ -24558,7 +24566,7 @@ func _create_car(chunk,pos,color,angle):
         sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
         # paint tone close to the body colour: a pale tint made parked cars glow
         # white under the night CanvasModulate
-        sprite.modulate = Color(0.86,0.86,0.86).lerp(color.lightened(0.06),0.85)
+        sprite.modulate = Color(0.55,0.55,0.55).lerp(color,0.9)
         car.set_meta("car_model",_car_model_index(pos))
         car.set_meta("car_view",view)
         car.add_child(sprite)
@@ -24936,6 +24944,8 @@ func _dress_service_verges(chunk,coord,district_id:String,rng):
 # staggered across the street so every block has a pool of light at night.
 # Towns get more than the plants; fields and woods stay dark.
 const STREET_LAMP_SLOTS = [Vector2(264,136),Vector2(504,640),Vector2(504,136),Vector2(264,640)]
+# along the east-west street: on the south verge, the head over the pavement
+const STREET_LAMP_SLOTS_H = [Vector2(136,504),Vector2(640,504),Vector2(640,264),Vector2(136,264)]
 
 func _place_street_lamps(chunk,coord,district_id:String):
     var wanted = 2
@@ -24960,6 +24970,16 @@ func _place_street_lamps(chunk,coord,district_id:String):
             continue
         _create_lamp(chunk,slot)
         placed += 1
+    # and one on the cross street (in town; every other block in the zones)
+    if wanted >= 2 or rng.randf() < 0.5:
+        var hstart = rng.randi_range(0,1)
+        for i in range(STREET_LAMP_SLOTS_H.size()):
+            var slot:Vector2 = STREET_LAMP_SLOTS_H[(hstart + i) % STREET_LAMP_SLOTS_H.size()]
+            if _tree_blocks_door_swing(chunk,slot) or _tree_overlaps_building(chunk,slot):
+                continue
+            _create_lamp(chunk,slot)
+            placed += 1
+            break
     chunk.set_meta("street_lamps",placed)
 
 # The HD lamp sprite carries a baked daylight shadow (flat alpha steps below
@@ -24998,7 +25018,7 @@ func _create_lamp(chunk,pos):
         head.x = -head.x
     if post is Sprite2D:
         post.material = _lamp_post_material()
-    _ellipse(head,1.5,1.2,Color(0.98,0.78,0.40,0.88),lamp)
+    var bulb = _ellipse(head,1.5,1.2,Color(0.98,0.78,0.40,0.88),lamp)
 
     var light = PointLight2D.new()
     light.texture = _make_base_radial_texture()
@@ -25008,8 +25028,12 @@ func _create_lamp(chunk,pos):
     light.position = head + Vector2(0,7)
     light.z_index = 1
     light.set_meta("night_energy",0.74)
-    light.set_meta("broken",abs(int(pos.x*13.0 + pos.y*7.0)) % 5 == 0)
-    light.set_meta("flicker_phase",float(abs(hash(str(pos)))) * 0.001)
+    # world position: street lamps share the same slots in every chunk
+    var wpos = chunk.position + pos
+    light.set_meta("broken",abs(hash(Vector2i(wpos))) % 4 == 0)
+    light.set_meta("flicker_phase",float(abs(hash(str(wpos))) % 100000) * 0.001)
+    if bulb != null:
+        light.set_meta("bulb",bulb)
     light.add_to_group("street_lights")
     lamp.add_child(light)
     # 0.90: warm pool + wet reflection streak on the ground under the lamp
@@ -27390,6 +27414,20 @@ func _create_weather_visuals():
         weather_visual_root.add_child(splash)
         rain_splashes.append(splash)
 
+func _lamp_flicker_gate(t:float,phase:float) -> float:
+    # a dying street lamp: steady most of the time with a mains hum, then a few
+    # seconds of stutter (random on / off every 1/10 s, mostly off), now and
+    # then a longer black-out before it catches again
+    var hum = 0.92 + sin(t * 31.0 + phase * 3.1) * 0.05
+    var burst = sin(t * 0.71 + phase) + sin(t * 0.23 + phase * 2.3) * 0.6
+    if burst > 0.95:
+        var step_i = floor(t * 10.0 + phase * 17.0)
+        var r = fposmod(sin(step_i * 12.9898 + phase * 78.233) * 43758.5453,1.0)
+        if burst > 1.4:
+            return 0.04 if r < 0.85 else 0.7
+        return 0.06 if r < 0.55 else hum
+    return hum
+
 func _update_weather_visuals(delta):
     var indoors = _high_risk_floor_active()
     var raining = weather_state == "rain" and not indoors
@@ -27507,10 +27545,18 @@ func _update_exterior_atmosphere(delta):
         var weather_boost = 1.10 if weather_state == "rain" else (1.04 if weather_state == "cloudy" else 1.0)
         var energy = base_energy * night * weather_boost
         if broken and night > 0.05:
-            var phase = float(light.get_meta("flicker_phase",0.0))
-            var gate = 1.0 if sin(t*5.3 + phase) > -0.72 else 0.18
-            energy *= gate * (0.88 + sin(t*13.0 + phase*1.7)*0.08)
+            energy *= _lamp_flicker_gate(t,float(light.get_meta("flicker_phase",0.0)))
         light.energy = max(0.0,energy)
+        # the bulb, the pool on the ground and the puddle reflection (which
+        # reads light.energy) all go out together
+        var bulb = light.get_meta("bulb") if light.has_meta("bulb") else null
+        if is_instance_valid(bulb):
+            var on = clamp(energy / max(0.01,base_energy * max(night,0.05)),0.0,1.0)
+            bulb.modulate = Color(1,1,1,lerpf(0.25,1.0,on)) if night > 0.05 else Color(1,1,1,0.3)
+        # its reflections in the puddles blink in the same frame
+        for r in light.get_meta("puddle_reflections",[]):
+            if is_instance_valid(r):
+                _puddle_reflection_follow(r,night,1.0 if weather_state == "rain" else 0.8)
         var pool = light.get_meta("pool") if light.has_meta("pool") else null
         if is_instance_valid(pool):
             var wet_gain = 1.0 if weather_state == "rain" else 0.62
