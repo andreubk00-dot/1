@@ -25,6 +25,18 @@ jobs:
       - name: Verify loot cards and mouse-fire gating
         shell: bash
         run: timeout 180s /tmp/godot-bin/Godot_v4.7.2-stable_linux.x86_64 --headless --path . --script tests/test_loot_mouse_polish_1380.gd
+      - name: Capture real Godot loot visuals (OpenGL / Xvfb)
+        shell: bash
+        run: |
+          mkdir -p artifacts/loot-ui
+          timeout 180s xvfb-run -a /tmp/godot-bin/Godot_v4.7.2-stable_linux.x86_64 --path . --rendering-driver opengl3 --script tests/qa_loot_mouse_capture_1380.gd -- --qa-output="$(pwd)/artifacts/loot-ui"
+      - name: Upload loot UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ostatok-loot-center-visuals
+          path: artifacts/loot-ui/*.png
+          if-no-files-found: warn
       - name: Existing weapon-action regression
         shell: bash
         run: timeout 180s /tmp/godot-bin/Godot_v4.7.2-stable_linux.x86_64 --headless --path . --script tests/test_weapon_action_cycles.gd
