@@ -97,7 +97,10 @@ const PLAYER_VISUAL_SCALE = 1.28
 # 0.75: original survivor rig is baked at 2x density (128px cells) and drawn at 0.5,
 # so it keeps the old world size but carries twice the pixel detail.
 const SURVIVOR_CELL = 128
-const SURVIVOR_SPRITE_SCALE = 0.5
+# 1.38 dev52: survivor sheets are drawn at 1.28x density (tools/char3d.py K);
+# 0.5 / 1.28 makes one texel exactly one screen pixel inside the 1.28x player
+# visual - the old 0.5 showed each texel 1.28 px wide, unevenly doubled
+const SURVIVOR_SPRITE_SCALE = 0.390625
 # 0.77: original 3D-rig infected use the same high-density cell approach as the survivor.
 const INFECTED_CELL = 128
 const INFECTED_SPRITE_SCALE = 0.62
@@ -6073,8 +6076,12 @@ func _update_modern_survivor(weapon_id,local_aim,local_motion,pose_offset,body_r
     var frame_total = max(1,int(tex.get_width() / SURVIVOR_CELL)) if tex != null else 8
     var frame = min(_modern_survivor_frame(clip,moving,frame_total),frame_total - 1)
     pv_modern_survivor_sprite.region_rect = Rect2(frame * SURVIVOR_CELL,row * SURVIVOR_CELL,SURVIVOR_CELL,SURVIVOR_CELL)
-    pv_modern_survivor_sprite.position = pose_offset + Vector2(0,-4)
-    pv_modern_survivor_sprite.rotation = body_roll * 0.55
+    # whole screen pixels only (one texel = 0.5 / PLAYER_VISUAL_SCALE here) and
+    # no turning: a pixel sprite rotated by a fraction of a degree breaks into
+    # stair-steps; the authored frames carry the body roll themselves
+    var px_unit = 0.5 / PLAYER_VISUAL_SCALE
+    pv_modern_survivor_sprite.position = (pose_offset + Vector2(0,-4)).snapped(Vector2(px_unit,px_unit))
+    pv_modern_survivor_sprite.rotation = 0.0
     pv_modern_survivor_sprite.scale = Vector2(SURVIVOR_SPRITE_SCALE,SURVIVOR_SPRITE_SCALE)
     pv_modern_survivor_sprite.z_index = 2
 

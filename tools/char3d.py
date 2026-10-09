@@ -12,7 +12,20 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 CELL = 128
+# Render density: K sheet pixels per rig unit. 1.0 drew the survivor at
+# 0.64 world units per texel (1.28 screen px - uneven pixel doubling); 1.28
+# draws the same body with 28% more pixels so that, at sprite scale
+# 0.5 / 1.28, one texel is exactly one screen pixel. GROUND moves down with it
+# so the feet keep their place in the cell (feet sit 0.64 * 28 world units
+# below the cell centre either way).
+K = 1.0
 GROUND = (64.0, 92.0)            # pixel of the character's ground origin
+
+
+def set_density(k):
+    global K, GROUND
+    K = float(k)
+    GROUND = (64.0, 64.0 + 28.0 * K)
 YK = 0.55                        # ground-plane compression of the 3/4 camera
 CAM = np.array([0.0, 1.0, YK]); CAM /= np.linalg.norm(CAM)
 LIGHT = np.array([-0.45, 0.30, 0.84]); LIGHT /= np.linalg.norm(LIGHT)
@@ -27,7 +40,7 @@ def norm(v):
 
 
 def proj(p):
-    return (GROUND[0] + p[0], GROUND[1] + p[1] * YK - p[2])
+    return (GROUND[0] + K * p[0], GROUND[1] + K * (p[1] * YK - p[2]))
 
 
 def shade(col, n, amb=0.60, dif=0.52):
@@ -110,10 +123,10 @@ class Scene:
         """Rounded limb with cylindrical shading (lit side / shadow side)."""
         a, b = np.asarray(a, float), np.asarray(b, float)
         dep = float(np.dot((a + b) / 2, CAM)) + bias
-        self.items.append((dep, 'caps', (proj(a), proj(b), ra, rb, col, edge)))
+        self.items.append((dep, 'caps', (proj(a), proj(b), ra * K, rb * K, col, edge)))
 
     def ball(self, c, r, col, bias=0.0):
-        self.items.append((float(np.dot(c, CAM)) + bias, 'ball', (proj(c), r, col)))
+        self.items.append((float(np.dot(c, CAM)) + bias, 'ball', (proj(c), r * K, col)))
 
     def flat(self, pts3, col, bias=0.0):
         cen = np.mean(pts3, axis=0)
@@ -167,7 +180,7 @@ class Scene:
                 d.point((int(x), int(y)), fill=col + (255,))
             elif kind == 'flash':
                 (x, y), dr = pl
-                dx, dy = dr
+                dx, dy = dr[0] * K, dr[1] * K
                 pts = []
                 for k, (L, W) in enumerate(((0, 2.2), (3, 3.2), (6, 1.8), (9, 0.2))):
                     pts.append((x + dx * L - dy * W, y + dy * L + dx * W))

@@ -13,6 +13,12 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from char3d import Scene, V, norm, CELL, save_png, darker
+import char3d
+
+# 1.38 dev52: sheets are drawn at 1.28 px per rig unit; the game shows them at
+# sprite scale 0.5 / 1.28 so one texel is one screen pixel (see char3d.K)
+RENDER_K = 1.28
+char3d.set_density(RENDER_K)
 
 # ---------------------------------------------------------------- outfit --
 JACKET = (94, 102, 62)
@@ -433,14 +439,18 @@ def keyinterp(keys, x):
 
 GAITS = {
     # stance fraction, half stride, swing keys (s, forward*A, lift, toe pitch), stance pitch keys
-    'walk': dict(S=0.62, A=5.8,
-                 swing=[(0.0, -1.0, 1.4, -0.55), (0.35, -0.55, 3.4, -0.35), (0.7, 0.55, 2.6, 0.05), (1.0, 1.0, 0.0, 0.32)],
-                 stance=[(0.0, 0.32), (0.18, 0.0), (0.68, 0.0), (1.0, -0.55)],
-                 heel=1.4, bob=0.75, hip=0.7, twist=0.11, shift=0.55, lean=0.05),
-    'run': dict(S=0.38, A=7.2,
-                swing=[(0.0, -0.75, 2.4, -0.75), (0.3, -1.05, 8.4, -0.9), (0.62, 0.35, 7.0, 0.0), (1.0, 0.55, 0.0, 0.18)],
-                stance=[(0.0, 0.18), (0.25, 0.0), (0.7, -0.1), (1.0, -0.75)],
-                heel=2.4, bob=1.5, hip=0.95, twist=0.2, shift=0.35, lean=0.27),
+    # 1.38 dev52: a juicier walk - longer stride, the knee lifted higher through
+    # the swing, a clearer heel-strike and toe-off, more spring in the body
+    # and a stronger hip / shoulder counter-swing (the old cycle read as a glide,
+    # worst walking toward or away from the camera where the stride foreshortens)
+    'walk': dict(S=0.60, A=6.6,
+                 swing=[(0.0, -1.0, 1.8, -0.65), (0.32, -0.5, 4.4, -0.4), (0.68, 0.6, 3.2, 0.1), (1.0, 1.0, 0.0, 0.4)],
+                 stance=[(0.0, 0.4), (0.16, 0.0), (0.66, 0.0), (1.0, -0.65)],
+                 heel=1.8, bob=1.05, hip=0.85, twist=0.14, shift=0.7, lean=0.07),
+    'run': dict(S=0.36, A=7.8,
+                swing=[(0.0, -0.8, 2.8, -0.8), (0.3, -1.1, 9.4, -0.95), (0.62, 0.4, 7.6, 0.0), (1.0, 0.6, 0.0, 0.2)],
+                stance=[(0.0, 0.2), (0.25, 0.0), (0.7, -0.1), (1.0, -0.8)],
+                heel=2.6, bob=1.85, hip=1.05, twist=0.24, shift=0.4, lean=0.3),
     'crouch': dict(S=0.6, A=4.2,
                    swing=[(0.0, -1.0, 1.0, -0.5), (0.4, -0.4, 2.8, -0.3), (1.0, 1.0, 0.0, 0.2)],
                    stance=[(0.0, 0.2), (0.2, 0.0), (0.7, 0.0), (1.0, -0.5)],
@@ -521,9 +531,9 @@ def make_pose(clip, w, d, k):
         run = clip != 'Walk'
         gait(P, t, (1, 0), 'run' if run else 'walk')
         if unarmed:
-            unarmed_swing(P, t, 4.2 if run else 2.8, run)
+            unarmed_swing(P, t, 4.6 if run else 3.4, run)
         else:
-            carry_sway(P, t, 0.7 if run else 0.35)
+            carry_sway(P, t, 0.85 if run else 0.5)
     elif clip.startswith('RunBackwards'):
         gait(P, t, (-1, 0), 'walk', amp_scale=0.8, pitch_scale=-0.5)
         P.lean = -0.04

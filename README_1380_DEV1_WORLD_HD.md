@@ -891,3 +891,23 @@ authors and pages are listed in `audio/CREDITS_CC0.md`, and
   distance; a shared 140 ms gate keeps a crowd from flooding the voice pool.
 - `tools/import_cc0_audio.py` builds all of it and no longer re-encodes the
   committed music (Vorbis output is not bit-stable).
+
+## dev52 — a crisper, livelier survivor
+
+- **Pixel-perfect character.** The survivor sheets were drawn at one texel per
+  rig unit and shown at 0.64 world units per texel - 1.28 screen pixels, so
+  some texels came out one pixel wide and others two, a ripple that crawled
+  over the figure as it moved. `tools/char3d.py` now renders at density K =
+  1.28 (`set_density`, the ground anchor moving down with it so the feet keep
+  their place) and the game shows the sheets at `SURVIVOR_SPRITE_SCALE` =
+  0.5 / 1.28: one texel is one screen pixel, the body keeps its world size and
+  gains 28 % more drawn detail (face, straps, folds, boots). All 231 sheets
+  rebaked (`tools/build_survivor_parallel.py`, ~3.5 min on 4 cores); TT-33,
+  SKS and TOZ-34 copy the PM, AKM and shotgun sheets as before.
+- **No sub-pixel turning.** The sprite was rotated by the body roll (a
+  fraction of a degree), which breaks pixel art into stair-steps; it now stays
+  upright, snapped to whole screen pixels - the frames carry the roll.
+- **A juicier walk and run** (`GAITS` in `tools/survivor3d.py`): longer
+  stride, the knee lifted higher through the swing, clearer heel-strike and
+  toe-off, more spring in the body, a stronger hip / shoulder counter-swing,
+  more arm and weapon sway.
