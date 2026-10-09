@@ -15825,6 +15825,7 @@ uniform vec2 mask_size;     // atlas size, texels
 uniform vec2 origin;        // reflection origin in puddle-cell texels
 uniform vec2 scl;           // reflection texel -> puddle-cell texel
 uniform bool flip;
+uniform vec3 tint = vec3(1.0);  // over-bright light colour (vertex COLOR clamps at 1)
 varying vec2 lv;
 void vertex() { lv = VERTEX; }
 void fragment() {
@@ -15834,27 +15835,36 @@ void fragment() {
     if (p.x >= 0.0 && p.y >= 0.0 && p.x < mask_region.z && p.y < mask_region.w) {
         inside = texture(mask, (mask_region.xy + p + 0.5) / mask_size).a;
     }
-    vec4 c = texture(TEXTURE, UV) * COLOR;
-    COLOR = vec4(c.rgb, c.a * step(0.5, inside));
+    vec4 c = texture(TEXTURE, UV);
+    COLOR = vec4(c.rgb * tint, c.a * COLOR.a * step(0.5, inside));
 }"""
 
 func _puddle_reflection_texture():
     if _reflection_tex != null:
         return _reflection_tex
-    # 8 x 48 texels: a soft column of light broken into horizontal ripple bands,
-    # brightest at the top (near the mirrored lamp), fading down in flat steps
+    # 12 x 48 texels: the lamp broken up by ripples into stacked horizontal
+    # glints, wide and dense near the lamp, thinner and sparser further down,
+    # each one nudged sideways; a hot core with a dimmer fringe
     var img = Image.create(12,48,false,Image.FORMAT_RGBA8)
     img.fill(Color(0,0,0,0))
-    for y in range(48):
-        if y % 4 == 3:
-            continue
-        var a = 1.0 if y < 16 else (0.78 if y < 30 else 0.5)
-        var half = 5 if y < 6 else (4 if y < 14 else (3 if y < 30 else 2))
-        var cx = 6 + (1 if (y / 4) % 3 == 1 else (-1 if (y / 4) % 3 == 2 else 0))
-        for x in range(cx - half,cx + half):
-            if x >= 0 and x < 12:
-                var edge = x == cx - half or x == cx + half - 1
-                img.set_pixel(x,y,Color(1,1,1,a * (0.55 if edge else 1.0)))
+    var widths = [5,6,5,4,6,5,4,5,3,4,3,4,2,3,2,2]
+    var shifts = [0,-1,1,0,1,-1,0,1,-1,0,1,0,-1,1,0,0]
+    var y = 0
+    var i = 0
+    while y < 48 and i < widths.size():
+        var half = widths[i]
+        var cx = 6 + shifts[i]
+        var a = 1.0 if y < 14 else (0.8 if y < 28 else 0.55)
+        var rows = 2 if y < 30 else 1
+        for dy in range(rows):
+            for x in range(cx - half,cx + half):
+                if x < 0 or x >= 12:
+                    continue
+                var d = abs(float(x) + 0.5 - float(cx))
+                var k = 1.0 if d < 1.5 else (0.62 if d < float(half) - 1.0 else 0.32)
+                img.set_pixel(x,y + dy,Color(1,1,1,a * k))
+        y += rows + (1 if y < 14 else 2)
+        i += 1
     _reflection_tex = ImageTexture.create_from_image(img)
     return _reflection_tex
 
@@ -15884,6 +15894,9 @@ func _make_puddle(chunk,local_pos:Vector2,variant:int):
     p.position = local_pos.round()
     p.flip_h = variant >= 4
     p.z_index = 1
+    # still water does not scatter lamp light like the pavement does: it stays
+    # dark and shows the lamp only as a reflection
+    p.light_mask = 0
     p.add_to_group("puddles")
     chunk.add_child(p)
     return p
@@ -15897,23 +15910,31 @@ func _place_puddles(chunk,coord):
     var spots = []
     # in front of lit entrances / under lamps, where the reflection falls
     for src in sources:
-        if rng.randf() < 0.55:
+        # street lamps always get one: the wet pool under a lamp is the point
+        if src["light"].is_in_group("street_lights"):
+            # right under the head: the mirrored lamp lands on the water just
+            # below the foot of the post, a little out toward the arm
+            var side = signf(src["light"].position.x) if src["light"].position.x != 0.0 else 1.0
+            spots.append([src["ground"] - chunk.global_position + Vector2(side * 8.0 + rng.randf_range(-2.0,2.0),16.0),0.0])
+        elif rng.randf() < 0.55:
             var h = src["ground"].y - src["pos"].y
-            spots.append(src["ground"] - chunk.global_position + Vector2(rng.randf_range(-8.0,8.0),h * 0.45 + 12.0))
+            spots.append([src["ground"] - chunk.global_position + Vector2(rng.randf_range(-8.0,8.0),h * 0.45 + 12.0),30.0])
     # a few on the carriageway
     for i in range(rng.randi_range(2,4)):
         var t = rng.randf_range(40.0,728.0)
         var a = rng.randf_range(312.0,456.0)
-        spots.append(Vector2(a,t) if rng.randf() < 0.5 else Vector2(t,a))
+        spots.append([Vector2(a,t) if rng.randf() < 0.5 else Vector2(t,a),30.0])
     var placed = []
-    for sp in spots:
+    for spot in spots:
+        var sp:Vector2 = spot[0]
+        var margin:float = spot[1]
         # puddles are flat: only the footprints themselves block them, so they
         # can lie right in front of an entrance (walking through is fine)
         var blocked = false
         for child in chunk.get_children():
             if child.has_meta("world_building"):
                 var bsz:Vector2 = child.get_meta("building_size",Vector2.ZERO)
-                if Rect2(child.position - bsz * 0.5 - Vector2(30,6),bsz + Vector2(60,22)).has_point(sp):
+                if Rect2(child.position - bsz * 0.5 - Vector2(margin,6),bsz + Vector2(margin * 2.0,22)).has_point(sp):
                     blocked = true
             elif bool(child.get_meta("world_car",false)) and child.position.distance_to(sp) < 50.0:
                 blocked = true
@@ -15950,7 +15971,7 @@ func _add_puddle_reflections(puddle,sources):
         # where the water starts and runs across the puddle toward the viewer
         if top.y < prect.position.y and prect.position.y - top.y < h * 1.6 + 20.0:
             top.y = prect.position.y + 2.0
-        var length = clamp(h * 0.8,16.0,26.0)
+        var length = clamp(h * 1.1,18.0,30.0)
         var col_rect = Rect2(top - Vector2(6,0),Vector2(12,length))
         if not col_rect.intersects(prect):
             continue
@@ -15978,9 +15999,11 @@ func _add_puddle_reflections(puddle,sources):
         mat.set_shader_parameter("scl",r.scale)
         mat.set_shader_parameter("flip",puddle.flip_h)
         r.material = mat
-        r.modulate = Color(c.r * 5.0,c.g * 4.4,c.b * 3.6,0.0)
+        mat.set_shader_parameter("tint",Vector3(c.r * 4.6,c.g * 4.0,c.b * 3.2))
+        r.modulate = Color(1,1,1,0.0)
         r.set_meta("light",src["light"])
         r.set_meta("base_x",r.position.x)
+        r.light_mask = 0
         r.add_to_group("puddle_reflections")
         puddle.add_child(r)
 
@@ -24834,6 +24857,7 @@ func _decorate_street_furniture(chunk,coord):
         _street_furniture_sprite(kinds[rng.randi_range(0,kinds.size() - 1)],chunk,slot,5)
         placed += 1
     chunk.set_meta("street_furniture_count",placed)
+    _place_street_lamps(chunk,coord,district_id)
     _dress_service_verges(chunk,coord,district_id,rng)
     _scatter_vegetation(chunk,coord,district_id)
 
@@ -24881,6 +24905,36 @@ func _dress_service_verges(chunk,coord,district_id:String,rng):
                     count += 1
     chunk.set_meta("service_verge_props",count)
 
+# 1.38: streets keep their lamp posts on the verge between the furniture slots,
+# staggered across the street so every block has a pool of light at night.
+# Towns get more than the plants; fields and woods stay dark.
+const STREET_LAMP_SLOTS = [Vector2(264,136),Vector2(504,640),Vector2(504,136),Vector2(264,640)]
+
+func _place_street_lamps(chunk,coord,district_id:String):
+    var wanted = 2
+    if district_id.find("rural") >= 0 or district_id.find("dacha") >= 0 or district_id.find("woodland") >= 0:
+        return
+    if district_id.find("industrial") >= 0 or district_id.find("military") >= 0 or district_id == "rail_corridor":
+        wanted = 1
+    if not RegionCatalog.poi_for_chunk(coord).is_empty():
+        return
+    for child in chunk.get_children():
+        if bool(child.get_meta("world_lamp",false)):
+            return
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 52711 + coord.y * 19937 + 811)) + 1
+    var start = rng.randi_range(0,1) * 2
+    var placed = 0
+    for i in range(STREET_LAMP_SLOTS.size()):
+        if placed >= wanted:
+            break
+        var slot:Vector2 = STREET_LAMP_SLOTS[(start + i) % STREET_LAMP_SLOTS.size()]
+        if _tree_blocks_door_swing(chunk,slot) or _tree_overlaps_building(chunk,slot):
+            continue
+        _create_lamp(chunk,slot)
+        placed += 1
+    chunk.set_meta("street_lamps",placed)
+
 func _create_lamp(chunk,pos):
     var lamp = Node2D.new()
     lamp.position = pos
@@ -24889,9 +24943,13 @@ func _create_lamp(chunk,pos):
     lamp.set_meta("world_lamp",true)
     chunk.add_child(lamp)
 
-    _world_prop_sprite("lamp",lamp,Vector2(0,-10),0,1.0)
-    # the HD lamp hangs its head on an arm to the east
+    var post = _world_prop_sprite("lamp",lamp,Vector2(0,-10),0,1.0)
+    # the HD lamp hangs its head on an arm to the east; east of the street
+    # centre the arm is mirrored so it reaches over the road
     var head = Vector2(5,-29) if _hd_exists("res://art/world_hd/props_hd.png") else Vector2(0,-31)
+    if pos.x > CHUNK_SIZE * 0.5 and post is Sprite2D:
+        post.flip_h = not post.flip_h
+        head.x = -head.x
     _ellipse(head,1.5,1.2,Color(0.98,0.78,0.40,0.88),lamp)
 
     var light = PointLight2D.new()

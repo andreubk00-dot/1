@@ -23,8 +23,8 @@ def shape(seed):
     m = np.zeros((CH, CW), bool)
     # a puddle is a union of a few flat ellipses (ruts, dips)
     for _ in range(int(rng.integers(2, 5))):
-        cx, cy = rng.uniform(44, 68), rng.uniform(22, 34)
-        rx, ry = rng.uniform(14, 30), rng.uniform(6, 11)
+        cx, cy = rng.uniform(44, 68), rng.uniform(24, 32)
+        rx, ry = rng.uniform(16, 30), rng.uniform(10, 15)
         m |= ((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2 < 1.0
     # ragged 2-texel edge
     g = rng.random((CH // 2 + 1, CW // 2 + 1)) < 0.35
