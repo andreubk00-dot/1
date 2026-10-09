@@ -253,6 +253,14 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert.equal(g.run.effects.length,0);
     assert(src.includes("if(p.crit){this.spawnRing(e.x,e.y,'#ffe27d',5,32,.2);this.spawnCritGlint(e.x,e.y);}"));
   });
+  await test('Laboratory funding has accessible progress and no altered prices',async()=>{
+    assert(src.includes('data-lab-funding="'), 'Funding meter is missing');
+    assert(src.includes('role="progressbar"'), 'Progress meter needs a semantic role');
+    assert(src.includes('aria-valuenow='), 'Progress meter must expose shard count');
+    assert(src.includes("cost=this.labUpgradeCost(k,level)"), 'Laboratory must use the existing price formula');
+    assert(src.includes('На следующий уровень')&&src.includes('Next level'), 'Progress description needs both languages');
+    assert(src.includes("max?'':"), 'Maxed upgrades must not show a funding goal');
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
