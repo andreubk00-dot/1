@@ -41,6 +41,41 @@ async function smoke(profile){
   });
   assert(goalCheck.unchanged&&goalCheck.width>20,'Contract goal mutated resources or failed to render');
   assert(goalCheck.scrollWidth<=goalCheck.viewport+6,'Contract goal caused mobile overflow');
+  // The squad collection now explains the currently active combat synergy on
+  // mobile too. Test live selection behavior, then restore the original save.
+  const squad=await page.evaluate(()=>{
+    const g=window.__ENDLESS_DEFENDERS__,modal=document.getElementById('collectionScreen'),
+      summary=document.getElementById('collectionSquadSummary');
+    const original={selected:g.save.selected.slice(),unlocked:g.save.unlocked.slice()};
+    modal.classList.remove('hidden');
+    g.renderCollection();
+    const first={id:summary.querySelector('[data-active-synergy]')?.dataset.activeSynergy,
+      text:summary.textContent,visible:summary.getBoundingClientRect().width>30};
+    g.save.unlocked=[...new Set([...g.save.unlocked,'prism','ember'])];
+    g.save.selected=['spark','prism','ember'];
+    g.renderCollection();
+    const combo={id:summary.querySelector('[data-active-synergy]')?.dataset.activeSynergy,
+      text:summary.textContent};
+    g.selectDefender('sentinel');
+    const rotated={id:summary.querySelector('[data-active-synergy]')?.dataset.activeSynergy,
+      names:g.save.selected.slice(),text:summary.textContent};
+    g.save.selected=original.selected;g.save.unlocked=original.unlocked;
+    g.persist();g.renderCollection();
+    const layout={width:summary.clientWidth,scroll:summary.scrollWidth,
+      pageScroll:document.documentElement.scrollWidth,viewport:innerWidth};
+    return {first,combo,rotated,layout};
+  });
+  assert(squad.first.visible&&squad.first.id==='bulwark','Starter synergy summary missing');
+  assert.equal(squad.combo.id,'cascade','Collection ignored actual synergy after role change');
+  assert(squad.combo.text.includes('Искра'),'Summary lacks replacement-role explanation');
+  assert.equal(squad.rotated.id,'none','Squad swap did not refresh active synergy');
+  assert.deepEqual(squad.rotated.names,['prism','ember','sentinel'],'First slot replacement drifted');
+  assert(squad.layout.width>50&&squad.layout.scroll<=squad.layout.width+4,
+    'Squad summary overflows its mobile container: '+JSON.stringify(squad.layout));
+  assert(squad.layout.pageScroll<=squad.layout.viewport+6,
+    'Squad collection causes horizontal page overflow');
+  await page.screenshot({path:'screenshots/'+profile.name+'-squad.png',fullPage:true});
+  await page.evaluate(()=>document.getElementById('collectionScreen').classList.add('hidden'));
   const result=await page.evaluate(()=>{
     const g=window.__ENDLESS_DEFENDERS__;g.save.tutorialDone=true;
     g.audio.enabled=false;g.startRun(false);
