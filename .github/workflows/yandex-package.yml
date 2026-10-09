@@ -2,6 +2,8 @@ name: Package Endless Defenders for Yandex Games
 on:
   workflow_dispatch:
   push:
+    branches: [endless-defenders-yandex-v1815, 'endless-defenders-yandex-ad-safety-*']
+  pull_request:
     branches: [endless-defenders-yandex-v1815]
     paths:
       - index.html
