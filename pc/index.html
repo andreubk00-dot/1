@@ -3136,14 +3136,14 @@ window.ED_BALANCE = Object.freeze({
     }
     claimJourney(i){const j=JOURNEY[i];if(!j||this.save.journey.claimed[i]||!j.test(this.save))return;this.save.journey.claimed[i]=true;this.track('rookie_goal',{index:i});this.save.shards+=j.reward.shards||0;this.save.gems+=j.reward.gems||0;const reward=[j.reward.shards?`+${j.reward.shards} 🔶`:'',j.reward.gems?`+${j.reward.gems} 💎`:''].filter(Boolean).join('   ');this.celebrateReward(reward,j.icon);if(this.save.journey.claimed.every(Boolean)&&!this.save.journey.bonusClaimed){this.save.journey.bonusClaimed=true;this.save.gems+=6;setTimeout(()=>this.celebrateReward('+6 💎','💎'),1350);setTimeout(()=>this.toast(this.t.journeyCompleteBonus),1500);}this.persist(true);this.renderHome();this.renderJourney();}
 
-    labFunding(k,level=this.save.lab[k]||0){
-      const cost=this.labUpgradeCost(k,level),available=Math.max(0,Number(this.save.shards)||0);
+    labFunding(k,level=this.save.lab[k]||0,cost=this.labUpgradeCost(k,level)){
+      const available=Math.max(0,Number(this.save.shards)||0);
       const max=level>=LABS[k].max,missing=Math.max(0,cost-available);
       return {cost,available,missing,max,can:!max&&missing===0,percent:cost>0?Math.min(100,Math.floor(available/cost*100)):100};
     }
     renderLab(){
       $('labList').innerHTML=Object.entries(LABS).map(([k,l])=>{
-        const lv=this.save.lab[k]||0,f=this.labFunding(k,lv),max=f.max,can=f.can,cost=f.cost,ru=this.lang==='ru';
+        const lv=this.save.lab[k]||0,cost=this.labUpgradeCost(k,lv),f=this.labFunding(k,lv,cost),max=f.max,can=f.can,ru=this.lang==='ru';
         const funding=max?'':`<div class="lab-funding ${can?'ready':''}" data-lab-funding="${k}" role="progressbar" aria-label="${ru?'Накопление осколков':'Shard savings'}: ${this.t[l.nameKey]}" aria-valuemin="0" aria-valuenow="${Math.min(f.available,cost)}" aria-valuemax="${cost}"><span>${ru?'На следующий уровень':'Next level'} <b>🔶 ${fmt(Math.min(f.available,cost))} / ${fmt(cost)}</b></span><div class="progress-track"><i style="width:${f.percent}%"></i></div></div>`;
         return `<div class="upgrade-row"><div><h4>${l.icon} ${this.t[l.nameKey]} <span class="tag">${this.t.lvl} ${lv}/${l.max}</span></h4><p>${this.t[l.descKey]}</p>${funding}</div><button class="buy-upgrade ${can?'can-buy':''}" data-lab="${k}" ${max||!can?'disabled':''}>${max?this.t.max:`🔶 ${fmt(cost)}${can?"":` · ${ru?"Не хватает":"Need"} ${fmt(f.missing)}`}`}</button></div>`;
       }).join('');
