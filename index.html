@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#10151f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>Бесконечные защитники — Яндекс Игры v1.8.20</title>
+  <title>Бесконечные защитники — Яндекс Игры v1.8.24</title>
   <meta name="apple-mobile-web-app-title" content="Защитники" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="application-name" content="Бесконечные защитники" />
@@ -1046,7 +1046,7 @@ canvas { touch-action:none; }
 .boss-intro strong{max-width:100%;overflow-wrap:anywhere;text-wrap:balance}
 .boss-intro em{display:block;max-width:100%;white-space:normal;overflow-wrap:break-word;line-height:1.32;text-wrap:balance}
 @media(max-width:520px){.boss-intro{padding:16px 22px}.boss-intro strong{font-size:clamp(25px,7.6vw,34px);line-height:1.06}.boss-intro em{font-size:12px;padding:0 4px}}
-/* v1.8.20: iPhone save-rescue controls */
+/* v1.8.24: iPhone save-rescue controls */
 #backupScreen{z-index:76}
 .save-entry{display:flex;justify-content:center;padding:18px 8px 26px}
 .save-entry button{min-height:44px;max-width:100%;white-space:normal}
@@ -1061,7 +1061,7 @@ canvas { touch-action:none; }
 .backup-card #backupNotice{min-height:18px;font-size:12px;line-height:1.45}
 @media(max-width:500px){.backup-card .backup-actions{grid-template-columns:1fr}.backup-card{padding:17px}}
 
-/* v1.8.20: fit three defender cards and Pulse on 320px Android/iPhone. */
+/* v1.8.24: fit three defender cards and Pulse on 320px Android/iPhone. */
 @media (max-width:520px) and (orientation:portrait) {
   .hud-bottom { gap:4px; left:6px; right:6px; }
   .hud-bottom .unit-cards { flex:1 1 0; width:auto; min-width:0; gap:3px; }
@@ -1084,13 +1084,27 @@ canvas { touch-action:none; }
 #fullscreenBtn{display:none}
 @media(min-width:800px) and (pointer:fine){.desktop-controls-guide{display:block}#fullscreenBtn{display:inline-grid;place-items:center}}
 
-/* v1.8.20 — UI clarity; preserves the 320px battle-control layout. */
+/* v1.8.24 — UI clarity; preserves the 320px battle-control layout. */
 .hero-card{align-items:center}
 .hero-actions #playBtn{min-height:66px;box-shadow:0 12px 30px rgba(97,211,255,.24);border:1px solid rgba(206,251,255,.45)}
 .hero-actions #playBtn span{font-size:19px;letter-spacing:-.025em}
 .hero-actions #dailyBtn{background:rgba(29,41,60,.65);font-size:12px}
 .next-steps{margin:16px 0 2px;padding:13px 14px;border:1px solid rgba(106,203,247,.25);border-radius:16px;background:rgba(8,19,34,.72);position:relative;z-index:2}
 .next-steps h3{font-size:12px;color:#9cdded;letter-spacing:.07em;text-transform:uppercase;margin:0 0 9px}
+.contract-goal{margin-top:12px;padding:12px;border-radius:12px;background:rgba(38,69,92,.27);border:1px solid rgba(137,183,214,.20)}
+.contract-goal-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px;margin-bottom:9px}
+.contract-goal-head b{font-size:12px;color:#dff3ff}
+.contract-goal-head small{font-size:10px;color:#a7c0d2}
+.contract-goal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 13px}
+.contract-goal-meter{min-width:0}
+.contract-goal-meter span{display:flex;justify-content:space-between;gap:6px;font-size:11px;color:#d0e3f4;margin-bottom:5px}
+.contract-goal-meter strong{white-space:nowrap;font-size:11px;color:#e9f8ff}
+.contract-goal-meter .progress-track{height:5px;background:rgba(255,255,255,.13);border-radius:99px;overflow:hidden}
+.contract-goal-meter .progress-track i{display:block;height:100%;background:#79cde9;border-radius:99px}
+.contract-goal-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:10px}
+.contract-goal-footer small{font-size:11px;color:#a8c8dd;line-height:1.35}
+.contract-goal-footer button{border:1px solid rgba(128,190,221,.45);border-radius:10px;padding:7px 10px;background:#1b4055;color:#e5f5ff;font-size:11px;font-weight:700}
+@media(max-width:390px){.contract-goal{padding:10px}.contract-goal-grid{gap:10px 7px}.contract-goal-meter span{font-size:10px}}
 .next-step{display:flex;align-items:center;gap:10px;padding:7px 0;min-width:0}
 .next-step+.next-step{border-top:1px solid rgba(142,188,218,.14)}
 .next-step-icon{font-size:19px;flex:0 0 24px;text-align:center}
@@ -1111,12 +1125,44 @@ canvas { touch-action:none; }
 .resource-help-action{width:100%;margin-top:20px;min-height:46px;border-radius:13px;font-weight:850;color:#091820;background:linear-gradient(110deg,#7be7ff,#a3bbff)}
 .collection-resource-guide{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 15px}
 .collection-resource-guide button{min-height:40px;padding:8px 12px;border:1px solid #375975;border-radius:11px;background:#172a41;color:#d9ecfa;font-weight:750;font-size:12px}
+/* Read-only active-squad explanation, always visible in collection (including iPhone). */
+.collection-squad-summary{display:grid;gap:8px;margin:0 0 12px;padding:13px 15px;border-radius:14px;border:1px solid rgba(111,176,218,.28);background:linear-gradient(145deg,rgba(18,40,58,.88),rgba(17,27,46,.85));min-width:0;overflow-wrap:anywhere}
+.collection-squad-line{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.collection-squad-line span{font-size:11px;font-weight:800;letter-spacing:.035em;color:#9bc3dc}
+.collection-squad-line strong{font-size:13px;color:#edfaff;line-height:1.35}
+.collection-squad-effect{font-size:12px;line-height:1.45;color:#b7d2e6}
+.collection-squad-hint{font-size:11px;line-height:1.35;color:#91a9c1}
+@media(max-width:390px){.collection-squad-summary{padding:11px 12px}.collection-squad-line strong{font-size:12px}}
+.contract-hunt-forecast{display:flex;flex-direction:column;gap:5px;margin-top:10px;padding:10px 11px;border-radius:11px;background:rgba(52,68,91,.34);border:1px solid rgba(135,180,217,.22)}
+.contract-hunt-forecast b{font-size:10px;color:#8fe0ff;letter-spacing:.06em}
+.contract-hunt-forecast span{font-size:12px;line-height:1.5;color:#e6f3ff}
+.contract-hunt-forecast small{font-size:11px;line-height:1.4;color:#afc5d8}
 .contract-missing{font-size:11px;color:#ffbd9e;line-height:1.5;margin-top:8px}
 .promote-btn small{line-height:1.45;white-space:normal}
 .upgrade-row .buy-upgrade{white-space:normal;line-height:1.4}
 .unit-card.can-upgrade{border-color:#73e9b5!important;background:linear-gradient(160deg,rgba(22,68,66,.94),rgba(11,30,40,.95))!important;box-shadow:inset 0 0 0 1px rgba(105,244,181,.18)}
 .unit-card.can-upgrade .unit-cost{color:#7ef9b8}
 .unit-card.needs-energy .unit-cost{color:#c9c8de}
+
+/* Boss mechanics take priority over decorative combo UI on portrait phones.
+   Prevent lengthy boss labels/weak-point instructions from colliding with HUD. */
+@media (max-width:520px) and (orientation:portrait){
+  .boss-hud:not(.hidden) ~ .combo-hud{display:none!important}
+  .boss-hud-head{min-width:0}
+  .boss-hud-head span{min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .boss-hud-head b{display:none!important}
+  /* Override the older higher-specificity 112px boss rule, not only .boss-objective. */
+  .boss-hud:not(.hidden) ~ .boss-objective{top:140px}
+  .boss-objective{box-sizing:border-box;max-width:calc(100% - 12px)}
+  .boss-objective b{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .boss-objective small{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+}
+
+/* Compact, always-visible next level and exact missing energy: useful on touch screens without hover. */
+.unit-upgrade-meta{display:flex;align-items:center;justify-content:space-between;gap:3px;margin-top:3px;min-width:0;line-height:1.2;font-size:9px;font-weight:800;color:#bfd2e6;white-space:nowrap}
+.unit-next-level{color:#9ebdd3}.unit-affordance{color:#efc5a3}.unit-affordance.ready{color:#7ef9b8}
+@media(max-width:390px),(max-height:540px){.unit-upgrade-meta{font-size:9px;gap:2px}.unit-card{min-height:60px}}
+
 .skill-btn:not(.cooling){border-color:#73eabb;box-shadow:0 0 17px rgba(85,243,177,.24)}
 .hud-pill.core-critical{border-color:#ff758b!important;background:rgba(75,22,40,.94)!important}
 .hud-pill.core-critical b{color:#ff9ba9!important}
@@ -1126,10 +1172,10 @@ canvas { touch-action:none; }
 @media(max-width:390px){.next-steps{padding:11px}.next-step-copy b{font-size:12px}.next-step-copy small{font-size:10px}.resource-help-card{padding:16px}.resource-help-head h2{font-size:21px}.collection-resource-guide button{font-size:11px}}
 
 </style>
-  <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
-  <!-- Яндекс Игры: подключаем официальный SDK до инициализации игровой логики. -->
+  <!-- Yandex SDK: no verified ad callback means no bonus. -->
   <script src="/sdk.js"></script>
   <script>window.ED_YANDEX_BUILD=true;</script>
+  <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
 </head>
 <body>
   <main id="app" class="app" aria-live="polite">
@@ -1184,7 +1230,7 @@ canvas { touch-action:none; }
             </div>
             <div id="nextSteps" class="next-steps" aria-label="Что делать дальше"></div>
             <div class="collection-resource-guide home-resource-guide"><button type="button" data-resource-help="parts">◈ <span data-label-fragments>Фрагменты</span></button><button type="button" data-resource-help="blueprints">🧩 <span data-label-blueprints>Чертежи</span></button></div>
-            <div class="desktop-controls-guide">Управление: <kbd>ЛКМ</kbd> — огонь · <kbd>ПКМ</kbd> — ускорение ×3 при удержании · <kbd>Пробел</kbd> — Импульс · <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — улучшение защитников · <kbd>P</kbd> — пауза · <kbd>M</kbd> — звук · <kbd>F</kbd> — полный экран. Прогресс телефона и ПК хранится раздельно — перенос через «Резервная копия».</div>
+            <div class="desktop-controls-guide">Управление: <kbd>ЛКМ</kbd> — огонь · <kbd>ПКМ</kbd> — ускорение ×3 при удержании · <kbd>Пробел</kbd> — Импульс · <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> — улучшение защитников · <kbd>P</kbd> — пауза · <kbd>M</kbd> — звук · <kbd>F</kbd> — полный экран. Прогресс Яндекс Игр хранится отдельно от браузерных версий.</div>
           </div>
           <div class="hero-visual" aria-hidden="true">
             <div class="hero-rift"></div>
@@ -1379,7 +1425,7 @@ canvas { touch-action:none; }
         <div class="modal-card large collection-modal-card">
           <div class="modal-head"><div><span class="panel-kicker">ОТРЯД</span><h2 id="collectionModalTitle">Защитники</h2></div><button class="close-btn" data-close="collectionScreen">✕</button></div>
           <p id="collectionModalCopy">Каждый защитник стреляет автоматически. Открывай новые роли, чтобы собирать сильные сочетания.</p>
-          <div class="collection-resource-guide"><button type="button" data-resource-help="parts">◈ <span data-label-fragments>Фрагменты</span></button><button type="button" data-resource-help="blueprints">🧩 <span data-label-blueprints>Чертежи</span></button></div><div id="defenderList" class="defender-list"></div>
+          <div class="collection-resource-guide"><button type="button" data-resource-help="parts">◈ <span data-label-fragments>Фрагменты</span></button><button type="button" data-resource-help="blueprints">🧩 <span data-label-blueprints>Чертежи</span></button></div><div id="collectionSquadSummary" class="collection-squad-summary" aria-live="polite" aria-atomic="true"></div><div id="defenderList" class="defender-list"></div>
         </div>
       </section>
 
@@ -1587,7 +1633,7 @@ canvas { touch-action:none; }
 
   <script>
 window.ED_BALANCE = Object.freeze({
-  version: '1.8.20',
+  version: '1.8.24',
   run: {
     baseCore: 100,
     baseEnergy: 74
@@ -1600,7 +1646,15 @@ window.ED_BALANCE = Object.freeze({
     hpBase: 22,
     hpEarlyGrowth: 1.125,
     hpEarlyCap: 29,
-    hpLateGrowth: 1.115,
+    hpLateGrowth: 1.032,
+    hpEndgameGrowth: 1.022,
+    hpEndgameStartWave: 60,
+    bossLateDampening: 0.035,
+    riftEaseStartWave: 30,
+    riftEasePeakWave: 35,
+    riftEaseEndWave: 55,
+    riftEaseHpFloor: 0.70,
+    riftEaseSpeedFloor: 0.88,
     speedBase: 34,
     speedGrowth: 1.2,
     speedCap: 42,
@@ -1614,10 +1668,20 @@ window.ED_BALANCE = Object.freeze({
   economy: {
     unitUpgradeBase: 32,
     unitUpgradeGrowth: 1.49,
+    unitUpgradeLateGrowth: 1.15,
+    unitDamageLateGrowth: 1.27,
+    unitLatePivot: 8,
+    defenderRangePerLab: .025,
+    defenderRangePerMastery: .01,
+    defenderRangePerStar: .03,
+    defenderRangeBonusCap: .85,
     waveRewardBase: 12,
     waveRewardGrowth: 2.55,
     runShardPerWave: 3,
     runShardKillSqrt: 3,
+    shardDepthBonusStartWave: 30,
+    shardDepthBonusPerWave: 0.012,
+    shardDepthBonusCap: 1.90,
     runGemWaveThreshold: 20,
     runGemEvery: 15,
     bossCoreXpBase: 20,
@@ -1648,8 +1712,8 @@ window.ED_BALANCE = Object.freeze({
     prism:  { source:'aegis',       minWave:40,  chance:0.30, pity:3, parts:2, shards:2500, gems:18,  requires:null },
     nova:   { source:'leech',       minWave:50,  chance:0.25, pity:4, parts:3, shards:4500, gems:30, requires:'prism' },
     ember:  { source:'singularity', minWave:60,  chance:0.22, pity:4, parts:4, shards:8000, gems:50, requires:'nova' },
-    volt:   { source:'aegis',       minWave:100, chance:0.18, pity:5, parts:5, shards:13000, gems:80, requires:'ember' },
-    chrono: { source:'singularity', minWave:120, chance:0.14, pity:6, parts:6, shards:20000, gems:125, requires:'volt' }
+    volt:   { source:'aegis',       minWave:100, chance:0.18, pity:4, parts:5, shards:13000, gems:80, requires:'ember' },
+    chrono: { source:'singularity', minWave:120, chance:0.14, pity:5, parts:6, shards:20000, gems:125, requires:'volt' }
   },
   retentionEconomy: {
     loginShardBase: 10,
@@ -1780,7 +1844,7 @@ window.ED_BALANCE = Object.freeze({
       adDoubleOffline:'Реклама: удвоить', close:'Закрыть', elite:'ЭЛИТНАЯ ВОЛНА', waveStart:'ВОЛНА {n}', defeat:'Ядро разрушено',
       unitSentinel:'Страж', unitSpark:'Искра', unitFrost:'Крио', unitPrism:'Призма', unitNova:'Нова', unitEmber:'Факел', unitVolt:'Вольт', unitChrono:'Хрон',
       roleTank:'стабильный урон', roleChain:'цепной разряд', roleSlow:'замедление', roleBurst:'критические импульсы', roleSplash:'урон по площади', roleBurn:'поджигает цели', roleRapid:'быстрая двойная очередь', roleWeaken:'ослабляет аномалии',
-      labDamage:'Матрица урона', labDamageDesc:'+6% урона всем защитникам за уровень.', labCore:'Стабилизатор ядра', labCoreDesc:'+8% максимального здоровья ядра.', labIncome:'Резонатор осколков', labIncomeDesc:'+7% осколков после вылазки.', labStart:'Полевой запас', labStartDesc:'+12 стартовой энергии за уровень.', tutorialKicker:'ПЕРВАЯ ВЫЛАЗКА', tutorialTitle:'Три правила Разлома', tutorialStart:'Понятно. В бой!', tutorial1:'<strong>Три защитника держат линию автоматически.</strong> Ты решаешь, кого усиливать по ходу боя.', tutorial2:'<strong>Ты тоже стреляешь из Ядра.</strong> Тапай или удерживай опасную цель, чтобы помочь отряду.', tutorial3:'<strong>Энергия временная, постоянные ресурсы — нет.</strong> Энергию трать в бою, осколки и кристаллы — между вылазками.',
+      labDamage:'Матрица урона', labDamageDesc:'+6% урона и +2,5% дальности защитников за уровень (общий бонус дальности до +85% с учётом мастерства).', labCore:'Стабилизатор ядра', labCoreDesc:'+8% максимального здоровья ядра.', labIncome:'Резонатор осколков', labIncomeDesc:'+4% осколков после вылазки.', labStart:'Полевой запас', labStartDesc:'+12 стартовой энергии за уровень.', tutorialKicker:'ПЕРВАЯ ВЫЛАЗКА', tutorialTitle:'Три правила Разлома', tutorialStart:'Понятно. В бой!', tutorial1:'<strong>Три защитника держат линию автоматически.</strong> Ты решаешь, кого усиливать по ходу боя.', tutorial2:'<strong>Ты тоже стреляешь из Ядра.</strong> Тапай или удерживай опасную цель, чтобы помочь отряду.', tutorial3:'<strong>Энергия временная, постоянные ресурсы — нет.</strong> Энергию трать в бою, осколки и кристаллы — между вылазками.',
       shopUnavailable:'Магазин покупок появится после добавления товаров в Консоли Яндекс Игр.',
       weeklyKicker:'НЕДЕЛЬНЫЙ ПРОТОКОЛ', weeklyTitle:'Стабилизация Разлома', weeklyText:'Проходи волны всю неделю и открывай постоянные награды.', weeklyButton:'Награды недели', weeklyCopy:'Каждая пройденная волна двигает недельную шкалу. Прогресс сбрасывается каждый понедельник.', weeklyWaves:'{n} / 150 волн', weeklyNext:'Следующая награда', weeklyAll:'Все награды получены', weeklyClaim:'Забрать',
       synergy:'Синергия', noSynergy:'Нет', relicKicker:'АНОМАЛЬНЫЙ МОДУЛЬ', relicTitle:'Выбери усиление вылазки', relicCopy:'Каждые 5 волн Разлом предлагает один из трёх модулей. Выбор действует до конца текущей вылазки.', relicTaken:'Модуль активирован: {name}',
@@ -1804,7 +1868,7 @@ window.ED_BALANCE = Object.freeze({
       adDoubleOffline:'Ad: double', close:'Close', elite:'ELITE WAVE', waveStart:'WAVE {n}', defeat:'Core collapsed',
       unitSentinel:'Sentinel', unitSpark:'Spark', unitFrost:'Cryo', unitPrism:'Prism', unitNova:'Nova', unitEmber:'Ember', unitVolt:'Volt', unitChrono:'Chrono',
       roleTank:'reliable damage', roleChain:'chain discharge', roleSlow:'slows targets', roleBurst:'critical pulses', roleSplash:'area damage', roleBurn:'burns targets', roleRapid:'rapid twin burst', roleWeaken:'weakens anomalies',
-      labDamage:'Damage Matrix', labDamageDesc:'+6% defender damage per level.', labCore:'Core Stabilizer', labCoreDesc:'+8% maximum core health.', labIncome:'Shard Resonator', labIncomeDesc:'+7% shards after each run.', labStart:'Field Reserve', labStartDesc:'+12 starting energy per level.', tutorialKicker:'FIRST EXPEDITION', tutorialTitle:'Three rules of the Rift', tutorialStart:'Got it. Start!', tutorial1:'<strong>Three defenders hold the line automatically.</strong> You decide who to upgrade during combat.', tutorial2:'<strong>You also fire the Core Weapon.</strong> Tap or hold dangerous targets to help the squad.', tutorial3:'<strong>Energy is temporary; permanent resources are not.</strong> Spend energy in combat and shards/crystals between runs.',
+      labDamage:'Damage Matrix', labDamageDesc:'+6% defender damage and +2.5% range per level (total range bonus capped at +85%, including mastery).', labCore:'Core Stabilizer', labCoreDesc:'+8% maximum core health.', labIncome:'Shard Resonator', labIncomeDesc:'+4% shards after each run.', labStart:'Field Reserve', labStartDesc:'+12 starting energy per level.', tutorialKicker:'FIRST EXPEDITION', tutorialTitle:'Three rules of the Rift', tutorialStart:'Got it. Start!', tutorial1:'<strong>Three defenders hold the line automatically.</strong> You decide who to upgrade during combat.', tutorial2:'<strong>You also fire the Core Weapon.</strong> Tap or hold dangerous targets to help the squad.', tutorial3:'<strong>Energy is temporary; permanent resources are not.</strong> Spend energy in combat and shards/crystals between runs.',
       shopUnavailable:'The purchase shop will appear after products are added in the Yandex Games Console.',
       weeklyKicker:'WEEKLY PROTOCOL', weeklyTitle:'Rift Stabilization', weeklyText:'Clear waves all week to unlock permanent rewards.', weeklyButton:'Weekly rewards', weeklyCopy:'Every cleared wave advances the weekly track. Progress resets every Monday.', weeklyWaves:'{n} / 150 waves', weeklyNext:'Next reward', weeklyAll:'All rewards claimed', weeklyClaim:'Claim',
       synergy:'Synergy', noSynergy:'None', relicKicker:'ANOMALY MODULE', relicTitle:'Choose a run upgrade', relicCopy:'Every 5 waves the Rift offers one of three modules. The choice lasts until the current run ends.', relicTaken:'Module activated: {name}',
@@ -1835,8 +1899,8 @@ window.ED_BALANCE = Object.freeze({
 
   const BALANCE = window.ED_BALANCE || {
     version:'fallback-1.8.20', run:{baseCore:100,baseEnergy:74},
-    wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.115,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
-    economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
+    wave:{baseCount:5,countGrowth:.84,post24Growth:.16,eliteBonusCount:2,hpBase:22,hpEarlyGrowth:1.125,hpEarlyCap:29,hpLateGrowth:1.032,hpEndgameGrowth:1.022,hpEndgameStartWave:60,bossLateDampening:.035,riftEaseStartWave:30,riftEasePeakWave:35,riftEaseEndWave:55,riftEaseHpFloor:.70,riftEaseSpeedFloor:.88,speedBase:34,speedGrowth:1.2,speedCap:42,spawnBase:.72,spawnFloor:.18,spawnWaveStep:.008,eliteWaveHpMultiplier:1.52,postBossCountMultiplier:.86,postBossHpMultiplier:.90},
+    economy:{unitUpgradeBase:32,unitUpgradeGrowth:1.49,unitUpgradeLateGrowth:1.15,unitDamageLateGrowth:1.27,unitLatePivot:8,defenderRangePerLab:.025,defenderRangePerMastery:.01,defenderRangePerStar:.03,defenderRangeBonusCap:.85,waveRewardBase:12,waveRewardGrowth:2.55,runShardPerWave:3,runShardKillSqrt:3,shardDepthBonusStartWave:30,shardDepthBonusPerWave:.012,shardDepthBonusCap:1.90,runGemWaveThreshold:20,runGemEvery:15,bossCoreXpBase:20,bossCoreXpPerWave:1,dailyQuestSeasonXp:10,weeklyClaimSeasonXp:20,dailyLoginSeasonXp:2,dailyChallengeFirstClearWave:10,dailyChallengeShards:20,dailyChallengeGems:1,masteryWaveBase:3,masteryWaveStep:12,coreXpWaveBase:2,coreXpWaveStep:10,seasonXpWaveBase:1,seasonXpWaveStep:30,bossGemReward:1,bossSeasonXpBase:6,bossSeasonXpStep:20,bossBlueprintBase:1,bossBlueprintStep:50,bossBlueprintEvery:2,bossRunEnergyBase:28,bossRunEnergyStep:8,bossCommanderCharge:18},
     retentionEconomy:{loginShardBase:10,loginShardPerStreak:1,loginStreakCap:14,loginGemNormal:1,loginGemWeekly:3,chestShardBase:14,chestShardRandom:8,chestStreakCap:14,chestGemChance:.10,offlineShardPerMinute:.08,offlineCapMinutes:240},
     commander:{heatMax:100,recoverAt:42,coolBase:28,modeDuration:8,modeEnemySlow:.58,modeDamage:1.9,focusDuration:1.8,weakOpen:1.8,weakCooldown:4.6,eliteOrbChance:.45,orbEnergy:16,orbCharge:24,threatRewardEnergy:10,threatRewardCharge:12,precisionWindow:2.1,precisionDamagePerHit:.025,precisionDamageCap:.24},
     reactive:{startWave:8,eventInterval:8.5,maxObjects:2,mineLife:9,mineRadius:132,mineDamage:70,nodeLife:7,nodeEnergy:22,nodeCharge:24,sapperStartWave:12,sapperChance:.14,sapperCharge:2.4,sapperDrainEnergy:24,anchorLife:5.5,anchorHits:2,anchorHeal:.08},
@@ -1903,8 +1967,8 @@ window.ED_BALANCE = Object.freeze({
     prism:{source:'aegis',minWave:40,chance:.30,pity:3,parts:2,shards:2500,gems:18,requires:null},
     nova:{source:'leech',minWave:50,chance:.25,pity:4,parts:3,shards:4500,gems:30,requires:'prism'},
     ember:{source:'singularity',minWave:60,chance:.22,pity:4,parts:4,shards:8000,gems:50,requires:'nova'},
-    volt:{source:'aegis',minWave:100,chance:.18,pity:5,parts:5,shards:13000,gems:80,requires:'ember'},
-    chrono:{source:'singularity',minWave:120,chance:.14,pity:6,parts:6,shards:20000,gems:125,requires:'volt'}
+    volt:{source:'aegis',minWave:100,chance:.18,pity:4,parts:5,shards:13000,gems:80,requires:'ember'},
+    chrono:{source:'singularity',minWave:120,chance:.14,pity:5,parts:6,shards:20000,gems:125,requires:'volt'}
   };
 
   const CONTEXT_COACHES = {
@@ -2032,6 +2096,12 @@ window.ED_BALANCE = Object.freeze({
     shield:{icon:'🛡',rarity:'epic',ru:['Фазовый щит','Ядро получает на 28% меньше урона.'],en:['Phase Shield','Core takes 28% less damage.']}
   };
 
+  // Repeatable late-game choices prevent a dead modifier screen after nine unique modules.
+  const VETERAN_RELICS = {
+    warhead:{ru:['Усиленный боезапас','+8% к урону всех защитников (повторяемое усиление).'],en:['Veteran Payload','+8% damage for all defenders (repeatable).']},
+    overclock:{ru:['Боевой оверклок','+6% к скорострельности всех защитников (повторяемое усиление).'],en:['Veteran Overclock','+6% fire rate for all defenders (repeatable).']},
+    capacitor:{ru:['Полевой аккумулятор','+12% энергии за волну (повторяемое усиление).'],en:['Veteran Capacitor','+12% wave-clear energy (repeatable).']}
+  };
   const META_SPECS = {
     damage:{icon:'⚔',nameKey:'metaDamage',descKey:'metaDamageDesc',max:25},
     core:{icon:'🛡',nameKey:'metaCore',descKey:'metaCoreDesc',max:25},
@@ -2480,7 +2550,7 @@ window.ED_BALANCE = Object.freeze({
       this.bridge = new YandexBridge(this); this.audio=new AudioFX(); this.audio.initMedia(); this.lang='ru'; this.t=TEXT.ru; this.save=structuredClone(DEFAULT_SAVE);
       this.canvas=$('gameCanvas'); this.ctx=this.canvas.getContext('2d'); this.dpr=Math.max(1,Math.min(2,devicePixelRatio||1));
       this.inRun=false; this.paused=false; this.pauseOverlay=false; this.externalPause=false; this.externalPauseWasPaused=false; this.externalPauseReasons=new Set(); this.challenge=false; this.lastFrame=performance.now(); this.animId=0; this.autoLowFx=false; this.perfWindowStart=0; this.perfFrames=0; this.perfSlowWindows=0; this.perfFastWindows=0; this.perfFps=60;
-      this.run=null; this.rmbBoost=false; this.rmbPointerId=null; this.toastTimer=0; this.saveTimer=0; this.sessionActiveAt=now(); this.sessionInterstitials=0;
+      this.run=null; this.resultAdBusy=false; this.rmbBoost=false; this.rmbPointerId=null; this.toastTimer=0; this.saveTimer=0; this.sessionActiveAt=now(); this.sessionInterstitials=0;
     }
 
     async init(){
@@ -2493,7 +2563,7 @@ window.ED_BALANCE = Object.freeze({
       this.loadLocal();
       const cloud = await this.bridge.loadCloud(); if(cloud) this.mergeCloud(cloud);
       const offlineSince=this.save.lastSeen||now();
-      this.ensureDaily(); this.ensureWeekly(); this.ensureSeason(); this.ensureReturnTrack(); this.handleLogin(); this.initRetentionTelemetry(); this.track('session_start',{dayIndex:this.retentionDayIndex()}); window.__ED_ANALYTICS__=()=>structuredClone(this.save.analytics); window.__ED_METRICS__=()=>this.analyticsSummary();window.__ED_AD_DIAGNOSTICS__=()=>({platform:'yandex',sdkReady:!!this.bridge.ysdk,rewardedApi:!!this.bridge.ysdk?.adv?.showRewardedVideo,fullscreenApi:!!this.bridge.ysdk?.adv?.showFullscreenAdv,adBusy:!!this.bridge.adInProgress,rewardedApproved:this.save.analytics?.events?.reward_ad_reward||0,interstitialShown:this.save.analytics?.events?.interstitial_shown||0}); window.__ED_LAUNCH_DIAGNOSTICS__=()=>({metrics:this.analyticsSummary(),balanceVersion:BALANCE.version,sessionInterstitials:this.sessionInterstitials||0,saveVersion:this.save.version}); this.unlockByBest(); this.bindUI(); this.applyText(); this.checkAchievements(false); this.renderHome();
+      this.ensureDaily(); this.ensureWeekly(); this.ensureSeason(); this.ensureReturnTrack(); this.handleLogin(); this.initRetentionTelemetry(); this.track('session_start',{dayIndex:this.retentionDayIndex()}); window.__ED_ANALYTICS__=()=>structuredClone(this.save.analytics); window.__ED_METRICS__=()=>this.analyticsSummary(); window.__ED_AD_DIAGNOSTICS__=()=>({platform:'yandex',sdkReady:!!this.bridge.ysdk,rewardedApi:!!this.bridge.ysdk?.adv?.showRewardedVideo,fullscreenApi:!!this.bridge.ysdk?.adv?.showFullscreenAdv,adBusy:!!this.bridge.adInProgress,rewardedApproved:this.save.analytics?.events?.reward_ad_reward||0,interstitialShown:this.save.analytics?.events?.interstitial_shown||0}); window.__ED_LAUNCH_DIAGNOSTICS__=()=>({metrics:this.analyticsSummary(),balanceVersion:BALANCE.version,sessionInterstitials:this.sessionInterstitials||0,saveVersion:this.save.version}); this.unlockByBest(); this.bindUI(); this.applyText(); this.checkAchievements(false); this.renderHome();
       await this.processPendingPurchases();
       $('loading').classList.add('hidden'); $('shell').classList.remove('hidden'); this.bridge.loadingReady();
       this.showOfflineReward(offlineSince); this.loop(performance.now());
@@ -2691,7 +2761,7 @@ window.ED_BALANCE = Object.freeze({
       if($('shardName'))$('shardName').textContent=ru?'ОСКОЛКИ':'SHARDS';if($('gemName'))$('gemName').textContent=ru?'КРИСТАЛЛЫ':'CRYSTALS';
       if($('shardChip')){$('shardChip').title=ru?'Подробнее об осколках':'About shards';$('shardChip').setAttribute('aria-label',$('shardChip').title);}if($('gemChip')){$('gemChip').title=ru?'Подробнее о кристаллах':'About crystals';$('gemChip').setAttribute('aria-label',$('gemChip').title);}document.querySelectorAll('[data-label-fragments]').forEach(el=>el.textContent=ru?'Фрагменты':'Fragments');document.querySelectorAll('[data-label-blueprints]').forEach(el=>el.textContent=ru?'Чертежи':'Blueprints');
       if($('pauseSoundLabel'))$('pauseSoundLabel').textContent=ru?'Звук и музыка':'Sound & music';if($('pauseFxLabel'))$('pauseFxLabel').textContent=ru?'Эффекты':'Effects';if($('pauseShakeLabel'))$('pauseShakeLabel').textContent=ru?'Тряска экрана':'Screen shake';if($('pauseHapticsLabel'))$('pauseHapticsLabel').textContent=ru?'Вибрация':'Vibration';
-      if($('pauseControlsHint'))$('pauseControlsHint').textContent=ru?'ПК: Пробел — Импульс · ЛКМ — огонь · удерживай ПКМ — поток врагов ×3 · поток ×0.5…×4':'PC: Space — Pulse · LMB — fire · hold RMB — enemy flow ×3 · flow ×0.5…×4';
+      if($('pauseControlsHint'))$('pauseControlsHint').textContent=ru?'ПК: Пробел — Импульс · ЛКМ — огонь · удерживай ПКМ — скорость игры ×3 · скорость ×0.5…×4':'PC: Space — Pulse · LMB — fire · hold RMB — game speed ×3 · speed ×0.5…×4';
       if(sound)sound.textContent=!this.save.sound||this.save.sfxVolume===0?(ru?'Выкл.':'Off'):(this.save.sfxVolume===.5?'50%':'100%');
       if(fx)fx.textContent=ru?(this.save.lowFx?'Упрощённые':'Насыщенные'):(this.save.lowFx?'Reduced':'Rich');
       if(shake)shake.textContent=ru?(this.save.shake?'Включена':'Выключена'):(this.save.shake?'On':'Off');
@@ -2779,6 +2849,13 @@ window.ED_BALANCE = Object.freeze({
       // v1.7.3: defender unlocks are explicit contracts, never automatic by wave.
       return this.save.unlocked;
     }
+    // Only eligible bosses count toward a contract. Listing those waves does not grant loot.
+    eligibleContractBossWaves(id,count=3){
+      const c=DEFENDER_CONTRACTS[id];if(!c)return [];
+      const offset={aegis:10,leech:20,singularity:30}[c.source];if(!offset)return [];
+      const wave=offset+30*Math.max(0,Math.ceil((c.minWave-offset)/30));
+      return Array.from({length:Math.max(0,Math.min(4,count))},(_,i)=>wave+i*30);
+    }
     bossSourceName(id){
       const names={aegis:this.lang==='ru'?'АЭГИДА':'AEGIS',leech:this.lang==='ru'?'ПОЖИРАТЕЛЬ':'DEVOURER',singularity:this.lang==='ru'?'СИНГУЛЯРНОСТЬ':'SINGULARITY'};return names[id]||id.toUpperCase();
     }
@@ -2839,13 +2916,40 @@ window.ED_BALANCE = Object.freeze({
     closeResourceHelp(){
       $('resourceHelpScreen').classList.add('hidden');if(this._resourceHelpResume&&this.inRun){this.pauseInternal(!!this.pauseOverlay);if(!this.paused)this.bridge.gameplayStart();}this._resourceHelpResume=false;
     }
+    contractGoalData(){
+      const s=this.save,id=Object.keys(DEFENDER_CONTRACTS).find(id=>!s.unlocked.includes(id)&&(!DEFENDER_CONTRACTS[id].requires||s.unlocked.includes(DEFENDER_CONTRACTS[id].requires)));
+      if(!id)return null;
+      const c=DEFENDER_CONTRACTS[id],st=this.defenderContractStatus(id);
+      return {id,name:this.t[DEFENDERS[id].nameKey],ready:st.ready,boss:this.bossSourceName(c.source),
+        nextWave:this.eligibleContractBossWaves(id,1)[0],
+        wave:[Math.min(c.minWave,s.bestWave||0),c.minWave],
+        parts:[Math.min(c.parts,s.defenderParts?.[id]||0),c.parts],
+        shards:[Math.min(c.shards,s.shards||0),c.shards],
+        gems:[Math.min(c.gems,s.gems||0),c.gems]};
+    }
+    renderContractGoal(){
+      const g=this.contractGoalData();if(!g)return '';
+      const ru=this.lang==='ru',rows=[
+        ['☄',ru?'Рекорд волны':'Best wave',g.wave],
+        ['◈',ru?'Фрагменты':'Fragments',g.parts],
+        ['🔶',ru?'Осколки':'Shards',g.shards],
+        ['💎',ru?'Кристаллы':'Crystals',g.gems]
+      ];
+      const meters=rows.map(([icon,label,[have,total]])=>{
+        const pct=total?Math.round(100*have/total):100;
+        return `<div class="contract-goal-meter"><span>${icon} ${label}<strong>${fmt(have)}/${fmt(total)}</strong></span><div class="progress-track"><i style="width:${pct}%"></i></div></div>`;
+      }).join('');
+      const hint=g.ready?(ru?'Все условия выполнены — собери защитника.':'All requirements met — assemble the defender.'):
+        (ru?`Босс: ${g.boss} · первая подходящая волна ${g.nextWave}`:`Boss: ${g.boss} · first eligible wave ${g.nextWave}`);
+      return `<div class="contract-goal" data-contract-goal="${g.id}"><div class="contract-goal-head"><b>◈ ${ru?'ДОЛГОСРОЧНАЯ ЦЕЛЬ':'LONG-TERM GOAL'}: ${g.name}</b><small>${ru?'Контракт защитника':'Defender contract'}</small></div><div class="contract-goal-grid">${meters}</div><div class="contract-goal-footer"><small>${hint}</small><button type="button" data-next-step="modal" data-target="collectionScreen">${ru?'Подробнее':'Details'} →</button></div></div>`;
+    }
     renderNextSteps(){
       const box=$('nextSteps');if(!box)return;const ru=this.lang==='ru',s=this.save,items=[];
       const add=(icon,title,detail,action,target='',defender='')=>items.push({icon,title,detail,action,target,defender});
       if((s.bestWave||0)>0&&now()>=(s.nextChestAt||0))add('🎁',ru?'Контейнер готов':'Chest ready',ru?'Забери награду за возвращение.':'Claim your return reward.','claim');
       const jr=JOURNEY.findIndex((goal,i)=>!s.journey.claimed[i]&&goal.test(s));
       if(jr>=0){const tx=JOURNEY[jr][this.lang]||JOURNEY[jr].ru;add('🎯',ru?'Забери награду: '+tx[0]:'Claim reward: '+tx[0],ru?'Цель новичка выполнена.':'Rookie goal complete.','rewards');}
-      const q=this.questDefs().find(q=>(s.quests[q.key]||0)>=q.goal&&!s.quests.claimed[this.questDefs().indexOf(q)]);
+      const q=this.questDefs().find((q,i)=>(s.quests[q.key]||0)>=q.goal&&!s.quests.claimed[i]);
       if(q)add('💎',ru?'Забери кристаллы за задание':'Claim quest crystals',q.text,'modal','dailyScreen');
       const wr=WEEKLY_REWARDS.find((reward,i)=>!s.weekly.claimed[i]&&(s.weekly.waves||0)>=reward.waves);
       if(wr)add('🔶',ru?'Недельная награда доступна':'Weekly reward ready',ru?'Награда за пройденные волны.':'Reward for completed waves.','modal','weeklyScreen');
@@ -2857,10 +2961,10 @@ window.ED_BALANCE = Object.freeze({
       if(promoteId)add('★',ru?'Можно повысить звезду':'Star promotion available',this.t[DEFENDERS[promoteId].nameKey],'modal','collectionScreen');
       const talentId=s.unlocked.find(id=>{const m=this.masteryState(id),t=this.talentState(id);return (m.level>=10&&!t.t10)||(m.level>=20&&!t.t20);});
       if(talentId)add('⎇',ru?'Выбери талант':'Choose a talent',this.t[DEFENDERS[talentId].nameKey],'talents','',talentId);
-      const lab=Object.entries(LABS).find(([k,l])=>{const lv=s.lab[k]||0;return lv<l.max&&s.shards>=Math.floor(l.base*Math.pow(l.growth,lv));});
+      const lab=Object.entries(LABS).find(([k,l])=>{const lv=s.lab[k]||0;return lv<l.max&&s.shards>=this.labUpgradeCost(k,lv);});
       if(lab)add('🧪',ru?'Доступно улучшение Лаборатории':'Laboratory upgrade available',this.t[lab[1].nameKey],'modal','labScreen');
       if(!items.length){const hunt=this.activeFragmentHunt();if(hunt){const c=DEFENDER_CONTRACTS[hunt],name=this.t[DEFENDERS[hunt].nameKey],have=s.defenderParts?.[hunt]||0;add('◈',ru?'Ищи фрагменты: '+name:'Hunt fragments: '+name,ru?`${have}/${c.parts} · ${this.bossSourceName(c.source)}, волна ${c.minWave}+`:`${have}/${c.parts} · ${this.bossSourceName(c.source)}, wave ${c.minWave}+`,'run');}else add('🛡',ru?'Проверь свой отряд':'Review your squad',ru?'Выбери трёх защитников для вылазки.':'Choose three defenders for your run.','modal','collectionScreen');}
-      box.innerHTML=`<h3>${ru?'Что делать дальше':'What to do next'}</h3>`+items.slice(0,2).map(x=>`<div class="next-step"><span class="next-step-icon">${x.icon}</span><div class="next-step-copy"><b>${x.title}</b><small>${x.detail}</small></div><button type="button" data-next-step="${x.action}" data-target="${x.target}" data-defender="${x.defender}">${ru?'Перейти':'Open'} →</button></div>`).join('');
+      box.innerHTML=`<h3>${ru?'Что делать дальше':'What to do next'}</h3>`+items.slice(0,2).map(x=>`<div class="next-step"><span class="next-step-icon">${x.icon}</span><div class="next-step-copy"><b>${x.title}</b><small>${x.detail}</small></div><button type="button" data-next-step="${x.action}" data-target="${x.target}" data-defender="${x.defender}">${ru?'Перейти':'Open'} →</button></div>`).join('')+this.renderContractGoal();
     }
 
     renderHome(){
@@ -2950,7 +3054,9 @@ window.ED_BALANCE = Object.freeze({
     }
     masteryXpNeed(level){return Math.floor(18*Math.pow(1.20,Math.max(0,level-1))+level*3);}
     masteryCap(stars){return Math.min(25,Math.max(1,stars||1)*5);}
-    masteryBonuses(id){const m=this.masteryState(id),lv=m.level||1,st=m.stars||1;return {damage:1+(lv-1)*.035+(st-1)*.05,rate:1+Math.floor((lv-1)/5)*.025,utility:1+(lv>=15?.10:0)+(lv>=25?.10:0)};}
+    masteryBonuses(id){const m=this.masteryState(id),lv=m.level||1,st=m.stars||1,e=BALANCE.economy;
+      const rangeExtra=Math.min(e.defenderRangeBonusCap||.85,Math.max(0,(this.save.lab.damage||0)*(e.defenderRangePerLab||.025)+(lv-1)*(e.defenderRangePerMastery||.01)+(st-1)*(e.defenderRangePerStar||.03)));
+      return {damage:1+(lv-1)*.035+(st-1)*.05,rate:1+Math.floor((lv-1)/5)*.025,utility:1+(lv>=15?.10:0)+(lv>=25?.10:0),range:1+rangeExtra};}
     gainDefenderMastery(amount){
       if(!amount)return;const leveled=[],talentUnlocks=[],rewardUnlocks=[];
       for(const id of this.save.selected){const m=this.masteryState(id),cap=this.masteryCap(m.stars),before=m.level;if(m.level>=cap){m.xp=Math.min(m.xp,this.masteryXpNeed(m.level));continue;}m.xp+=Math.max(1,Math.floor(amount));let changed=false;while(m.level<cap&&m.xp>=this.masteryXpNeed(m.level)){m.xp-=this.masteryXpNeed(m.level);m.level++;changed=true;}if(changed){leveled.push(id);for(const tier of [10,20])if(before<tier&&m.level>=tier&&!this.talentState(id)[`t${tier}`])talentUnlocks.push({id,tier});for(const milestone of MASTERY_MILESTONES)if(before<milestone.level&&m.level>=milestone.level)rewardUnlocks.push({id,level:milestone.level});}}
@@ -3005,10 +3111,10 @@ window.ED_BALANCE = Object.freeze({
     claimJourney(i){const j=JOURNEY[i];if(!j||this.save.journey.claimed[i]||!j.test(this.save))return;this.save.journey.claimed[i]=true;this.track('rookie_goal',{index:i});this.save.shards+=j.reward.shards||0;this.save.gems+=j.reward.gems||0;const reward=[j.reward.shards?`+${j.reward.shards} 🔶`:'',j.reward.gems?`+${j.reward.gems} 💎`:''].filter(Boolean).join('   ');this.celebrateReward(reward,j.icon);if(this.save.journey.claimed.every(Boolean)&&!this.save.journey.bonusClaimed){this.save.journey.bonusClaimed=true;this.save.gems+=6;setTimeout(()=>this.celebrateReward('+6 💎','💎'),1350);setTimeout(()=>this.toast(this.t.journeyCompleteBonus),1500);}this.persist(true);this.renderHome();this.renderJourney();}
 
     renderLab(){
-      $('labList').innerHTML=Object.entries(LABS).map(([k,l])=>{const lv=this.save.lab[k]||0,cost=Math.floor(l.base*Math.pow(l.growth,lv)),max=lv>=l.max,can=this.save.shards>=cost&&!max;return `<div class="upgrade-row"><div><h4>${l.icon} ${this.t[l.nameKey]} <span class="tag">${this.t.lvl} ${lv}/${l.max}</span></h4><p>${this.t[l.descKey]}</p></div><button class="buy-upgrade ${can?'can-buy':''}" data-lab="${k}" ${max||!can?'disabled':''}>${max?this.t.max:`🔶 ${fmt(cost)}${can?"":` · ${this.lang==="ru"?"Не хватает":"Need"} ${fmt(cost-this.save.shards)}`}`}</button></div>`}).join('');
+      $('labList').innerHTML=Object.entries(LABS).map(([k,l])=>{const lv=this.save.lab[k]||0,cost=this.labUpgradeCost(k,lv),max=lv>=l.max,can=this.save.shards>=cost&&!max;return `<div class="upgrade-row"><div><h4>${l.icon} ${this.t[l.nameKey]} <span class="tag">${this.t.lvl} ${lv}/${l.max}</span></h4><p>${this.t[l.descKey]}</p></div><button class="buy-upgrade ${can?'can-buy':''}" data-lab="${k}" ${max||!can?'disabled':''}>${max?this.t.max:`🔶 ${fmt(cost)}${can?"":` · ${this.lang==="ru"?"Не хватает":"Need"} ${fmt(cost-this.save.shards)}`}`}</button></div>`}).join('');
       document.querySelectorAll('[data-lab]').forEach(b=>b.onclick=()=>this.buyLab(b.dataset.lab));
     }
-    buyLab(k){const l=LABS[k],lv=this.save.lab[k],cost=Math.floor(l.base*Math.pow(l.growth,lv));if(lv>=l.max||this.save.shards<cost)return;const first=Object.values(this.save.lab||{}).reduce((a,v)=>a+(v||0),0)===0;this.save.shards-=cost;this.save.lab[k]++;if(first)this.track('first_lab_upgrade',{type:k,cost});this.audio.upgrade();this.persist();this.renderHome();}
+    buyLab(k){const l=LABS[k];if(!l)return;const lv=this.save.lab[k],cost=this.labUpgradeCost(k,lv);if(lv>=l.max||this.save.shards<cost)return;const first=Object.values(this.save.lab||{}).reduce((a,v)=>a+(v||0),0)===0;this.save.shards-=cost;this.save.lab[k]++;if(first)this.track('first_lab_upgrade',{type:k,cost});this.audio.upgrade();this.persist();this.renderHome();}
 
     questDefs(){return [{key:'waves',goal:12,reward:2,text:this.t.questWaves.replace('{n}',12)},{key:'upgrades',goal:8,reward:2,text:this.t.questUpgrades.replace('{n}',8)},{key:'skills',goal:3,reward:1,text:this.t.questSkills.replace('{n}',3)}];}
     renderQuests(){
@@ -3017,10 +3123,29 @@ window.ED_BALANCE = Object.freeze({
     }
     claimQuest(i){const q=this.questDefs()[i];if(this.save.quests.claimed[i]||(this.save.quests[q.key]||0)<q.goal)return;this.save.quests.claimed[i]=true;this.save.gems+=q.reward;this.ensureSeason();this.save.season.xp+=BALANCE.economy.dailyQuestSeasonXp||10;this.track('daily_quest',{index:i});this.celebrateReward(`+${q.reward} 💎`,'💎');this.persist();this.renderHome();}
 
+    // Read-only description of the three currently selected roles.
+    // Keep the exact combat synergy resolver as the single source of truth.
+    squadSummaryData(){
+      const ids=this.save.selected.filter(id=>DEFENDERS[id]&&this.save.unlocked.includes(id));
+      return {ids,names:ids.map(id=>this.t[DEFENDERS[id].nameKey]),synergy:this.activeSynergy(ids),
+        replaced:ids.length===3?this.t[DEFENDERS[ids[0]].nameKey]:null};
+    }
     renderCollection(){
+      const summary=$('collectionSquadSummary');
+      if(summary){
+        const data=this.squadSummaryData(),ru=this.lang==='ru',syn=data.synergy;
+        const names=data.names.join(' · ')||(ru?'Отряд не выбран':'No squad selected');
+        const effect=syn.id==='none'
+          ?(ru?'Особое сочетание пока не активно. Меняй роли и изучай результат.':'No special synergy yet. Try different roles and inspect the result.')
+          :syn.desc;
+        const replace=data.replaced
+          ?(ru?'При выборе нового защитника заменится: ':'Selecting another defender replaces: ')+data.replaced
+          :'';
+        summary.innerHTML=`<div class="collection-squad-line"><span>${ru?'СЕЙЧАС В ОТРЯДЕ':'CURRENT SQUAD'}</span><strong>${names}</strong></div><div class="collection-squad-line" data-active-synergy="${syn.id}"><span>${ru?'СОЧЕТАНИЕ':'SYNERGY'}</span><strong>${syn.name}</strong></div><div class="collection-squad-effect">${effect}</div><div class="collection-squad-hint">${replace}</div>`;
+      }
       $('defenderList').innerHTML=Object.entries(DEFENDERS).map(([id,d])=>{const open=this.save.unlocked.includes(id),sel=this.save.selected.includes(id),rar=d.rarity||'common',rlabel=this.lang==='ru'?(rar==='legendary'?'ЛЕГЕНДАРНЫЙ':rar==='epic'?'ЭПИЧЕСКИЙ':rar==='rare'?'РЕДКИЙ':'ОБЫЧНЫЙ'):(rar==='legendary'?'LEGENDARY':rar==='epic'?'EPIC':rar==='rare'?'RARE':'COMMON'),m=this.masteryState(id),cap=this.masteryCap(m.stars),need=this.masteryXpNeed(m.level),xpPct=m.level>=cap?100:Math.min(100,m.xp/need*100),bonus=this.masteryBonuses(id),promote=open&&m.level>=cap&&m.stars<5,cost=PROMOTION_COSTS[m.stars]||0,bpCost=PROMOTION_BLUEPRINT_COSTS[m.stars]||0,bp=this.save.blueprints[id]||0,tstate=this.talentState(id),talCount=(tstate.t10?1:0)+(tstate.t20?1:0),talReady=(m.level>=10&&!tstate.t10)||(m.level>=20&&!tstate.t20),rewardReady=this.masteryMilestoneReady(id),canPromote=this.save.gems>=cost&&bp>=bpCost,cs=!open?this.defenderContractStatus(id):null;
-        const missing=[];if(cs){const c=cs.contract;if(!cs.prevOk)missing.push(this.lang==='ru'?'Открой предыдущего защитника':'Unlock the previous defender');if(!cs.waveOk)missing.push(this.lang==='ru'?`Рекорд: ${this.save.bestWave||0}/${c.minWave} волн`:`Best wave: ${this.save.bestWave||0}/${c.minWave}`);if(!cs.partsOk)missing.push(`◈ ${this.lang==='ru'?'Не хватает':'Missing'} ${c.parts-cs.parts}`);if(this.save.shards<c.shards)missing.push(`🔶 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.shards-this.save.shards)}`);if(this.save.gems<c.gems)missing.push(`💎 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.gems-this.save.gems)}`);}const missingHtml=missing.length?`<div class="contract-missing">${missing.join(' · ')}</div>`:'';let contract='';if(cs){const c=cs.contract,reqHtml=cs.reqs.map(r=>`<span class="contract-req ${r.current>=r.goal?'done':''}">${r.current>=r.goal?'✓':'○'} ${r.label} <b>${r.key==='parts'?`${Math.min(r.current,r.goal)}/${r.goal}`:(r.key==='source'?`${Math.min(this.save.bestWave||0,c.minWave)}/${c.minWave}`:(r.current>=r.goal?(this.lang==='ru'?'ГОТОВО':'READY'):'—'))}</b></span>`).join(''),costHtml=`<span class="shard-cost">🔶 ${c.shards}</span>${c.gems?`<span class="gem-cost">💎 ${c.gems}</span>`:''}`,huntNote=this.lang==='ru'?'Фрагменты сигнатуры добываются только с этого босса на нужной глубине':'Signature fragments drop only from this boss at the required depth';contract=`<div class="unlock-contract"><div class="contract-head"><b>${this.lang==='ru'?'СБОРКА СИГНАТУРЫ':'SIGNATURE ASSEMBLY'}</b><small>${cs.partsOk?(this.lang==='ru'?'КОМПЛЕКТ СОБРАН':'SET COMPLETE'):(this.lang==='ru'?'ОХОТА АКТИВНА':'HUNT ACTIVE')}</small></div><div class="contract-source"><strong>☠ ${this.bossSourceName(c.source)} · ${c.minWave}+</strong><span>${huntNote}</span></div><div class="fragment-track">${Array.from({length:c.parts},(_,i)=>`<i class="${i<cs.parts?'filled':''}">◈</i>`).join('')}<b>${cs.parts}/${c.parts}</b></div><div class="contract-reqs">${reqHtml}</div><div class="contract-cost"><em>${this.lang==='ru'?'Сборка':'Assembly'}</em>${costHtml}</div>${missingHtml}</div>`;}
-        return `<div class="defender-row mastery-row ${open?'':'locked-contract'}" data-rarity="${rar}"><div class="defender-icon" style="color:${d.color}">${open?d.icon:'?'}</div><div class="defender-main"><h4>${this.t[d.nameKey]} <span class="rarity-tag ${rar}">${rlabel}</span></h4><p>${this.t[d.roleKey]}</p>${open?`<div class="mastery-head"><b>${this.t.masteryLevel} ${m.level}</b><span>${'★'.repeat(m.stars)}${'☆'.repeat(5-m.stars)}</span></div><div class="mastery-track"><i style="width:${xpPct}%"></i></div><div class="mastery-meta"><span>${m.level>=cap?this.t.masteryCapped:`${m.xp}/${need} XP`}</span><span>DMG +${Math.round((bonus.damage-1)*100)}% · SPD +${Math.round((bonus.rate-1)*100)}%</span></div><div class="blueprint-line"><span>🧩 ${this.lang==='ru'?'Чертежи':'Blueprints'}</span><b>${bp}</b></div>`:contract}</div><div class="defender-actions">${open?`<button class="buy-upgrade ${sel?'can-buy':''}" data-def="${id}">${sel?this.t.selected:this.t.choose}</button><button class="milestone-btn ${rewardReady?'reward-ready':''}" data-milestones="${id}">🎁 ${this.lang==='ru'?'Рубежи':'Milestones'}${rewardReady?'<small>НАГРАДА</small>':''}</button><button class="talent-btn ${talReady?'talent-ready':''}" data-talents="${id}">⎇ ${this.lang==='ru'?'Таланты':'Talents'} <small>${talCount}/2</small></button>${promote?`<button class="promote-btn ${canPromote?'can-promote':''}" data-promote="${id}" ${!canPromote?'disabled':''}>★ ${this.t.masteryPromote}<small>💎 ${this.save.gems}/${cost} · 🧩 ${bp}/${bpCost}${canPromote?"":` · ${this.lang==="ru"?"Не хватает":"Missing"} ${[this.save.gems<cost?`💎 ${cost-this.save.gems}`:"",bp<bpCost?`🧩 ${bpCost-bp}`:""].filter(Boolean).join(" + ")}`}</small></button>`:''}`:`<button class="unlock-defender-btn ${cs?.ready?'ready':cs?.requirementsMet?'needs-resources':''}" data-unlock-defender="${id}" ${!cs?.requirementsMet?'disabled':''}>${cs?.ready?(this.lang==='ru'?'АКТИВИРОВАТЬ':'ACTIVATE'):cs?.requirementsMet?(this.lang==='ru'?'НУЖНЫ РЕСУРСЫ':'NEED RESOURCES'):(this.lang==='ru'?'ЗАКРЫТО':'LOCKED')}</button>`}</div></div>`}).join('');
+        const missing=[];if(cs){const c=cs.contract;if(!cs.prevOk)missing.push(this.lang==='ru'?'Открой предыдущего защитника':'Unlock the previous defender');if(!cs.waveOk)missing.push(this.lang==='ru'?`Рекорд: ${this.save.bestWave||0}/${c.minWave} волн`:`Best wave: ${this.save.bestWave||0}/${c.minWave}`);if(!cs.partsOk)missing.push(`◈ ${this.lang==='ru'?'Не хватает':'Missing'} ${c.parts-cs.parts}`);if(this.save.shards<c.shards)missing.push(`🔶 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.shards-this.save.shards)}`);if(this.save.gems<c.gems)missing.push(`💎 ${this.lang==='ru'?'Не хватает':'Missing'} ${fmt(c.gems-this.save.gems)}`);}const missingHtml=missing.length?`<div class="contract-missing">${missing.join(' · ')}</div>`:'';let contract='';if(cs){const c=cs.contract,forecast=this.eligibleContractBossWaves(id,3),needBosses=Math.max(1,c.pity-cs.pity),contractGuide=cs.partsOk?'':`<div class="contract-hunt-forecast"><b>${this.lang==='ru'?'ОХОТА НА ФРАГМЕНТ':'FRAGMENT HUNT'}</b><span>${this.lang==='ru'?('Базовый шанс '+Math.round(c.chance*100)+'% · следующий фрагмент гарантирован не позднее чем через '+needBosses+' побед над нужным боссом'):('Base chance '+Math.round(c.chance*100)+'% · next fragment guaranteed within '+needBosses+' eligible boss victories')}</span><small>${this.lang==='ru'?'Подходящие волны: ':'Eligible waves: '}${forecast.join(' · ')}…</small></div>`,reqHtml=cs.reqs.map(r=>`<span class="contract-req ${r.current>=r.goal?'done':''}">${r.current>=r.goal?'✓':'○'} ${r.label} <b>${r.key==='parts'?`${Math.min(r.current,r.goal)}/${r.goal}`:(r.key==='source'?`${Math.min(this.save.bestWave||0,c.minWave)}/${c.minWave}`:(r.current>=r.goal?(this.lang==='ru'?'ГОТОВО':'READY'):'—'))}</b></span>`).join(''),costHtml=`<span class="shard-cost">🔶 ${c.shards}</span>${c.gems?`<span class="gem-cost">💎 ${c.gems}</span>`:''}`,huntNote=this.lang==='ru'?'Фрагменты сигнатуры добываются только с этого босса на нужной глубине':'Signature fragments drop only from this boss at the required depth';contract=`<div class="unlock-contract"><div class="contract-head"><b>${this.lang==='ru'?'СБОРКА СИГНАТУРЫ':'SIGNATURE ASSEMBLY'}</b><small>${cs.partsOk?(this.lang==='ru'?'КОМПЛЕКТ СОБРАН':'SET COMPLETE'):(this.lang==='ru'?'ОХОТА АКТИВНА':'HUNT ACTIVE')}</small></div><div class="contract-source"><strong>☠ ${this.bossSourceName(c.source)} · ${c.minWave}+</strong><span>${huntNote}</span></div><div class="fragment-track">${Array.from({length:c.parts},(_,i)=>`<i class="${i<cs.parts?'filled':''}">◈</i>`).join('')}<b>${cs.parts}/${c.parts}</b></div><div class="contract-reqs">${reqHtml}</div><div class="contract-cost"><em>${this.lang==='ru'?'Сборка':'Assembly'}</em>${costHtml}</div>${contractGuide}${missingHtml}</div>`;}
+        return `<div class="defender-row mastery-row ${open?'':'locked-contract'}" data-rarity="${rar}"><div class="defender-icon" style="color:${d.color}">${open?d.icon:'?'}</div><div class="defender-main"><h4>${this.t[d.nameKey]} <span class="rarity-tag ${rar}">${rlabel}</span></h4><p>${this.t[d.roleKey]}</p>${open?`<div class="mastery-head"><b>${this.t.masteryLevel} ${m.level}</b><span>${'★'.repeat(m.stars)}${'☆'.repeat(5-m.stars)}</span></div><div class="mastery-track"><i style="width:${xpPct}%"></i></div><div class="mastery-meta"><span>${m.level>=cap?this.t.masteryCapped:`${m.xp}/${need} XP`}</span><span>DMG +${Math.round((bonus.damage-1)*100)}% · SPD +${Math.round((bonus.rate-1)*100)}% · 🎯 +${Math.round((bonus.range-1)*100)}%</span></div><div class="blueprint-line"><span>🧩 ${this.lang==='ru'?'Чертежи':'Blueprints'}</span><b>${bp}</b></div>`:contract}</div><div class="defender-actions">${open?`<button class="buy-upgrade ${sel?'can-buy':''}" data-def="${id}">${sel?this.t.selected:this.t.choose}</button><button class="milestone-btn ${rewardReady?'reward-ready':''}" data-milestones="${id}">🎁 ${this.lang==='ru'?'Рубежи':'Milestones'}${rewardReady?'<small>НАГРАДА</small>':''}</button><button class="talent-btn ${talReady?'talent-ready':''}" data-talents="${id}">⎇ ${this.lang==='ru'?'Таланты':'Talents'} <small>${talCount}/2</small></button>${promote?`<button class="promote-btn ${canPromote?'can-promote':''}" data-promote="${id}" ${!canPromote?'disabled':''}>★ ${this.t.masteryPromote}<small>💎 ${this.save.gems}/${cost} · 🧩 ${bp}/${bpCost}${canPromote?"":` · ${this.lang==="ru"?"Не хватает":"Missing"} ${[this.save.gems<cost?`💎 ${cost-this.save.gems}`:"",bp<bpCost?`🧩 ${bpCost-bp}`:""].filter(Boolean).join(" + ")}`}</small></button>`:''}`:`<button class="unlock-defender-btn ${cs?.ready?'ready':cs?.requirementsMet?'needs-resources':''}" data-unlock-defender="${id}" ${!cs?.requirementsMet?'disabled':''}>${cs?.ready?(this.lang==='ru'?'АКТИВИРОВАТЬ':'ACTIVATE'):cs?.requirementsMet?(this.lang==='ru'?'НУЖНЫ РЕСУРСЫ':'NEED RESOURCES'):(this.lang==='ru'?'ЗАКРЫТО':'LOCKED')}</button>`}</div></div>`}).join('');
       document.querySelectorAll('[data-def]').forEach(b=>b.onclick=()=>this.selectDefender(b.dataset.def));document.querySelectorAll('[data-unlock-defender]').forEach(b=>b.onclick=()=>this.unlockDefender(b.dataset.unlockDefender));document.querySelectorAll('[data-promote]').forEach(b=>b.onclick=e=>{e.stopPropagation();this.promoteDefender(b.dataset.promote);});document.querySelectorAll('[data-talents]').forEach(b=>b.onclick=e=>{e.stopPropagation();this.openTalents(b.dataset.talents);});document.querySelectorAll('[data-milestones]').forEach(b=>b.onclick=e=>{e.stopPropagation();this.openMasteryRewards(b.dataset.milestones);});
     }
     selectDefender(id){if(!this.save.unlocked.includes(id))return;if(this.save.selected.includes(id))return;this.save.selected.shift();this.save.selected.push(id);this.persist();this.renderHome();}
@@ -3078,7 +3203,10 @@ window.ED_BALANCE = Object.freeze({
       if(announce){this.banner(`${rule.icon} ${this.lang==='ru'?'РАЗЛОМ':'RIFT'} ${sector}: ${this.run.rift.name}`,false);this.toast(this.run.rift.desc);}return this.run.rift;
     }
     waveEnemyCount(w){const b=BALANCE.wave;if(this.isBossWave(w))return 1;let n=b.baseCount+Math.floor(w*b.countGrowth)+Math.floor(Math.max(0,w-24)*b.post24Growth)+(w%5===0?b.eliteBonusCount:0);if(w>1&&w%10===1)n=Math.max(b.baseCount,Math.floor(n*(b.postBossCountMultiplier||.86)));return n}
-    waveHp(w){const b=BALANCE.wave,early=Math.pow(b.hpEarlyGrowth,Math.min(b.hpEarlyCap,Math.max(0,w-1))),late=Math.pow(b.hpLateGrowth,Math.max(0,w-30)),rift=this.run?.rift?.fx?.enemyHp||1,first=this.run?.firstRun?(this.isBossWave(w)?(BALANCE.onboarding?.firstBossHpMultiplier||.92):(w<=9?(BALANCE.onboarding?.firstRunHpMultiplier||.86):1)):1,elite=(w%5===0&&!this.isBossWave(w)?(b.eliteWaveHpMultiplier||1.52):1),breather=(w>1&&w%10===1?(b.postBossHpMultiplier||.90):1);return b.hpBase*early*late*elite*breather*(this.run?.challengeHp||1)*rift*first}
+    waveHp(w){const b=BALANCE.wave,early=Math.pow(b.hpEarlyGrowth,Math.min(b.hpEarlyCap,Math.max(0,w-1))),late=Math.pow(b.hpLateGrowth,Math.max(0,Math.min(w,b.hpEndgameStartWave||60)-30))*Math.pow(b.hpEndgameGrowth||b.hpLateGrowth,Math.max(0,w-(b.hpEndgameStartWave||60))),rift=this.run?.rift?.fx?.enemyHp||1,first=this.run?.firstRun?(this.isBossWave(w)?(BALANCE.onboarding?.firstBossHpMultiplier||.92):(w<=9?(BALANCE.onboarding?.firstRunHpMultiplier||.86):1)):1,elite=(w%5===0&&!this.isBossWave(w)?(b.eliteWaveHpMultiplier||1.52):1),breather=(w>1&&w%10===1?(b.postBossHpMultiplier||.90):1);return b.hpBase*early*late*elite*breather*(this.run?.challengeHp||1)*rift*first}
+    bossHp(w,b){const v=b.variant||{},softening=1/(1+Math.max(0,w-40)*(BALANCE.wave.bossLateDampening||0));return this.waveHp(w)*b.hp*(v.hp||1)*(1+Math.max(0,w-30)*.012)*softening;}
+    // Smooth onboarding to Rift affixes after wave 30; no abrupt difficulty step at wave 55.
+    riftEase(w){const b=BALANCE.wave,start=b.riftEaseStartWave||30,peak=b.riftEasePeakWave||35,end=b.riftEaseEndWave||55;const inPart=clamp((w-start)/Math.max(1,peak-start),0,1),outPart=clamp((end-w)/Math.max(1,end-peak),0,1),weight=inPart*outPart;return {hp:1-(1-(b.riftEaseHpFloor||.70))*weight,speed:1-(1-(b.riftEaseSpeedFloor||.88))*weight};}
     waveSpeed(w){const b=BALANCE.wave,rift=this.run?.rift?.fx?.enemySpeed||1;return (b.speedBase+Math.min(b.speedCap,w*b.speedGrowth))*(this.run?.challengeSpeed||1)*rift}
     bossVariant(w){if(w<40)return null;return BOSS_VARIANTS[(Math.floor(w/10)-4)%BOSS_VARIANTS.length]||null}
     bossSpec(w){
@@ -3094,15 +3222,29 @@ window.ED_BALANCE = Object.freeze({
     }
 
     renderUnitCards(){
-      $('unitCards').innerHTML=this.run.units.map((u,i)=>{const d=DEFENDERS[u.id],cost=this.unitUpgradeCost(u);const rar=d.rarity||'common';return `<button class="unit-card" data-unit="${i}" data-rarity="${rar}"><div class="unit-name" style="color:${d.color}"><i class="unit-rarity-dot"></i>${d.icon} ${this.t[d.nameKey]}</div><div class="unit-level">${this.t.lvl} ${u.level} · ${this.t.masteryLevel} ${this.masteryState(u.id).level}</div><div class="unit-cost">⚡ ${fmt(cost)}</div></button>`}).join('');
+      $('unitCards').innerHTML=this.run.units.map((u,i)=>{const d=DEFENDERS[u.id],cost=this.unitUpgradeCost(u);const rar=d.rarity||'common';return `<button class="unit-card" data-unit="${i}" data-rarity="${rar}"><div class="unit-name" style="color:${d.color}"><i class="unit-rarity-dot"></i>${d.icon} ${this.t[d.nameKey]}</div><div class="unit-level">${this.t.lvl} ${u.level} · ${this.t.masteryLevel} ${this.masteryState(u.id).level}</div><div class="unit-cost">⚡ ${fmt(cost)}</div><div class="unit-upgrade-meta"><span class="unit-next-level">${this.lang==='ru'?'Ур.':'Lv.'}${u.level+1}</span><span class="unit-affordance" aria-hidden="true"></span></div></button>`}).join('');
       document.querySelectorAll('[data-unit]').forEach(b=>b.onclick=()=>this.upgradeUnit(+b.dataset.unit));
     }
-    unitUpgradeCost(u){return Math.floor(BALANCE.economy.unitUpgradeBase*Math.pow(BALANCE.economy.unitUpgradeGrowth,u.level-1));}
+    // Early Lab levels retain their prices; after level 8, softer growth keeps
+    // late progression achievable without altering saves or earned resources.
+    labUpgradeCost(k,level=this.save.lab[k]||0){
+      const l=LABS[k];if(!l)return Infinity;
+      const lv=Math.max(0,Math.floor(level)),pivot=Math.min(lv,8);
+      return Math.floor(l.base*Math.pow(l.growth,pivot)*Math.pow(1.18,Math.max(0,lv-8)));
+    }
+    unitUpgradeCost(u){
+      const e=BALANCE.economy,lv=Math.max(0,Math.floor(u.level||1)-1),pivot=Math.min(lv,e.unitLatePivot||8);
+      return Math.floor(e.unitUpgradeBase*Math.pow(e.unitUpgradeGrowth,pivot)*Math.pow(e.unitUpgradeLateGrowth||1.15,Math.max(0,lv-pivot)));
+    }
+    unitDamageMultiplier(level){
+      const e=BALANCE.economy,lv=Math.max(1,Math.floor(level||1));
+      return (1+(lv-1)*.42)*Math.pow(e.unitDamageLateGrowth||1.27,Math.max(0,lv-(e.unitLatePivot||8)));
+    }
     upgradeUnit(i){const u=this.run?.units[i];if(!u)return;const c=this.unitUpgradeCost(u);if(this.run.energy<c)return;this.run.energy-=c;u.level++;this.run.upgrades++;this.save.quests.upgrades++;this.save.stats.upgrades++;if(this.run.upgrades===1)this.track('first_upgrade',{wave:this.run.wave,unit:u.id});this.checkFieldOrders();this.checkAchievements();this.audio.upgrade();this.renderUnitCards();this.updateBattleHud();this.persist();}
 
-    // Flow speed affects only enemy spawn cadence and movement; combat timers stay real-time.
+    // Whole-battle time scaling: defenses, cooldowns, enemies and boss phases all use simulation time.
     effectiveSpeed(){return this.rmbBoost?3:Number(this.run?.speed||1);}
-    refreshSpeedButton(){const b=$('speedBtn');if(!b)return;b.classList.toggle('temp-boost',!!this.rmbBoost);const speed=this.rmbBoost?3:Number(this.run?.speed||1);b.textContent=this.rmbBoost?(this.lang==='ru'?'ПКМ ×3':'RMB ×3'):`×${speed}`;b.title=this.lang==='ru'?`Поток врагов ×${speed}`:`Enemy flow ×${speed}`;b.setAttribute('aria-label',b.title);}
+    refreshSpeedButton(){const b=$('speedBtn');if(!b)return;b.classList.toggle('temp-boost',!!this.rmbBoost);const speed=this.rmbBoost?3:Number(this.run?.speed||1);b.textContent=this.rmbBoost?(this.lang==='ru'?'ПКМ ×3':'RMB ×3'):`×${speed}`;b.title=this.lang==='ru'?`Скорость всей игры ×${speed}`:`Whole-game speed ×${speed}`;b.setAttribute('aria-label',b.title);}
     setRmbBoost(active){const next=!!active&&!!this.inRun&&!!this.run&&!this.paused;if(this.rmbBoost===next)return;this.rmbBoost=next;this.refreshSpeedButton();if(next)this.track('combat_speed_hold',{speed:3,wave:this.run?.wave||0});}
     toggleSpeed(){if(!this.run)return;const speeds=[.5,1,2,3,4],cur=Number(this.run.speed||1),i=speeds.findIndex(x=>Math.abs(x-cur)<.01);this.run.speed=speeds[(i+1+speeds.length)%speeds.length];this.refreshSpeedButton();this.track('combat_speed',{speed:this.run.speed,wave:this.run.wave});}
     usePulse(){if(!this.run||this.run.skillCd>0||this.paused)return;this.run.skillCd=12*(this.run.mods?.skillCd||1);this.run.skills++;this.save.quests.skills++;this.save.stats.skills++;if(this.run.skills===1)this.track('first_pulse',{wave:this.run.wave});for(const e of this.run.enemies){let resist=e.boss?.id==='aegis'&&e.hp/e.maxHp>.5?.72:1;if(e.boss?.variant?.guard)resist*=1-e.boss.variant.guard;if(e.affixes?.includes('barrier'))resist*=ENEMY_AFFIXES.barrier.fx.damageTaken;e.hp-=32*(1+this.save.lab.damage*.06)*(1+(this.save.meta.spent.damage||0)*.03)*this.metaRankBonus()*resist*(this.run.rift?.fx?.playerDamage||1);e.flash=.18;}this.run.screenFlash=.18;this.spawnBurst(690,360,'#7fe7ff',36);this.audio.pulse();this.checkFieldOrders();this.checkAchievements();this.persist();}
@@ -3139,7 +3281,7 @@ window.ED_BALANCE = Object.freeze({
     spawnEnemy(){
       const w=this.run.wave,bossWave=this.isBossWave(w);
       if(bossWave&&this.run.spawned===0){
-        const b=this.bossSpec(w),v=b.variant||{},hp=this.waveHp(w)*b.hp*(v.hp||1)*(1+Math.max(0,w-30)*.012);
+        const b=this.bossSpec(w),v=b.variant||{},hp=this.bossHp(w,b);
         const e={type:'boss',boss:{...b},x:1325,y:360,r:b.r,hp,maxHp:hp,speed:this.waveSpeed(w)*b.speed*(v.speed||1),slow:0,flash:0,color:b.color,energy:Math.round(b.energy*(v.energy||1)),burnTime:0,burnDps:0,weakenTime:0,bossTimer:3.8*(v.abilityRate||1),phase:0,weakCooldown:(b.id==='aegis'&&(this.save.bossesDefeated?.aegis||0)===0?(BALANCE.polish?.firstAegisWeakDelay||1.15):2.6),weakOpen:0,weakAngle:Math.random()*Math.PI*2,armorDisabled:0,regenSuppressed:0};
         this.run.enemies.push(e);this.run.boss=e;this.run.spawned++;this.run.bossIntro=true;this.run.screenFlash=.35;this.run.shake=.22;
         this.showBossIntro(b);this.audio.bossIntro(b.id);this.spawnBurst(1190,360,b.color,42);this.spawnRing(1190,360,b.color,50,190,.7);return;
@@ -3152,14 +3294,14 @@ window.ED_BALANCE = Object.freeze({
       if(type==='sapper'){hpMul=.9;speedMul=.9;r=16;energy=9;color='#6df2ff';}
       const affixes=this.rollEnemyAffixes(type,w);let affixSpeed=1,statusResist=1,coreDamage=1,regen=0;
       for(const id of affixes){const fx=ENEMY_AFFIXES[id].fx;if(fx.speed)affixSpeed*=fx.speed;if(fx.statusResist)statusResist*=fx.statusResist;if(fx.coreDamage)coreDamage*=fx.coreDamage;if(fx.regen)regen+=fx.regen;}
-      const hp=this.waveHp(w)*hpMul;
+      const ease=this.riftEase(w),hp=this.waveHp(w)*hpMul*ease.hp;
       const threatChance=w>=6?(type==='elite'?.52:type==='brute'?.30:type==='runner'?.16:.10):0;
       const threatReady=Math.random()<threatChance;
-      this.run.enemies.push({type,x:1260+r,y:100+Math.random()*520,r,hp,maxHp:hp,speed:this.waveSpeed(w)*speedMul*affixSpeed,slow:0,flash:0,color,energy,burnTime:0,burnDps:0,weakenTime:0,affixes,statusResist,affixCoreDamage:coreDamage,affixRegen:regen,threatReady,threatCharge:threatReady?(type==='elite'?2.8:2.35):0,threatBoost:0,sabotageReady:false,sabotageCharge:0,sabotaged:false});this.run.spawned++;
+      this.run.enemies.push({type,x:1260+r,y:100+Math.random()*520,r,hp,maxHp:hp,speed:this.waveSpeed(w)*speedMul*affixSpeed*ease.speed,slow:0,flash:0,color,energy,burnTime:0,burnDps:0,weakenTime:0,affixes,statusResist,affixCoreDamage:coreDamage,affixRegen:regen,threatReady,threatCharge:threatReady?(type==='elite'?2.8:2.35):0,threatBoost:0,sabotageReady:false,sabotageCharge:0,sabotaged:false});this.run.spawned++;
     }
     update(dt){
       if(!this.inRun||this.paused||!this.run)return;
-      const rawDt=dt;let enemyFlowDt=dt*this.effectiveSpeed();
+      const rawDt=dt;let enemyFlowDt=dt;
       const r=this.run;if((r.hitStop||0)>0){r.hitStop=Math.max(0,r.hitStop-rawDt);dt*=.08;enemyFlowDt*=.08;} const cb=this.commanderBonuses(),cc=BALANCE.commander||{};r.muzzleFlash=Math.max(0,(r.muzzleFlash||0)-rawDt);for(const m of r.impactMarks||[])m.life-=rawDt;r.impactMarks=(r.impactMarks||[]).filter(m=>m.life>0);r.skillCd=Math.max(0,r.skillCd-dt);r.commanderCooldown=Math.max(0,(r.commanderCooldown||0)-dt);const wasOverheated=!!r.commanderOverheated;r.commanderHeat=Math.max(0,(r.commanderHeat||0)-cb.coolRate*dt*(r.commanderModeTimer>0?1.8:1));if(r.commanderOverheated&&r.commanderHeat<=(cc.recoverAt||42)){r.commanderOverheated=false;if(wasOverheated)this.audio.cooled();}if(r.commanderModeTimer>0){r.commanderModeTimer=Math.max(0,r.commanderModeTimer-dt);if(r.commanderModeTimer===0)this.track('commander_mode_end',{wave:r.wave});}r.focusTimer=Math.max(0,(r.focusTimer||0)-dt);if(r.focusTimer<=0||!r.focusTarget||r.focusTarget.hp<=0)r.focusTarget=null;r.precisionTimer=Math.max(0,(r.precisionTimer||0)-dt);if(r.precisionTimer<=0)r.precisionStreak=0;for(const o of r.orbs||[]){o.life-=dt;o.y+=Math.sin((o.seed||0)+o.life*5)*4*dt;}r.orbs=(r.orbs||[]).filter(o=>o.life>0);r.screenFlash=Math.max(0,(r.screenFlash||0)-dt);r.shake=Math.max(0,(r.shake||0)-dt);r.comboTimer=Math.max(0,(r.comboTimer||0)-dt);if(r.comboTimer<=0&&r.combo>1){r.combo=0;this.updateComboHud();}
       if(r.holdFire&&r.aim&&r.commanderCooldown<=0&&!r.commanderOverheated){const aim=this.aimState(r.aim.x,r.aim.y);if(aim==='target'||aim==='threat'||aim==='weak')this.manualFire(r.aim.x,r.aim.y);}
       {const list=r.effects||(r.effects=[]);let keep=0;for(const fx of list){fx.life-=dt;if(fx.r!=null)fx.r=lerp(fx.r,fx.toR,Math.min(1,dt*8));if(fx.life>0)list[keep++]=fx;}list.length=keep;}
@@ -3190,7 +3332,7 @@ window.ED_BALANCE = Object.freeze({
         e.x-=e.speed*moveMul*enemyFlowDt;
         if(e.x<100){const guard=(r.synergy?.coreGuard||1)*(r.mods?.coreGuard||1)*(r.talentCoreGuard||1);const impact=e.boss?(20+r.wave*1.2):Math.max(3,e.maxHp*.025);r.core-=impact*guard*(e.affixCoreDamage||1)*(e.threatBoost>0?1.7:1)*(r.rift?.fx?.coreDamage||1);e.hp=0;this.audio.coreHit(!!e.boss);this.spawnBurst(105,e.y,'#ff7e8d',e.boss?34:12);r.screenFlash=.25;const f=document.querySelector('.battle-frame');if(f){f.classList.remove('hit-shake');void f.offsetWidth;f.classList.add('hit-shake');}}
       }
-      for(const u of r.units){u.cooldown-=dt;if(u.cooldown<=0){const d=DEFENDERS[u.id];const target=this.findTarget(u,d.range);if(target){this.fire(u,target);u.cooldown=1/(d.rate*this.masteryBonuses(u.id).rate*this.talentBonuses(u.id).rate*(r.synergy?.rate||1)*(r.mods?.rate||1)*(r.rift?.fx?.playerRate||1));}}}
+      for(const u of r.units){u.cooldown-=dt;if(u.cooldown<=0){const d=DEFENDERS[u.id];const target=this.findTarget(u,d.range*this.masteryBonuses(u.id).range);if(target){this.fire(u,target);u.cooldown=1/(d.rate*this.masteryBonuses(u.id).rate*this.talentBonuses(u.id).rate*(r.synergy?.rate||1)*(r.mods?.rate||1)*(r.rift?.fx?.playerRate||1));}}}
       for(const p of r.projectiles){p.ttl-=dt;const e=p.target;if(!e||e.hp<=0){p.ttl=0;continue;}p.px=p.x;p.py=p.y;const dx=e.x-p.x,dy=e.y-p.y,dist=Math.hypot(dx,dy);if(dist<18+e.r){this.hit(p,e);p.ttl=0;}else{const sp=720; p.x+=dx/dist*sp*dt;p.y+=dy/dist*sp*dt;}}
       r.enemies=r.enemies.filter(e=>{if(e.hp<=0){if(e.x>100){r.kills++;this.save.stats.kills++;if(e.affixes?.length){r.affixKills++;this.save.stats.affixKills=(this.save.stats.affixKills||0)+1;}this.checkAchievements();r.combo=(r.comboTimer>0?r.combo+1:1);r.comboTimer=2.15;r.maxCombo=Math.max(r.maxCombo,r.combo);const comboBonus=r.combo>=15?1.30:r.combo>=10?1.20:r.combo>=5?1.10:1;r.energy+=Math.ceil(e.energy*comboBonus);this.updateComboHud(true);this.deathFx(e);if(!e.boss)this.audio.kill(e.type);if(e.boss||e.type==='elite'){const chance=e.boss?1:(cc.eliteOrbChance||.45);if(Math.random()<chance)this.spawnEnergyOrb(e.x,e.y,e.boss?(cc.orbEnergy||16)+8:(cc.orbEnergy||16),e.boss?(cc.orbCharge||24)+12:(cc.orbCharge||24));}if(e.boss){r.interactives=(r.interactives||[]).filter(o=>o.type!=='anchor'||o.boss!==e);this.save.stats.bosses++;this.save.bossesDefeated[e.boss.id]=(this.save.bossesDefeated[e.boss.id]||0)+1;r.runBosses++;this.checkFieldOrders();r.earnedGems+=BALANCE.economy.bossGemReward;const bossSupply=(BALANCE.economy.bossRunEnergyBase||28)+Math.floor(r.wave/10)*(BALANCE.economy.bossRunEnergyStep||8);r.energy+=bossSupply;this.audio.energy('boss');r.commanderCharge=clamp((r.commanderCharge||0)+(BALANCE.economy.bossCommanderCharge||18),0,100);r.floats.push({x:170,y:315,life:1.0,text:`+${bossSupply} ⚡`,color:'#8fffd7'});this.track('boss_supply',{wave:r.wave,energy:bossSupply});this.gainMetaXp((BALANCE.economy.bossCoreXpBase||20)+r.wave*(BALANCE.economy.bossCoreXpPerWave||1));this.gainDefenderMastery(24+Math.floor(r.wave/3));this.ensureSeason();this.save.season.xp+=BALANCE.economy.bossSeasonXpBase+Math.floor(r.wave/BALANCE.economy.bossSeasonXpStep)*4;this.track('boss_kill',{wave:r.wave,variant:e.boss.variant?.id||'base'});this.rollDefenderFragment(e.boss.id,r.wave);const bpEvery=BALANCE.economy.bossBlueprintEvery||2;if(this.save.stats.bosses%bpEvery===0){const bpN=Math.min(3,BALANCE.economy.bossBlueprintBase+Math.floor(r.wave/BALANCE.economy.bossBlueprintStep)),bpId=this.grantBlueprints(bpN);if(bpId)this.toast(`${this.t[DEFENDERS[bpId].nameKey]} +${bpN} 🧩`);}r.rerolls=Math.min(3,(r.rerolls||0)+1);r.boss=null;r.screenFlash=.46;r.shake=.42;this.spawnRing(e.x,e.y,'#ffffff',20,230,.75);this.audio.bossDeath(e.boss.id);}}return false;}return e.x>70;});r.projectiles=r.projectiles.filter(p=>p.ttl>0);
       {let keep=0;for(const p of r.particles){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97;if(p.shape==='shard'){p.rot=(p.rot||0)+(p.vr||0)*dt;p.vy+=95*dt;}if(p.life>0)r.particles[keep++]=p;}r.particles.length=keep;}
@@ -3257,8 +3399,8 @@ window.ED_BALANCE = Object.freeze({
     spawnBeam(x1,y1,x2,y2,color,life=.12,width=3){this.run?.effects?.push({type:'beam',x1,y1,x2,y2,color,width,life,maxLife:life});}
 
     fire(u,target){
-      const d=DEFENDERS[u.id],mastery=this.masteryBonuses(u.id),talent=this.talentBonuses(u.id),mul=(1+this.save.lab.damage*.06)*(1+(this.save.meta.spent.damage||0)*.03)*this.metaRankBonus()*mastery.damage*talent.damage*(1+(u.level-1)*.42)*(this.run.synergy?.damage||1)*(this.run.mods?.damage||1)*(this.run.rift?.fx?.playerDamage||1),critChance=(d.crit||0)+talent.crit+(u.id==='prism'?(this.run.synergy?.prismCrit||0)+(this.run.mods?.prismCrit||0):0),shotCount=(d.multishot||1)+talent.multishot;
-      const targets=[target];if(shotCount>1){const extra=this.run.enemies.filter(e=>e!==target&&e.hp>0&&Math.hypot(e.x-u.x,e.y-u.y)<=d.range).sort((a,b)=>b.x-a.x);for(let i=0;i<shotCount-1&&i<extra.length;i++)targets.push(extra[i]);}
+      const d=DEFENDERS[u.id],mastery=this.masteryBonuses(u.id),talent=this.talentBonuses(u.id),mul=(1+this.save.lab.damage*.06)*(1+(this.save.meta.spent.damage||0)*.03)*this.metaRankBonus()*mastery.damage*talent.damage*this.unitDamageMultiplier(u.level)*(this.run.synergy?.damage||1)*(this.run.mods?.damage||1)*(this.run.rift?.fx?.playerDamage||1),critChance=(d.crit||0)+talent.crit+(u.id==='prism'?(this.run.synergy?.prismCrit||0)+(this.run.mods?.prismCrit||0):0),shotCount=(d.multishot||1)+talent.multishot;
+      const targets=[target];if(shotCount>1){const extra=this.run.enemies.filter(e=>e!==target&&e.hp>0&&Math.hypot(e.x-u.x,e.y-u.y)<=d.range*mastery.range).sort((a,b)=>b.x-a.x);for(let i=0;i<shotCount-1&&i<extra.length;i++)targets.push(extra[i]);}
       targets.forEach((tar,idx)=>{const crit=critChance>0&&Math.random()<critChance,bossMul=tar.boss?talent.bossDamage:1;this.run.projectiles.push({x:u.x+26,y:u.y+(idx?8:-2),px:u.x+26,py:u.y,target:tar,damage:d.baseDamage*mul*bossMul*(crit?2.2*talent.critMult:1),color:d.projectile,source:u.id,slow:(d.slow||0)*mastery.utility*talent.slow,burn:(d.burn||0)*mastery.utility*talent.burn,weaken:(d.weaken||0)*mastery.utility*talent.weaken,chain:(d.chain||0)+talent.chain+(this.run.synergy?.chainBonus||0)+(this.run.mods?.chainBonus||0),splash:(d.splash||0)*talent.splash*(this.run.synergy?.splash||1)*(this.run.mods?.splash||1)+talent.splashAdd,splashDamage:talent.splashDamage,slowDamage:talent.slowDamage,burnSpread:talent.burnSpread,ttl:1.6,crit});});this.audio.turretShot(u.id);
     }
     hit(p,e){
@@ -3301,36 +3443,35 @@ window.ED_BALANCE = Object.freeze({
     completeWave(){
       const r=this.run,cleared=r.wave,econ=BALANCE.economy;r.lastCleared=cleared;const reward=this.waveReward(cleared);r.energy+=reward;this.save.quests.waves++;this.ensureWeekly();this.save.weekly.waves++;this.ensureSeason();this.save.season.xp+=econ.seasonXpWaveBase+Math.floor(cleared/econ.seasonXpWaveStep);this.save.lifetimeWaves++;this.gainMetaXp(econ.coreXpWaveBase+Math.floor(cleared/econ.coreXpWaveStep));this.gainDefenderMastery(econ.masteryWaveBase+Math.floor(cleared/econ.masteryWaveStep));if([5,10,20,30,60,100].includes(cleared))this.track('wave_milestone',{wave:cleared});if(cleared%(econ.runGemEvery||12)===0)r.earnedGems++;this.checkFieldOrders();
       if(this.riftActive(cleared)&&cleared%10===0){const mult=r.rift?.fx?.sectorShard||1,bonus=Math.round((BALANCE.rift.sectorRewardShards+this.riftSectorFor(cleared)*5)*mult);r.riftBonusShards+=bonus;this.save.season.xp+=BALANCE.rift.sectorRewardSeasonXp;this.track('rift_sector_clear',{sector:this.riftSectorFor(cleared),rule:r.rift?.id||'none',bonus});this.toast(`${this.lang==='ru'?'Сектор Разлома стабилизирован':'Rift sector stabilized'}: +${bonus} 🔶`);}
-      r.wave++;r.spawned=0;r.toSpawn=this.waveEnemyCount(r.wave);r.spawnTimer=.4;r.wavePause=1.15;r.boss=null;const prevSector=r.riftSector;this.ensureRiftSector(r.wave,false);const changed=r.riftSector>0&&r.riftSector!==prevSector;if(changed)this.toast(`${r.rift.icon} ${r.rift.name}: ${r.rift.desc}`);this.audio.setCombatIntensity(r.wave,this.isBossWave(r.wave));this.audio.wave(this.isBossWave(r.wave)?'boss':(r.wave%5===0?'elite':'normal'));this.unlockByBest();this.checkAchievements();this.banner(this.isBossWave(r.wave)?this.t.bossWave.replace('{n}',r.wave):(r.wave%5===0?this.t.elite:this.t.waveStart.replace('{n}',r.wave)),this.isBossWave(r.wave));this.persist();if(cleared%5===0)setTimeout(()=>this.presentRelicChoice(),320);
+      r.wave++;r.spawned=0;r.toSpawn=this.waveEnemyCount(r.wave);r.spawnTimer=.4;r.wavePause=1.15;r.boss=null;const prevSector=r.riftSector;this.ensureRiftSector(r.wave,false);const changed=r.riftSector>0&&r.riftSector!==prevSector;if(changed)this.toast(`${r.rift.icon} ${r.rift.name}: ${r.rift.desc}`);this.audio.setCombatIntensity(r.wave,this.isBossWave(r.wave));this.audio.wave(this.isBossWave(r.wave)?'boss':(r.wave%5===0?'elite':'normal'));this.unlockByBest();this.checkAchievements();this.banner(this.isBossWave(r.wave)?this.t.bossWave.replace('{n}',r.wave):(r.wave%5===0?this.t.elite:this.t.waveStart.replace('{n}',r.wave)),this.isBossWave(r.wave));this.persist();if(cleared%5===0)setTimeout(()=>this.presentRelicChoice(),Math.max(60,320/this.effectiveSpeed()));
     }
 
     presentRelicChoice(force=false){
       if(!this.inRun||!this.run||(this.paused&&!force))return;
-      const taken=new Set(this.run.relics||[]),pool=Object.keys(RELICS).filter(id=>!taken.has(id));
+      const taken=new Set(this.run.relics||[]),pool=Object.keys(RELICS).filter(id=>!taken.has(id));this.run.veteranMode=pool.length===0;if(this.run.veteranMode)pool.push(...Object.keys(VETERAN_RELICS));
       const choices=[];while(pool.length&&choices.length<3){const i=Math.floor(Math.random()*pool.length);choices.push(pool.splice(i,1)[0]);}
       if(!choices.length)return;this.run.currentRelicChoices=choices.slice();this.pauseInternal(true);this.bridge.gameplayStop();
-      $('relicChoices').innerHTML=choices.map(id=>{const r=RELICS[id],tx=r[this.lang]||r.ru,rar=r.rarity||'common',rl=this.lang==='ru'?(rar==='epic'?'ЭПИЧЕСКИЙ':rar==='rare'?'РЕДКИЙ':'ОБЫЧНЫЙ'):(rar==='epic'?'EPIC':rar==='rare'?'RARE':'COMMON');return `<button class="relic-choice" data-relic="${id}" data-rarity="${rar}"><span class="relic-rarity">${rl}</span><span class="relic-icon">${r.icon}</span><h3>${tx[0]}</h3><p>${tx[1]}</p><small>${this.lang==='ru'?'ВЫБРАТЬ':'SELECT'}</small></button>`}).join('');
-      document.querySelectorAll('[data-relic]').forEach(b=>b.onclick=()=>this.chooseRelic(b.dataset.relic));if($('relicRerollBtn')){$('relicRerollBtn').disabled=(this.run.rerolls||0)<=0;$('relicRerollBtn').textContent=`↻ ${this.t.reroll} · ${this.t.rerolls}: ${this.run.rerolls||0}`;}$('relicScreen').classList.remove('hidden');
+      $('relicChoices').innerHTML=choices.map(id=>{const r=RELICS[id],tx=this.run.veteranMode?(VETERAN_RELICS[id][this.lang]||VETERAN_RELICS[id].ru):(r[this.lang]||r.ru),rar=r.rarity||'common',rl=this.lang==='ru'?(rar==='epic'?'ЭПИЧЕСКИЙ':rar==='rare'?'РЕДКИЙ':'ОБЫЧНЫЙ'):(rar==='epic'?'EPIC':rar==='rare'?'RARE':'COMMON');return `<button class="relic-choice" data-relic="${id}" data-rarity="${rar}"><span class="relic-rarity">${rl}</span><span class="relic-icon">${r.icon}</span><h3>${tx[0]}</h3><p>${tx[1]}</p><small>${this.lang==='ru'?'ВЫБРАТЬ':'SELECT'}</small></button>`}).join('');
+      document.querySelectorAll('[data-relic]').forEach(b=>b.onclick=()=>this.chooseRelic(b.dataset.relic));if($('relicRerollBtn')){$('relicRerollBtn').disabled=(this.run.rerolls||0)<=0||this.run.veteranMode;$('relicRerollBtn').textContent=`↻ ${this.t.reroll} · ${this.t.rerolls}: ${this.run.rerolls||0}`;}$('relicScreen').classList.remove('hidden');
     }
-    rerollRelics(){if(!this.run||(this.run.rerolls||0)<=0)return;this.run.rerolls--;this.audio.reward();this.presentRelicChoice(true);}
+    rerollRelics(){if(!this.run||this.run.veteranMode||(this.run.rerolls||0)<=0)return;this.run.rerolls--;this.audio.reward();this.presentRelicChoice(true);}
     chooseRelic(id){
-      if(!this.run||!RELICS[id])return;const m=this.run.mods;
-      if(id==='overclock')m.rate*=1.18;if(id==='warhead')m.damage*=1.25;if(id==='capacitor')m.waveReward*=1.25;if(id==='resonance')m.skillCd*=.75;if(id==='cryo')m.slowBonus*=1.35;if(id==='chain')m.chainBonus+=1;if(id==='blast')m.splash*=1.45;if(id==='scavenger')m.shardBonus*=1.20;if(id==='shield')m.coreGuard*=.72;
-      this.run.relics.push(id);this.run.currentRelicChoices=[];this.save.stats.relics++;this.track('relic_select',{id,wave:this.run.wave});this.checkFieldOrders();const tx=RELICS[id][this.lang]||RELICS[id].ru;$('relicScreen').classList.add('hidden');this.pauseInternal(false);this.bridge.gameplayStart();this.checkAchievements();this.persist();this.toast(this.t.relicTaken.replace('{name}',tx[0]));
+      if(!this.run||!RELICS[id]||!this.run.currentRelicChoices?.includes(id))return;const m=this.run.mods,veteran=!!this.run.veteranMode;
+      if(veteran){if(id==='overclock')m.rate*=1.06;else if(id==='warhead')m.damage*=1.08;else if(id==='capacitor')m.waveReward*=1.12;}else{if(id==='overclock')m.rate*=1.18;if(id==='warhead')m.damage*=1.25;if(id==='capacitor')m.waveReward*=1.25;if(id==='resonance')m.skillCd*=.75;if(id==='cryo')m.slowBonus*=1.35;if(id==='chain')m.chainBonus+=1;if(id==='blast')m.splash*=1.45;if(id==='scavenger')m.shardBonus*=1.20;if(id==='shield')m.coreGuard*=.72;}
+      if(!veteran)this.run.relics.push(id);else this.track('veteran_module',{id,wave:this.run.wave});this.run.veteranMode=false;this.run.currentRelicChoices=[];this.save.stats.relics++;this.track('relic_select',{id,wave:this.run.wave});this.checkFieldOrders();const tx=veteran?(VETERAN_RELICS[id][this.lang]||VETERAN_RELICS[id].ru):(RELICS[id][this.lang]||RELICS[id].ru);$('relicScreen').classList.add('hidden');this.pauseInternal(false);this.bridge.gameplayStart();this.checkAchievements();this.persist();this.toast(this.t.relicTaken.replace('{name}',tx[0]));
     }
 
     updateBossObjective(boss){const el=$('bossObjective');if(!el)return;if(!boss){el.className='boss-objective hidden';return;}const r=this.run,cfg=BALANCE.commander||{},anchors=(r.interactives||[]).filter(o=>o.type==='anchor'&&!o.resolved&&o.boss===boss),first=boss.boss?.id==='aegis'&&(this.save.bossesDefeated?.aegis||0)===0;let icon='◎',title='',text='',pct=0,mode=first?' coach':'';if(anchors.length){const minLife=Math.min(...anchors.map(o=>o.life)),maxLife=Math.max(...anchors.map(o=>o.maxLife||1));icon='⬡';title=this.lang==='ru'?(anchors.length===1?'РАЗБЕЙ ЯКОРЬ':'РАЗБЕЙ ЯКОРЯ'):(anchors.length===1?'BREAK THE ANCHOR':'BREAK THE ANCHORS');text=this.lang==='ru'?`${anchors.length} активн. · ${Math.max(0,minLife).toFixed(1)}с до подпитки`:`${anchors.length} active · ${Math.max(0,minLife).toFixed(1)}s until heal`;pct=clamp(minLife/maxLife*100,0,100);mode=' urgent';}else if((boss.weakOpen||0)>0){icon='✹';title=this.lang==='ru'?'СТРЕЛЯЙ В СЛАБУЮ ТОЧКУ':'SHOOT THE WEAK POINT';const action=boss.boss.id==='aegis'?(this.lang==='ru'?'Сними фазовую броню':'Disable phase armor'):boss.boss.id==='leech'?(this.lang==='ru'?'Подави регенерацию':'Suppress regeneration'):(this.lang==='ru'?'Отложи пространственный рывок':'Delay spatial dash');text=action;pct=clamp((boss.weakOpen/(first?(BALANCE.polish?.firstAegisWeakOpen||2.65):(cfg.weakOpen||1.8)))*100,0,100);mode=' weak';}else{icon=boss.boss.id==='aegis'?'🛡':boss.boss.id==='leech'?'◉':'∞';title=this.lang==='ru'?(first?'СЛЕДИ ЗА ЖЁЛТОЙ МЕТКОЙ':'ИЩИ ОКНО ДЛЯ АТАКИ'):(first?'WATCH FOR THE GOLD MARK':'WAIT FOR AN OPENING');const cd=Math.max(0,boss.weakCooldown||0);text=this.lang==='ru'?(first?'Фазовый щит снижает обычный урон. Точная стрельба решает бой.':`${boss.boss.ability} · уязвимость через ${cd.toFixed(1)}с`):(first?'The phase shield reduces normal damage. Precision wins this fight.':`${boss.boss.ability} · weak point in ${cd.toFixed(1)}s`);pct=clamp(100-cd/(cfg.weakCooldown||4.6)*100,0,100);}el.className='boss-objective'+mode;$('bossObjectiveIcon').textContent=icon;$('bossObjectiveTitle').textContent=title;$('bossObjectiveText').textContent=text;$('bossObjectiveBar').style.width=`${pct}%`; }
     combatTier(w=this.run?.wave||1){if(w>=70)return 4;if(w>=45)return 3;if(w>=25)return 2;return 1;}
-    updateBattleHud(){if(!this.run)return;const r=this.run;const critical=r.core/r.maxCore<=.3;document.querySelector('.hud-top .hud-pill:nth-child(2)')?.classList.toggle('core-critical',critical);this.run.units.forEach((u,i)=>{const btn=document.querySelector(`[data-unit="${i}"]`);if(!btn)return;const cost=this.unitUpgradeCost(u),ready=r.energy>=cost;btn.classList.toggle('can-upgrade',ready);btn.classList.toggle('needs-energy',!ready);btn.title=(this.lang==='ru'?'Улучшить':'Upgrade')+' '+this.t[DEFENDERS[u.id].nameKey]+': ⚡ '+fmt(cost)+(ready?(this.lang==='ru'?' · доступно':' · ready'):(this.lang==='ru'?' · не хватает ':' · missing ')+fmt(cost-r.energy));});$('waveValue').textContent=r.wave;$('coreValue').textContent=`${Math.max(0,Math.ceil(r.core/r.maxCore*100))}%`;$('runCoinValue').textContent=fmt(r.energy);if($('waveHint')){const isBoss=this.isBossWave(r.wave),nextBoss=isBoss?r.wave:Math.ceil((r.wave+0.001)/10)*10,remain=isBoss?0:Math.max(0,nextBoss-r.wave);$('waveHint').textContent=r.rift?(this.lang==='ru'?`Разлом ${r.riftSector} · ${remain?`босс через ${remain}`:'БОСС'}`:`Rift ${r.riftSector} · ${remain?`boss in ${remain}`:'BOSS'}`):(this.lang==='ru'?(remain?`До босса: ${remain}`:'БОСС'):(remain?`Boss in: ${remain}`:'BOSS'));}if($('synergyValue'))$('synergyValue').textContent=r.synergy?.name||this.t.noSynergy;const rh=$('riftHud');if(rh){rh.classList.toggle('hidden',!r.rift);if(r.rift){$('riftLabel').textContent=`${r.rift.icon} ${this.lang==='ru'?'РАЗЛОМ '+r.riftSector:'RIFT '+r.riftSector}`;$('riftValue').textContent=r.rift.name;$('riftDesc').textContent=r.rift.desc;}}$('skillBtn').classList.toggle('cooling',r.skillCd>0);const desktopKeys=!!(window.matchMedia&&window.matchMedia('(pointer:fine)').matches);$('skillCooldown').textContent=r.skillCd>0?`${r.skillCd.toFixed(1)}s`:(desktopKeys?(this.lang==='ru'?'ПРОБЕЛ':'SPACE'):this.t.ready);const boss=r.enemies.find(e=>e.boss&&e.hp>0);$('bossHud').classList.toggle('hidden',!boss);if(boss){$('bossName').textContent=boss.boss.name;$('bossAbility').textContent=boss.boss.ability;$('bossHealthBar').style.width=`${clamp(boss.hp/boss.maxHp*100,0,100)}%`;$('bossHud').classList.toggle('boss-enraged',boss.hp/boss.maxHp<.35);}else $('bossHud').classList.remove('boss-enraged');this.updateBossObjective(boss);const ch=$('commanderCombatHud'),cCfg=BALANCE.commander||{},cw=COMMANDER_WEAPONS[this.save.commander.weapon]||COMMANDER_WEAPONS.pulse,ctx=cw[this.lang]||cw.ru;if(ch){$('commanderWeaponHud').textContent=`${cw.icon} ${ctx[0].toUpperCase()}`;$('commanderHeatText').textContent=r.commanderOverheated?(this.lang==='ru'?'ПЕРЕГРЕВ':'OVERHEAT'):`${Math.round(r.commanderHeat||0)}%`;$('commanderHeatBar').style.width=`${clamp((r.commanderHeat||0)/(cCfg.heatMax||100)*100,0,100)}%`;$('commanderChargeBar').style.width=`${clamp(r.commanderCharge||0,0,100)}%`;ch.classList.toggle('overheated',!!r.commanderOverheated);ch.classList.toggle('active',(r.commanderModeTimer||0)>0);const mb=$('commanderModeBtn');mb.disabled=(r.commanderCharge||0)<100||(r.commanderModeTimer||0)>0;mb.textContent=(r.commanderModeTimer||0)>0?`${this.lang==='ru'?'КОМАНДИР':'COMMAND'} ${r.commanderModeTimer.toFixed(1)}s`:`${this.lang==='ru'?'КОМАНДИР':'COMMAND'} ${Math.round(r.commanderCharge||0)}%`;if($('commanderHint')){const threat=r.enemies.some(e=>(e.threatReady||e.sabotageReady)&&e.hp>0),reactive=(r.interactives||[]).some(o=>o.life>0);$('commanderHint').textContent=r.commanderOverheated?(this.lang==='ru'?'ОХЛАЖДЕНИЕ':'COOLING'):reactive?(this.lang==='ru'?'✦ СОБЫТИЕ — ВМЕШАЙСЯ':'✦ EVENT — INTERVENE'):threat?(this.lang==='ru'?'⚠ СОРВИ УГРОЗУ':'⚠ INTERRUPT THREAT'):(r.precisionStreak>=2?`${this.lang==='ru'?'ТОЧНОСТЬ':'PRECISION'} ×${r.precisionStreak}`:(this.lang==='ru'?'ТАП / УДЕРЖИВАЙ ПО ЦЕЛИ':'TAP / HOLD ON TARGET'));}}const bf=document.querySelector('.battle-frame');if(bf){const tier=this.combatTier(r.wave);bf.classList.toggle('commander-active',(r.commanderModeTimer||0)>0);bf.classList.toggle('commander-overheat',!!r.commanderOverheated);bf.classList.toggle('precision-live',(r.precisionStreak||0)>=3);for(let i=1;i<=4;i++)bf.classList.toggle(`combat-tier-${i}`,i===tier);bf.dataset.wave=String(r.wave);}if(ch)ch.classList.toggle('threat-alert',r.enemies.some(e=>(e.threatReady||e.sabotageReady)&&e.hp>0));this.updateComboHud();this.renderFieldOrder();}
+    updateBattleHud(){if(!this.run)return;const r=this.run;const critical=r.core/r.maxCore<=.3;document.querySelector('.hud-top .hud-pill:nth-child(2)')?.classList.toggle('core-critical',critical);this.run.units.forEach((u,i)=>{const btn=document.querySelector(`[data-unit="${i}"]`);if(!btn)return;const cost=this.unitUpgradeCost(u),ready=r.energy>=cost;btn.classList.toggle('can-upgrade',ready);btn.classList.toggle('needs-energy',!ready);const missing=Math.max(0,Math.ceil(cost-r.energy)),status=btn.querySelector('.unit-affordance');if(status){status.textContent=ready?'✓':'+'+fmt(missing)+'⚡';status.classList.toggle('ready',ready);}btn.title=(this.lang==='ru'?'Улучшить':'Upgrade')+' '+this.t[DEFENDERS[u.id].nameKey]+': ⚡ '+fmt(cost)+(ready?(this.lang==='ru'?' · доступно':' · ready'):(this.lang==='ru'?' · не хватает ':' · missing ')+fmt(missing));btn.setAttribute('aria-label',btn.title);});$('waveValue').textContent=r.wave;$('coreValue').textContent=`${Math.max(0,Math.ceil(r.core/r.maxCore*100))}%`;$('runCoinValue').textContent=fmt(r.energy);if($('waveHint')){const isBoss=this.isBossWave(r.wave),nextBoss=isBoss?r.wave:Math.ceil((r.wave+0.001)/10)*10,remain=isBoss?0:Math.max(0,nextBoss-r.wave);$('waveHint').textContent=r.rift?(this.lang==='ru'?`Разлом ${r.riftSector} · ${remain?`босс через ${remain}`:'БОСС'}`:`Rift ${r.riftSector} · ${remain?`boss in ${remain}`:'BOSS'}`):(this.lang==='ru'?(remain?`До босса: ${remain}`:'БОСС'):(remain?`Boss in: ${remain}`:'BOSS'));}if($('synergyValue'))$('synergyValue').textContent=r.synergy?.name||this.t.noSynergy;const rh=$('riftHud');if(rh){rh.classList.toggle('hidden',!r.rift);if(r.rift){$('riftLabel').textContent=`${r.rift.icon} ${this.lang==='ru'?'РАЗЛОМ '+r.riftSector:'RIFT '+r.riftSector}`;$('riftValue').textContent=r.rift.name;$('riftDesc').textContent=r.rift.desc;}}$('skillBtn').classList.toggle('cooling',r.skillCd>0);const desktopKeys=!!(window.matchMedia&&window.matchMedia('(pointer:fine)').matches);$('skillCooldown').textContent=r.skillCd>0?`${r.skillCd.toFixed(1)}s`:(desktopKeys?(this.lang==='ru'?'ПРОБЕЛ':'SPACE'):this.t.ready);const boss=r.enemies.find(e=>e.boss&&e.hp>0);$('bossHud').classList.toggle('hidden',!boss);if(boss){$('bossName').textContent=boss.boss.name;$('bossAbility').textContent=boss.boss.ability;$('bossHealthBar').style.width=`${clamp(boss.hp/boss.maxHp*100,0,100)}%`;$('bossHud').classList.toggle('boss-enraged',boss.hp/boss.maxHp<.35);}else $('bossHud').classList.remove('boss-enraged');this.updateBossObjective(boss);const ch=$('commanderCombatHud'),cCfg=BALANCE.commander||{},cw=COMMANDER_WEAPONS[this.save.commander.weapon]||COMMANDER_WEAPONS.pulse,ctx=cw[this.lang]||cw.ru;if(ch){$('commanderWeaponHud').textContent=`${cw.icon} ${ctx[0].toUpperCase()}`;$('commanderHeatText').textContent=r.commanderOverheated?(this.lang==='ru'?'ПЕРЕГРЕВ':'OVERHEAT'):`${Math.round(r.commanderHeat||0)}%`;$('commanderHeatBar').style.width=`${clamp((r.commanderHeat||0)/(cCfg.heatMax||100)*100,0,100)}%`;$('commanderChargeBar').style.width=`${clamp(r.commanderCharge||0,0,100)}%`;ch.classList.toggle('overheated',!!r.commanderOverheated);ch.classList.toggle('active',(r.commanderModeTimer||0)>0);const mb=$('commanderModeBtn');mb.disabled=(r.commanderCharge||0)<100||(r.commanderModeTimer||0)>0;mb.textContent=(r.commanderModeTimer||0)>0?`${this.lang==='ru'?'КОМАНДИР':'COMMAND'} ${r.commanderModeTimer.toFixed(1)}s`:`${this.lang==='ru'?'КОМАНДИР':'COMMAND'} ${Math.round(r.commanderCharge||0)}%`;if($('commanderHint')){const threat=r.enemies.some(e=>(e.threatReady||e.sabotageReady)&&e.hp>0),reactive=(r.interactives||[]).some(o=>o.life>0);$('commanderHint').textContent=r.commanderOverheated?(this.lang==='ru'?'ОХЛАЖДЕНИЕ':'COOLING'):reactive?(this.lang==='ru'?'✦ СОБЫТИЕ — ВМЕШАЙСЯ':'✦ EVENT — INTERVENE'):threat?(this.lang==='ru'?'⚠ СОРВИ УГРОЗУ':'⚠ INTERRUPT THREAT'):(r.precisionStreak>=2?`${this.lang==='ru'?'ТОЧНОСТЬ':'PRECISION'} ×${r.precisionStreak}`:(this.lang==='ru'?'ТАП / УДЕРЖИВАЙ ПО ЦЕЛИ':'TAP / HOLD ON TARGET'));}}const bf=document.querySelector('.battle-frame');if(bf){const tier=this.combatTier(r.wave);bf.classList.toggle('commander-active',(r.commanderModeTimer||0)>0);bf.classList.toggle('commander-overheat',!!r.commanderOverheated);bf.classList.toggle('precision-live',(r.precisionStreak||0)>=3);for(let i=1;i<=4;i++)bf.classList.toggle(`combat-tier-${i}`,i===tier);bf.dataset.wave=String(r.wave);}if(ch)ch.classList.toggle('threat-alert',r.enemies.some(e=>(e.threatReady||e.sabotageReady)&&e.hp>0));this.updateComboHud();this.renderFieldOrder();}
     banner(text,boss=false){const b=$('waveBanner'),w=this.run?.wave||1,tier=this.combatTier(w);b.textContent=text;b.classList.toggle('boss-banner',!!boss);b.classList.toggle('epic-banner',tier>=2);b.classList.toggle('apocalypse-banner',tier>=4);b.classList.remove('hidden');clearTimeout(this.bannerTimer);this.bannerTimer=setTimeout(()=>b.classList.add('hidden'),boss?1600:(tier>=3?1150:950));}
 
     endRun(manual=false){
-      if(!this.inRun||!this.run)return;this.rmbBoost=false;this.rmbPointerId=null;this.refreshSpeedButton();this.bridge.gameplayStop();const r=this.run;r.holdFire=false;this.inRun=false;this.paused=true;this.pauseOverlay=false;$('pauseScreen').classList.add('hidden');this.audio.stopCombatMusic(.22);if(!manual)this.audio.defeat();
-      const reached=Math.max(1,r.wave-(r.spawned===0&&r.enemies.length===0?1:0)),completed=Math.max(0,r.lastCleared||0),econ=BALANCE.economy;const base=completed>0?Math.floor((completed*econ.runShardPerWave+Math.sqrt(r.kills)*econ.runShardKillSqrt)*(1+this.save.lab.income*.04)*(1+(this.save.meta.spent.income||0)*.02)*(r.challengeBonus)*(r.mods?.shardBonus||1)):0;r.earnedShards=completed>0?base+(r.riftBonusShards||0):0;if(manual&&completed===0)setTimeout(()=>this.toast(this.lang==='ru'?'Постоянная награда начисляется после завершения хотя бы одной волны':'Permanent rewards start after clearing at least one wave'),180);if(completed>=econ.runGemWaveThreshold&&!r.endGemGranted){r.earnedGems+=1;r.endGemGranted=true;}if(this.challenge&&completed>=(econ.dailyChallengeFirstClearWave||10)&&!this.save.quests.challengeRewarded){this.save.quests.challengeRewarded=true;const cs=econ.dailyChallengeShards||30,cg=econ.dailyChallengeGems||2;r.earnedShards+=cs;r.earnedGems+=cg;this.track('daily_challenge_clear',{wave:reached,shards:cs,gems:cg});this.celebrateReward(`+${cs} 🔶   +${cg} 💎`,'◈');}
+      if(!this.inRun||!this.run)return;this.rmbBoost=false;this.rmbPointerId=null;this.refreshSpeedButton();this.bridge.gameplayStop();const r=this.run;r.holdFire=false;r.manualEnd=!!manual;this.resultAdBusy=false;this.inRun=false;this.paused=true;this.pauseOverlay=false;$('pauseScreen').classList.add('hidden');this.audio.stopCombatMusic(.22);if(!manual)this.audio.defeat();
+      const reached=Math.max(1,r.wave-(r.spawned===0&&r.enemies.length===0?1:0)),completed=Math.max(0,r.lastCleared||0),econ=BALANCE.economy;const depthMultiplier=Math.min(econ.shardDepthBonusCap||1.90,1+Math.max(0,completed-(econ.shardDepthBonusStartWave||30))*(econ.shardDepthBonusPerWave||.012));const base=completed>0?Math.floor((completed*econ.runShardPerWave+Math.sqrt(r.kills)*econ.runShardKillSqrt)*depthMultiplier*(1+this.save.lab.income*.04)*(1+(this.save.meta.spent.income||0)*.02)*(r.challengeBonus)*(r.mods?.shardBonus||1)):0;r.earnedShards=completed>0?base+(r.riftBonusShards||0):0;if(manual&&completed===0)setTimeout(()=>this.toast(this.lang==='ru'?'Постоянная награда начисляется после завершения хотя бы одной волны':'Permanent rewards start after clearing at least one wave'),180);if(completed>=econ.runGemWaveThreshold&&!r.endGemGranted){r.earnedGems+=1;r.endGemGranted=true;}if(this.challenge&&completed>=(econ.dailyChallengeFirstClearWave||10)&&!this.save.quests.challengeRewarded){this.save.quests.challengeRewarded=true;const cs=econ.dailyChallengeShards||30,cg=econ.dailyChallengeGems||2;r.earnedShards+=cs;r.earnedGems+=cg;this.track('daily_challenge_clear',{wave:reached,shards:cs,gems:cg});this.celebrateReward(`+${cs} 🔶   +${cg} 💎`,'◈');}
       if(completed===0){r.earnedGems=0;r.riftBonusShards=0;}r.reached=reached;r.completed=completed;const durationMs=Math.max(0,now()-(r.startedAt||now()));this.track('run_finish',{wave:reached,completed,run:this.save.runs,durationMs,manualHits:r.manualHits||0,weakHits:r.weakHits||0});const oldBest=this.save.bestWave;if(completed>oldBest){this.save.bestWave=completed;this.bridge.submitScore(completed);setTimeout(()=>this.toast(this.t.newBest.replace('{n}',completed)),450);}
       this.save.shards+=r.earnedShards;this.save.gems+=r.earnedGems;this.unlockByBest();this.checkAchievements();$('bossHud').classList.add('hidden');document.querySelector('.battle-frame')?.classList.remove('commander-active','commander-overheat');this.persist(true);
-      $('resultWave').textContent=reached;$('resultShards').textContent=r.earnedShards;$('resultGems').textContent=r.earnedGems;$('resultKills').textContent=r.kills;$('resultCombo').textContent=`×${r.maxCombo||0}`;$('resultBosses').textContent=r.runBosses||0;$('resultManualHits').textContent=r.manualHits||0;this.renderResultNextGoal();const score=reached+(r.runBosses||0)*6+(r.maxCombo||0)*.22;const grade=score>=65?'S':score>=42?'A':score>=24?'B':score>=12?'C':'D';$('resultGrade').textContent=grade;const gradeBox=$('resultGrade')?.parentElement;if(gradeBox)gradeBox.dataset.grade=grade;const resultCard=document.querySelector('#resultScreen .result-card');if(resultCard){resultCard.classList.remove('result-show');void resultCard.offsetWidth;resultCard.classList.add('result-show');}const adCfg=BALANCE.ads||{},canRevive=!manual&&!r.revived&&reached>=(adCfg.reviveMinWave||5),canDouble=reached>=(adCfg.doubleMinWave||2)&&r.earnedShards>=(adCfg.doubleMinShards||20)&&(this.save.quests.doubleAds||0)<(adCfg.doubleRewardDailyLimit||3);const adAvailable=!!this.bridge.ysdk?.adv?.showRewardedVideo;
-      $('doubleRewardBtn').disabled=!adAvailable;$('doubleRewardBtn').classList.toggle('hidden',!canDouble||!adAvailable);$('reviveBtn').classList.toggle('hidden',!canRevive||!adAvailable);if(canDouble)$('doubleRewardText').textContent=this.lang==='ru'?`Удвоить награду: +${r.earnedShards} 🔶`:`Double reward: +${r.earnedShards} 🔶`;if(canRevive)$('reviveText').textContent=this.lang==='ru'?`Продолжить: ${Math.round((adCfg.reviveCorePct||.62)*100)}% ядра +${adCfg.reviveEnergy||45} ⚡`:`Continue: ${Math.round((adCfg.reviveCorePct||.62)*100)}% core +${adCfg.reviveEnergy||45} ⚡`;if(canRevive)this.track('reward_ad_offer',{placement:'revive',wave:reached});if(canDouble)this.track('reward_ad_offer',{placement:'double',wave:reached});$('comboHud')?.classList.add('hidden');$('fieldOrderHud')?.classList.add('hidden');$('bossIntro')?.classList.add('hidden');$('resultScreen').classList.remove('hidden');
+      $('resultWave').textContent=reached;$('resultShards').textContent=r.earnedShards;$('resultGems').textContent=r.earnedGems;$('resultKills').textContent=r.kills;$('resultCombo').textContent=`×${r.maxCombo||0}`;$('resultBosses').textContent=r.runBosses||0;$('resultManualHits').textContent=r.manualHits||0;this.renderResultNextGoal();const score=reached+(r.runBosses||0)*6+(r.maxCombo||0)*.22;const grade=score>=65?'S':score>=42?'A':score>=24?'B':score>=12?'C':'D';$('resultGrade').textContent=grade;const gradeBox=$('resultGrade')?.parentElement;if(gradeBox)gradeBox.dataset.grade=grade;const resultCard=document.querySelector('#resultScreen .result-card');if(resultCard){resultCard.classList.remove('result-show');void resultCard.offsetWidth;resultCard.classList.add('result-show');}const adCfg=BALANCE.ads||{},canRevive=!manual&&!r.revived&&reached>=(adCfg.reviveMinWave||5),canDouble=reached>=(adCfg.doubleMinWave||2)&&r.earnedShards>=(adCfg.doubleMinShards||20)&&(this.save.quests.doubleAds||0)<(adCfg.doubleRewardDailyLimit||3);const adAvailable=!!this.bridge.ysdk?.adv?.showRewardedVideo;$('doubleRewardBtn').disabled=!adAvailable;$('doubleRewardBtn').classList.toggle('hidden',!canDouble||!adAvailable);$('reviveBtn').classList.toggle('hidden',!canRevive||!adAvailable);if(canDouble)$('doubleRewardText').textContent=this.lang==='ru'?`Удвоить награду: +${r.earnedShards} 🔶`:`Double reward: +${r.earnedShards} 🔶`;if(canRevive)$('reviveText').textContent=this.lang==='ru'?`Продолжить: ${Math.round((adCfg.reviveCorePct||.62)*100)}% ядра +${adCfg.reviveEnergy||45} ⚡`:`Continue: ${Math.round((adCfg.reviveCorePct||.62)*100)}% core +${adCfg.reviveEnergy||45} ⚡`;if(canRevive)this.track('reward_ad_offer',{placement:'revive',wave:reached});if(canDouble)this.track('reward_ad_offer',{placement:'double',wave:reached});$('comboHud')?.classList.add('hidden');$('fieldOrderHud')?.classList.add('hidden');$('bossIntro')?.classList.add('hidden');$('resultScreen').classList.remove('hidden');
       this.renderHome();
     }
     // Only one result-screen ad may run at a time. Closing the result during an
@@ -3481,7 +3622,14 @@ window.ED_BALANCE = Object.freeze({
       if(low!==this.autoLowFx){this.resizeCanvas();this.perfSlowWindows=0;this.perfFastWindows=0;}
       this.perfWindowStart=ts;this.perfFrames=0;
     }
-    loop(ts){const dt=Math.min(.05,(ts-this.lastFrame)/1000||0);this.lastFrame=ts;this.update(dt);if(!$('battleScreen').classList.contains('hidden'))this.draw();this.samplePerformance(ts);this.animId=requestAnimationFrame(t=>this.loop(t));}
+    stepCombat(realDt){
+      if(!this.inRun||this.paused||!this.run)return;
+      // Substeps keep projectiles, boss weak points and input simulation stable at x0.5..x4.
+      const simDt=Math.max(0,realDt)*clamp(this.effectiveSpeed(),.5,4);
+      const steps=Math.max(1,Math.ceil(simDt/.033));
+      for(let i=0;i<steps&&this.inRun&&!this.paused&&this.run;i++)this.update(simDt/steps);
+    }
+    loop(ts){const dt=Math.min(.05,(ts-this.lastFrame)/1000||0);this.lastFrame=ts;this.stepCombat(dt);if(!$('battleScreen').classList.contains('hidden'))this.draw();this.samplePerformance(ts);this.animId=requestAnimationFrame(t=>this.loop(t));}
   }
 
   window.addEventListener('DOMContentLoaded',()=>{ const game=new Game(); window.__ENDLESS_DEFENDERS__=game; game.init(); });
