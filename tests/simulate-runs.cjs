@@ -1,6 +1,7 @@
 'use strict';
 // Headless smoke simulation of the ACTUAL Game.update loop, not a DPS spreadsheet.
-// Usage: node tests/simulate-runs.cjs [fresh|progressed|veteran] [seed] [rangeMultiplier]
+// Usage: node tests/simulate-runs.cjs [profile] [seed] [rangeMultiplier]
+// Also exposes contract-ladder snapshots; see tests/combat-contract-ladder-v1824.test.cjs.
 // Graphics/audio are mocked, manual fire, Pulse, Commander Mode and inexpensive upgrades are automated.
 const fs=require('node:fs'),path=require('node:path');
 const html=fs.readFileSync(path.join(__dirname,'..','pc','index.html'),'utf8');
@@ -28,11 +29,7 @@ new Function('window','document','navigator','performance','structuredClone','se
  scripts[0]+'\n'+source)(window,document,{language:'ru'},{now:()=>0},
  obj=>JSON.parse(JSON.stringify(obj)),()=>0,function(){},math);
 const {Game,DEFAULT_SAVE,TEXT,RELICS}=window.__sim;
-const profiles={
- fresh:{damage:0,core:0,income:0,start:0,mastery:1,stars:1,meta:1,units:['sentinel','spark','frost']},
- progressed:{damage:10,core:10,income:6,start:5,mastery:15,stars:3,meta:15,units:['sentinel','spark','frost']},
- veteran:{damage:22,core:18,income:12,start:12,mastery:25,stars:5,meta:45,units:['prism','volt','chrono']}
-};
+const profiles=require('./combat-profiles-v1824.cjs');
 const kind=process.argv[2]||'fresh',p=profiles[kind],rangeFactor=Number(process.argv[4]||1);
 if(!p||!(rangeFactor>0))throw Error('Invalid simulation parameters');
 const g=Object.create(Game.prototype);
