@@ -852,3 +852,27 @@ Measured with a per-call profiler on a scripted night walk (600 frames):
 - **Stair label.** "ЛЕСТНИЦА • ИЗОЛЯЦИОННЫЙ БЛОК" ran past the well; it is now
   split at the bullet into two centred lines, stepped down until it fits.
 - Partition audit (radius 10): 1003 buildings, 0 issues.
+
+## dev50 — real sound: CC0 firearms, footsteps by surface, music
+
+All new audio is **CC0 1.0** (public domain, no attribution needed); sources,
+authors and pages are listed in `audio/CREDITS_CC0.md`, and
+`tools/import_cc0_audio.py` rebuilds every game file from them.
+
+- **Gunshots** are real recordings from The Free Firearm Sound Library, the
+  closest gun to each one in the game (AK-47 for the AKM, PPSh for the PPS-43,
+  Mosin, SKS, three 12-gauges, three pistols); the suppressed PM is the same
+  pistol filtered. Trimmed to the report and its tail (0.4-1.6 s), a soft tanh
+  saturation brings the body of each shot to the loudness of the old ones.
+- **Reloads, pump and bolt actions, dry fire, doors, infected voices, rain**
+  replaced with recorded CC0 takes in the same names and limits.
+- **Footsteps** now fall on every foot contact of the walk cycle (phase 0 and
+  PI) instead of a fixed timer, from 21 recorded takes on four surfaces:
+  stone (streets, pavement, concrete and tiled floors), grass, gravel (dirt
+  roads, military and industrial ground), wood (homes, shops, sheds) - a random
+  take each time, never the same one twice in a row (`_play_footstep`).
+- **Music** (`_update_music`): seven quiet CC0 pieces, played at -21 dB with
+  1-2.5 minutes of silence between them and slow fades; calm ones by day,
+  darker at night, the unsettling ones inside high-risk sites (the score
+  fades out and changes when you step into one), and it dips while infected
+  chase you.

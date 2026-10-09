@@ -4145,6 +4145,7 @@ func _process(delta):
     )
 
     if visual_movement_active and actual_displacement.length() > 0.001:
+        var step_half_before = int(floor(walk_phase / PI))
         # Distance-driven gait prevents foot sliding:
         # blocked/slowed movement automatically slows the animation.
         walk_phase = fposmod(
@@ -4154,6 +4155,10 @@ func _process(delta):
             ),
             TAU
         )
+        # a footfall on every foot contact (phase 0 and PI), in step with
+        # the legs instead of on a fixed timer
+        if int(floor(walk_phase / PI)) != step_half_before:
+            _play_footstep()
     elif movement_anim_blend > 0.02:
         # Settle the final foot onto the nearest contact phase rather than
         # snapping from a stride directly to the idle sprite.
@@ -4205,6 +4210,7 @@ func _process(delta):
     _update_puddle_reflections()
     _cull_dark_lights()
     _update_ambience_audio(delta)
+    _update_music(delta)
     _update_exterior_atmosphere(delta)
     _update_base_system(delta)
 
@@ -7715,7 +7721,60 @@ func _create_world_audio_layer():
         add_child(player_node)
         world_audio_players.append(player_node)
 
+# --- footsteps --------------------------------------------------------------
+# Recorded (CC0) steps per surface, a random take each time so a walk never
+# machine-guns one sample: stone (asphalt, pavement, concrete and tiled
+# floors), grass (yards, verges, fields), gravel (dirt roads, military and
+# industrial grounds), wood (homes, shops, sheds).
+const STEP_TAKES = {"stone":6,"grass":6,"gravel":6,"wood":3}
+const WOOD_FLOOR_LOOT = ["residential","grocery","rural","forest_cache"]
+var _last_step_take = ""
+
+func _footstep_surface() -> String:
+    if _high_risk_floor_active():
+        return "stone"
+    var p = player.global_position
+    var coord = _world_to_chunk(p)
+    var chunk = loaded_chunks.get(coord,null)
+    if chunk != null:
+        for b in chunk.get_children():
+            if not b.has_meta("world_building"):
+                continue
+            var size = b.get_meta("building_size",Vector2.ZERO)
+            if typeof(size) != TYPE_VECTOR2 or size == Vector2.ZERO:
+                continue
+            if Rect2(b.global_position - size * 0.5,size).has_point(p):
+                var arche = BuildingCatalog.ARCHETYPES.get(str(b.get_meta("world_archetype","")),{})
+                return "wood" if str(arche.get("loot","residential")) in WOOD_FLOOR_LOOT else "stone"
+    var local = p - Vector2(coord) * CHUNK_SIZE
+    var family = _ground_family(coord)
+    var on_way = (local.x >= 274.0 and local.x < 494.0) or (local.y >= 274.0 and local.y < 494.0)
+    if on_way:
+        # paved streets in town; rural and forest roads are dirt and gravel
+        return "gravel" if family in ["rural","woodland"] else "stone"
+    if family in ["military","industrial"]:
+        return "gravel"
+    return "grass"
+
+func _play_footstep():
+    if player == null:
+        return
+    var surface = _footstep_surface()
+    var n = int(STEP_TAKES.get(surface,1))
+    var take = "step_%s_%d" % [surface,randi() % n + 1]
+    if take == _last_step_take and n > 1:
+        take = "step_%s_%d" % [surface,(int(take.get_slice("_",2)) % n) + 1]
+    _last_step_take = take
+    var volume = -16.0
+    if is_sprinting:
+        volume = -11.5
+    elif is_crouching:
+        volume = -26.0
+    _play_world_sfx(take,volume,0.06)
+
 func _world_sfx_path(kind):
+    if str(kind).begins_with("step_"):
+        return "res://audio/world/steps/%s.wav" % str(kind).substr(5)
     match str(kind):
         "door_open": return "res://audio/world/door_open.wav"
         "door_close": return "res://audio/world/door_close.wav"
@@ -7856,6 +7915,101 @@ func _ambience_target_volume(kind,selection = {}):
     if key == "rain" and bool(state.get("rain",false)):
         return -19.0
     return -60.0
+
+# --- music ------------------------------------------------------------------
+# Unobtrusive score from CC0 tracks (audio/CREDITS_CC0.md): quiet, with long
+# silences between pieces so the world's own sound carries most of the time.
+# The pick follows the moment - calm pieces by day, darker ones at night,
+# the unsettling ones inside high-risk sites - and dips while infected chase.
+const MUSIC_TRACKS = {
+    "day":["empty_city","contemplation","end_of_hope","long_winter"],
+    "night":["long_winter","tragic_ambient","the_plague","contemplation"],
+    "danger":["cold_silence","the_plague"],
+}
+const MUSIC_BASE_DB = -21.0
+var music_player = null
+var music_mood = ""
+var music_track = ""
+var music_wait = 25.0
+var music_fade = 0.0           # 0 silent .. 1 full
+var music_fading_out = false
+var music_duck = 0.0
+var _music_last = []
+var _music_site_chunk = Vector2i(999999,999999)
+var _music_site_danger = false
+
+func _music_mood() -> String:
+    if _high_risk_floor_active():
+        return "danger"
+    if player != null:
+        var c = _world_to_chunk(player.global_position)
+        if c != _music_site_chunk:
+            _music_site_chunk = c
+            var poi = RegionCatalog.poi_for_chunk(c)
+            _music_site_danger = not poi.is_empty() and HighRiskSiteCatalog.has(str(poi.get("id","")))
+        if _music_site_danger:
+            return "danger"
+    return "night" if _time_night_factor() > 0.5 else "day"
+
+func _music_pick(mood:String) -> String:
+    var pool = MUSIC_TRACKS.get(mood,MUSIC_TRACKS["day"]).filter(func(t): return not (t in _music_last))
+    if pool.is_empty():
+        pool = MUSIC_TRACKS.get(mood,MUSIC_TRACKS["day"])
+    return str(pool[randi() % pool.size()])
+
+func _update_music(delta):
+    if music_player == null:
+        music_player = AudioStreamPlayer.new()
+        music_player.name = "Music"
+        music_player.volume_db = -80.0
+        add_child(music_player)
+    var mood = _music_mood()
+    var chased = false
+    for e in get_tree().get_nodes_in_group("infected"):
+        if is_instance_valid(e) and str(e.get_meta("ai_state","")) == "chase" and player != null and e.global_position.distance_to(player.global_position) < 360.0:
+            chased = true
+            break
+    music_duck = move_toward(music_duck,1.0 if chased else 0.0,delta / (0.8 if chased else 4.0))
+    if music_player.playing:
+        # a sharp change of scene (stepping into a high-risk site) lets the
+        # piece go and gives the place its own
+        if music_mood != mood and (mood == "danger" or music_mood == "danger"):
+            music_fading_out = true
+        if music_fading_out:
+            music_fade = max(0.0,music_fade - delta / 3.5)
+            if music_fade <= 0.0:
+                music_player.stop()
+                music_fading_out = false
+                music_wait = 6.0 if mood == "danger" else randf_range(40.0,90.0)
+        else:
+            music_fade = min(1.0,music_fade + delta / 5.0)
+            var stream = music_player.stream
+            if stream != null and stream.get_length() - music_player.get_playback_position() < 6.0:
+                music_fade = min(music_fade,(stream.get_length() - music_player.get_playback_position()) / 6.0)
+        music_player.volume_db = MUSIC_BASE_DB + linear_to_db(max(0.0001,music_fade)) - 9.0 * music_duck
+        return
+    if music_track != "":
+        # a piece just ended: rest before the next one
+        music_track = ""
+        music_wait = randf_range(70.0,160.0)
+    music_wait -= delta
+    if music_wait > 0.0:
+        return
+    var pick = _music_pick(mood)
+    var path = "res://audio/music/%s.ogg" % pick
+    if not ResourceLoader.exists(path):
+        music_wait = 120.0
+        return
+    music_player.stream = load(path)
+    music_track = pick
+    music_mood = mood
+    _music_last.append(pick)
+    if _music_last.size() > 2:
+        _music_last.pop_front()
+    music_fade = 0.0
+    music_fading_out = false
+    music_player.volume_db = -80.0
+    music_player.play()
 
 func _update_ambience_audio(delta):
     if ambience_audio_players.is_empty():
@@ -28029,16 +28183,13 @@ func _update_survival(delta):
     if moving_now and sprint_noise_time <= 0.0:
         if is_sprinting:
             _emit_ai_sound(player.global_position,138.0,"sprint",1.0)
-            _play_world_sfx("footstep_sprint",-12.5,0.035)
             sprint_noise_time = 0.48
         elif is_crouching:
             # creeping: barely a sound
             _emit_ai_sound(player.global_position,22.0,"walk",0.6)
-            _play_world_sfx("footstep_walk",-24.0,0.035)
             sprint_noise_time = 1.05
         else:
             _emit_ai_sound(player.global_position,52.0,"walk",1.0)
-            _play_world_sfx("footstep_walk",-16.0,0.035)
             sprint_noise_time = 0.80
 
     survival_feedback_time = max(0.0,survival_feedback_time - delta)
