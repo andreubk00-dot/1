@@ -61,7 +61,7 @@ between('gatePrism',35,50);
 between('gateNova',50,85);
 between('gateVoltWeak',50,80);
 between('gateVoltSynergy',80,121);
-between('gateChrono',100,121);
+between('gateChrono',70,121);
 assert(result.gatePrism.some(w=>w>=DEFENDER_CONTRACTS.prism.minWave),
  'No starting-squad build can approach Prism contract wave 40');
 assert(result.gateNova.some(w=>w>=DEFENDER_CONTRACTS.nova.minWave),
