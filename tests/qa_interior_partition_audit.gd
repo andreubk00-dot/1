@@ -61,7 +61,7 @@ func _reach(size:Vector2,door_x:float,walls:Array,props:Array) -> Dictionary:
 	for w in walls:
 		grown.append(w.grow(CLEAR))
 	for p in props:
-		grown.append(p[0].grow(CLEAR - 2.0))
+		grown.append(p[0].grow(CLEAR - 4.0))
 	for j in range(ny):
 		for i in range(nx):
 			var pt = inner.position + Vector2(i + 0.5,j + 0.5) * CELL
@@ -145,6 +145,39 @@ func run():
 					if not shell.grow(1.0).encloses(w):
 						print("ISSUE ",tag," partition outside the shell ",w)
 						issues += 1
+				# 1b. every partition end meets a wall (outer or partition) or a
+				#     doorway; partitions meet in T-joints, never cross
+				var gaps = b.get_meta("partition_gaps",[])
+				for w in parts:
+					var horiz = w.size.x >= w.size.y
+					var ends = [Vector2(w.position.x - 3.0,w.get_center().y),Vector2(w.end.x + 3.0,w.get_center().y)] if horiz else [Vector2(w.get_center().x,w.position.y - 3.0),Vector2(w.get_center().x,w.end.y + 3.0)]
+					for e in ends:
+						# outer walls are drawn thicker than they collide: their inner
+						# faces sit 14 px in at the sides, 16 at the back
+						var hs = size * 0.5
+						var attached = e.x <= -hs.x + 15.0 or e.x >= hs.x - 15.0 or e.y <= -hs.y + 17.0 or e.y >= hs.y - 7.0
+						for o in all_walls:
+							if o != w and o.grow(4.0).has_point(e):
+								attached = true
+						for g in gaps:
+							if g.has_point(e):
+								attached = true
+						if not attached:
+							print("ISSUE ",tag," free partition end at ",e.round())
+							issues += 1
+				for i in range(parts.size()):
+					for j in range(i + 1,parts.size()):
+						var a = parts[i]
+						var c2 = parts[j]
+						var ov = a.intersection(c2)
+						if ov.size.x <= 0.0 or ov.size.y <= 0.0:
+							continue
+						# a cross: the overlap sits clear of both walls' ends
+						var a_mid = ov.position.x - a.position.x > 4.0 and a.end.x - ov.end.x > 4.0 if a.size.x >= a.size.y else ov.position.y - a.position.y > 4.0 and a.end.y - ov.end.y > 4.0
+						var c_mid = ov.position.x - c2.position.x > 4.0 and c2.end.x - ov.end.x > 4.0 if c2.size.x >= c2.size.y else ov.position.y - c2.position.y > 4.0 and c2.end.y - ov.end.y > 4.0
+						if a_mid and c_mid:
+							print("ISSUE ",tag," partitions cross at ",ov.get_center().round())
+							issues += 1
 				# 2. furniture on partitions
 				var props = _prop_feet(b)
 				for p in props:

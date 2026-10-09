@@ -24004,6 +24004,154 @@ func _layout_wall_v(root,x,height,gap_y = 0.0,gap = 28.0):
     if bottom_len > 4.0:
         _wall_piece(root,Vector2(x,gap_bottom + bottom_len * 0.5),Vector2(8,bottom_len),false)
 
+# 1.38: room plans. Partitions are laid out as rooms, not as loose strokes:
+# every wall runs from wall to wall (an outer wall or another partition, a
+# T-joint, never a cross or a free end), and every room gets one doorway in
+# the middle of the wall it shares with the hall. Plans:
+#   strip   - a back row of rooms behind one wall across the building;
+#             "split" cuts the row into rooms with walls from the back wall
+#   corner  - an office in a back corner (one wall from the side wall, one
+#             from the back wall, meeting at its corner)
+#   bays    - garage bays: a wall across in front, bay walls from the back
+# The front part stays the hall the front door opens into.
+const ROOM_PLANS = {
+    "panel_block":{"strip":0.42,"split":[0.5]},
+    "panel_entry":{"strip":0.40,"split":[0.62]},
+    "utility":{"strip":0.42},
+    "garage_row":{"bays":0.58,"split":[0.34,0.67]},
+    "clinic":{"strip":0.44,"split":[0.33,0.66]},
+    "clinic_small":{"strip":0.42,"split":[0.45]},
+    "pharmacy":{"strip":0.36},
+    "grocery":{"strip":0.32},
+    "cafe":{"strip":0.36},
+    "service_shop":{"strip":0.36,"split":[0.40]},
+    "workshop":{"corner":"left","w":0.34,"d":0.42},
+    "warehouse":{"corner":"right","w":0.30,"d":0.40},
+    "repair_bay":{"strip":0.32},
+    "factory_admin":{"strip":0.42,"split":[0.55]},
+    "rail_store":{"corner":"right","w":0.32,"d":0.42},
+    "rail_service":{"strip":0.40,"split":[0.40]},
+    "dacha":{"strip":0.40},
+    "country_house":{"strip":0.42,"split":[0.48]},
+    "forester":{"strip":0.42,"split":[0.5]},
+    "checkpoint":{"corner":"left","w":0.40,"d":0.46},
+    "barracks":{"strip":0.30},
+    "mil_store":{"corner":"right","w":0.32,"d":0.42},
+    "comms":{"corner":"left","w":0.38,"d":0.44}
+}
+const ROOM_DOOR = 30.0          # doorway width
+const ROOM_HALL_MIN = 50.0      # depth of the hall in front, at least
+const ROOM_MIN = 40.0           # narrowest room worth a wall
+const ROOM_BACK_MIN = 54.0      # shallowest back room
+
+func _room_plan_for(layout:String,size:Vector2) -> Dictionary:
+    if layout == "clinic" and (size.x < 300.0 or size.y < 170.0):
+        return ROOM_PLANS["clinic_small"]
+    return ROOM_PLANS.get(layout,{})
+
+func _room_bounds(size:Vector2) -> Rect2:
+    # the inner faces of the outer walls as they are drawn
+    var h = size * 0.5
+    return Rect2(Vector2(-h.x + 14.0,-h.y + 16.0),Vector2(size.x - 28.0,size.y - 22.5))
+
+func _room_door_gap(lo:float,hi:float) -> Array:
+    # a doorway centred in the span, clear of the joints at its ends
+    var c = (lo + hi) * 0.5
+    var half = ROOM_DOOR * 0.5
+    c = clamp(c,lo + half + 10.0,hi - half - 10.0)
+    return [c - half,c + half]
+
+func _room_wall_h(root,y:float,x0:float,x1:float,gaps:Array):
+    var cursor = x0
+    var sorted = gaps.duplicate()
+    sorted.sort_custom(func(a,b): return a[0] < b[0])
+    for g in sorted:
+        if g[0] - cursor > 0.5:
+            _wall_piece(root,Vector2((cursor + g[0]) * 0.5,y),Vector2(g[0] - cursor,8.0),true)
+        # the doorway and a step either side of it stay clear of furniture
+        _note_partition_gap(root,Rect2(g[0],y - 26.0,g[1] - g[0],52.0))
+        cursor = g[1]
+    if x1 - cursor > 0.5:
+        _wall_piece(root,Vector2((cursor + x1) * 0.5,y),Vector2(x1 - cursor,8.0),true)
+
+func _room_wall_v(root,x:float,y0:float,y1:float):
+    _wall_piece(root,Vector2(x,(y0 + y1) * 0.5),Vector2(8.0,y1 - y0),false)
+
+func _build_side_room(building,r:Rect2,door_x:float,T:float,B:float):
+    var w = max(ROOM_MIN + 16.0,r.size.x * 0.36)
+    if r.size.x - w < 90.0 or r.size.y < 2.0 * ROOM_DOOR:
+        return                                      # small: one open room
+    var left = door_x > 0.0
+    var edge = (r.position.x + w) if left else (r.end.x - w)
+    if abs(door_x - edge) < ROOM_DOOR:
+        return
+    var g = _room_door_gap(T + 4.0,B - 4.0)
+    if g[0] - T > 0.5:
+        _room_wall_v(building,edge,T,g[0])
+    if B + 2.0 - g[1] > 0.5:
+        _room_wall_v(building,edge,g[1],B + 2.0)
+    _note_partition_gap(building,Rect2(edge - 26.0,g[0],52.0,g[1] - g[0]))
+    building.set_meta("room_plan","side")
+
+func _build_room_plan(building,size:Vector2,door_x:float,plan:Dictionary):
+    if plan.is_empty():
+        return
+    var r = _room_bounds(size)
+    # walls tuck 2 px into the walls they meet so the joints read as joined
+    var L = r.position.x - 2.0
+    var R = r.end.x + 2.0
+    var T = r.position.y - 2.0
+    var B = r.end.y
+    if plan.has("corner"):
+        var w = r.size.x * float(plan.get("w",0.34))
+        var d = r.size.y * float(plan.get("d",0.42))
+        d = max(d,ROOM_BACK_MIN)
+        if w < ROOM_MIN + 8.0 or r.size.y - d < ROOM_HALL_MIN:
+            return
+        var left = str(plan["corner"]) == "left"
+        # never put the office over the front door's side if it can be helped
+        if abs(door_x) > r.size.x * 0.2:
+            left = door_x > 0.0
+        var edge = (r.position.x + w) if left else (r.end.x - w)
+        var y = r.position.y + d
+        var gap = _room_door_gap(L if left else edge,edge if left else R)
+        if left:
+            _room_wall_h(building,y,L,edge + 4.0,[gap])
+        else:
+            _room_wall_h(building,y,edge - 4.0,R,[gap])
+        _room_wall_v(building,edge,T,y + 4.0)
+        building.set_meta("room_plan","corner")
+        return
+    var frac = float(plan.get("strip",plan.get("bays",0.0)))
+    if frac <= 0.0:
+        return
+    # back rooms deep enough to hold a bed or a shelf; the hall keeps its depth
+    var y = r.position.y + max(r.size.y * frac,ROOM_BACK_MIN)
+    if B - y < ROOM_HALL_MIN:
+        y = B - ROOM_HALL_MIN
+    if y - r.position.y < ROOM_BACK_MIN:
+        # too shallow for rooms behind: a side room the full depth of the
+        # building instead, on the side away from the front door, entered
+        # through a doorway in its wall
+        _build_side_room(building,r,door_x,T,B)
+        return
+    # the rooms along the back: split points, dropped where a room would be
+    # too narrow for its doorway
+    var xs = [L]
+    for f in plan.get("split",[]):
+        var x = r.position.x + r.size.x * float(f)
+        if x - xs[xs.size() - 1] >= ROOM_MIN + 8.0 and R - x >= ROOM_MIN + 8.0:
+            xs.append(x)
+    xs.append(R)
+    var gaps = []
+    for i in range(xs.size() - 1):
+        gaps.append(_room_door_gap(xs[i] + 4.0,xs[i + 1] - 4.0))
+    _room_wall_h(building,y,L,R,gaps)
+    for i in range(1,xs.size() - 1):
+        _room_wall_v(building,xs[i],T,y + 4.0)
+    building.set_meta("room_plan","bays" if plan.has("bays") else "strip")
+    building.set_meta("room_count",xs.size() - 1)
+
 # 1.38: partitions keep out of the entrance: every wall piece is clipped
 # against the building's keep-clear zones (the hall inside the front door),
 # so a partition never runs into the doorway. Pieces and the gaps between
@@ -24089,26 +24237,18 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
 
     match layout:
         "panel_block":
-            _layout_wall_v(building,-size.x*0.20,inner_h,8.0,28.0)
-            _layout_wall_v(building,size.x*0.20,inner_h,8.0,28.0)
-            _layout_wall_h(building,-size.y*0.10,inner_w,0.0,30.0)
             _archetype_prop(building,"old_fridge",Vector2(-size.x*0.31,back_y),0.55)
             _archetype_prop(building,"cabinet",Vector2(size.x*0.31,back_y),0.55)
             _archetype_prop(building,"old_mattress",Vector2(-size.x*0.31,front_y-10),0.47)
             _layout_stair_marks(building,Vector2(-12,-size.y*0.28),6)
         "panel_entry":
-            _layout_wall_v(building,size.x*0.12,inner_h,-4.0,28.0)
-            _layout_wall_h(building,-size.y*0.18,inner_w*0.76,-size.x*0.18,26.0)
             _layout_stair_marks(building,Vector2(-size.x*0.28,-size.y*0.18),6)
             _archetype_prop(building,"filing_cabinet",Vector2(size.x*0.30,back_y),0.52)
             _archetype_prop(building,"tipped_chair",Vector2(-size.x*0.22,front_y-12),0.45)
         "utility":
-            _layout_wall_v(building,0.0,inner_h,4.0,28.0)
             _archetype_prop(building,"cabinet",Vector2(-size.x*0.25,back_y),0.50)
             _archetype_prop(building,"cardboard_boxes",Vector2(size.x*0.25,back_y),0.46)
         "garage_row":
-            _layout_wall_v(building,-size.x*0.19,inner_h,10.0,28.0)
-            _layout_wall_v(building,size.x*0.19,inner_h,10.0,28.0)
             _archetype_prop(building,"workbench",Vector2(-size.x*0.32,back_y),0.68)
             _archetype_prop(building,"gas_can",Vector2(size.x*0.02,back_y+8),0.52)
             _archetype_prop(building,"tool_case",Vector2(size.x*0.32,back_y),0.56)
@@ -24117,7 +24257,6 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             # a small surgery: waiting room in front, treatment and store
             # behind one partition (the full plan's four partitions crossed in
             # their own doorways at this size)
-            _layout_wall_h(building,-size.y*0.10,inner_w,size.x*0.22,32.0)
             _archetype_prop(building,"reception_desk",Vector2(-size.x*0.28,front_y-16),0.64)
             _archetype_prop(building,"hospital_bed",Vector2(size.x*0.28,-size.y*0.30),0.58)
             _archetype_prop(building,"medical_shelf",Vector2(-size.x*0.30,-size.y*0.30),0.56)
@@ -24125,10 +24264,6 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             building.set_meta("room_roles",["reception","treatment","medical_storage"])
         "clinic":
             # Reception / waiting corridor with two treatment wings and a rear store.
-            _layout_wall_v(building,-size.x*0.18,inner_h,-size.y*0.05,34.0)
-            _layout_wall_v(building,size.x*0.18,inner_h,size.y*0.09,34.0)
-            _layout_wall_h(building,-size.y*0.17,inner_w*0.58,size.x*0.19,30.0)
-            _layout_wall_h(building,size.y*0.08,inner_w*0.56,-size.x*0.20,30.0)
             _archetype_prop(building,"reception_desk",Vector2(-size.x*0.29,front_y-18),0.72)
             _archetype_prop(building,"hospital_bed",Vector2(size.x*0.27,-size.y*0.20),0.64)
             _archetype_prop(building,"medical_screen",Vector2(size.x*0.27,size.y*0.04),0.54)
@@ -24139,70 +24274,54 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             _archetype_prop(building,"floor_papers",Vector2(-size.x*0.08,size.y*0.15),0.46,2)
             building.set_meta("room_roles",["reception","waiting","treatment","treatment","medical_storage"])
         "pharmacy":
-            _layout_wall_h(building,-size.y*0.14,inner_w,size.x*0.22,30.0)
             _archetype_prop(building,"medical_shelf",Vector2(-size.x*0.29,back_y),0.62)
             _archetype_prop(building,"medical_shelf",Vector2(size.x*0.02,back_y),0.62)
             _archetype_prop(building,"reception_desk",Vector2(size.x*0.24,front_y-18),0.64)
             _archetype_prop(building,"med_supply_stack",Vector2(size.x*0.30,back_y+3),0.48)
         "grocery":
-            _layout_wall_h(building,-size.y*0.18,inner_w,-size.x*0.20,30.0)
             _archetype_prop(building,"retail_shelf",Vector2(-size.x*0.20,-2),0.63)
             _archetype_prop(building,"retail_shelf",Vector2(size.x*0.18,-2),0.63)
             _archetype_prop(building,"counter",Vector2(size.x*0.28,front_y-18),0.60)
             _archetype_prop(building,"cardboard_boxes",Vector2(-size.x*0.28,back_y),0.48)
         "cafe":
-            _layout_wall_h(building,-size.y*0.16,inner_w,size.x*0.18,28.0)
             _archetype_prop(building,"counter",Vector2(-size.x*0.22,back_y+5),0.56)
             _archetype_prop(building,"old_fridge",Vector2(size.x*0.27,back_y),0.50)
             _archetype_prop(building,"desk",Vector2(-size.x*0.20,front_y-18),0.48)
             _archetype_prop(building,"chair",Vector2(size.x*0.14,front_y-16),0.48)
         "service_shop":
-            _layout_wall_v(building,-size.x*0.18,inner_h,-4.0,28.0)
-            _layout_wall_h(building,-size.y*0.20,inner_w*0.54,size.x*0.20,26.0)
             _archetype_prop(building,"desk",Vector2(-size.x*0.31,back_y),0.50)
             _archetype_prop(building,"workbench",Vector2(size.x*0.23,back_y),0.68)
             _archetype_prop(building,"tool_case",Vector2(size.x*0.30,front_y-16),0.54)
         "workshop":
-            _layout_wall_v(building,-size.x*0.27,inner_h*0.74,-size.y*0.16,28.0)
-            _layout_wall_h(building,-size.y*0.25,inner_w*0.46,-size.x*0.24,24.0)
             _archetype_prop(building,"workbench",Vector2(size.x*0.24,back_y),0.72)
             _archetype_prop(building,"generator",Vector2(size.x*0.28,front_y-18),0.52)
             _archetype_prop(building,"metal_shelving",Vector2(-size.x*0.34,back_y+4),0.58)
         "warehouse":
-            _layout_wall_v(building,size.x*0.28,inner_h*0.74,-size.y*0.16,28.0)
             _archetype_prop(building,"metal_shelving",Vector2(-size.x*0.27,back_y),0.62)
             _archetype_prop(building,"metal_shelving",Vector2(-size.x*0.02,back_y),0.62)
             _archetype_prop(building,"supply_crate",Vector2(-size.x*0.25,front_y-14),0.58)
             _archetype_prop(building,"desk",Vector2(size.x*0.32,back_y),0.48)
         "repair_bay":
-            _layout_wall_v(building,0.0,inner_h,10.0,30.0)
             _archetype_prop(building,"workbench",Vector2(size.x*0.24,back_y),0.70)
             _archetype_prop(building,"gas_can",Vector2(-size.x*0.26,back_y+5),0.54)
             _archetype_prop(building,"tool_case",Vector2(size.x*0.30,front_y-16),0.54)
         "factory_admin":
-            _layout_wall_v(building,0.0,inner_h,12.0,28.0)
-            _layout_wall_h(building,-size.y*0.13,inner_w,-size.x*0.24,26.0)
             _archetype_prop(building,"filing_cabinet",Vector2(-size.x*0.30,back_y),0.52)
             _archetype_prop(building,"desk",Vector2(size.x*0.28,back_y),0.50)
             _archetype_prop(building,"chair",Vector2(size.x*0.22,front_y-12),0.44)
         "rail_store":
-            _layout_wall_v(building,size.x*0.29,inner_h*0.76,-size.y*0.14,28.0)
             _archetype_prop(building,"metal_shelving",Vector2(-size.x*0.27,back_y),0.62)
             _archetype_prop(building,"supply_crate",Vector2(-size.x*0.02,front_y-16),0.58)
             _archetype_prop(building,"gas_can",Vector2(size.x*0.30,back_y),0.50)
         "rail_service":
-            _layout_wall_v(building,-size.x*0.18,inner_h,-2.0,26.0)
             _archetype_prop(building,"desk",Vector2(-size.x*0.30,back_y),0.48)
             _archetype_prop(building,"tool_case",Vector2(size.x*0.22,back_y),0.54)
             _archetype_prop(building,"filing_cabinet",Vector2(size.x*0.30,front_y-18),0.48)
         "dacha":
-            _layout_wall_v(building,0.0,inner_h,3.0,26.0)
             _archetype_prop(building,"old_fridge",Vector2(-size.x*0.25,back_y),0.48)
             _archetype_prop(building,"chair",Vector2(size.x*0.22,back_y),0.48)
             _archetype_prop(building,"old_mattress",Vector2(size.x*0.23,front_y-14),0.45)
         "country_house":
-            _layout_wall_v(building,-size.x*0.12,inner_h,8.0,26.0)
-            _layout_wall_h(building,-size.y*0.12,inner_w*0.62,size.x*0.18,26.0)
             _archetype_prop(building,"old_fridge",Vector2(-size.x*0.29,back_y),0.50)
             _archetype_prop(building,"cabinet",Vector2(size.x*0.28,back_y),0.50)
             _archetype_prop(building,"old_mattress",Vector2(size.x*0.24,front_y-14),0.46)
@@ -24211,7 +24330,6 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             _archetype_prop(building,"gas_can",Vector2(size.x*0.20,back_y),0.50)
             _archetype_prop(building,"wooden_debris",Vector2(0,front_y-14),0.42,2)
         "forester":
-            _layout_wall_v(building,0.0,inner_h,4.0,26.0)
             _archetype_prop(building,"cot",Vector2(-size.x*0.24,back_y),0.54)
             _archetype_prop(building,"cabinet",Vector2(size.x*0.23,back_y),0.50)
             _archetype_prop(building,"gas_can",Vector2(size.x*0.24,front_y-16),0.46)
@@ -24219,30 +24337,26 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
             _archetype_prop(building,"supply_crate",Vector2(-size.x*0.18,back_y),0.52)
             _archetype_prop(building,"wooden_debris",Vector2(size.x*0.16,front_y-16),0.44,2)
         "checkpoint":
-            _layout_wall_v(building,-size.x*0.12,inner_h,-2.0,26.0)
             _archetype_prop(building,"desk",Vector2(-size.x*0.27,back_y),0.48)
             _archetype_prop(building,"locker",Vector2(size.x*0.24,back_y),0.52)
             _archetype_prop(building,"ammo_crate",Vector2(size.x*0.24,front_y-18),0.48)
         "barracks":
-            _layout_wall_h(building,-size.y*0.18,inner_w,0.0,30.0)
             _archetype_prop(building,"cot",Vector2(-size.x*0.28,back_y),0.54)
             _archetype_prop(building,"cot",Vector2(size.x*0.28,back_y),0.54)
             _archetype_prop(building,"cot",Vector2(-size.x*0.28,front_y-14),0.54)
             _archetype_prop(building,"locker",Vector2(size.x*0.28,front_y-18),0.52)
         "mil_store":
-            _layout_wall_v(building,size.x*0.26,inner_h*0.72,-size.y*0.14,26.0)
             _archetype_prop(building,"metal_shelving",Vector2(-size.x*0.24,back_y),0.62)
             _archetype_prop(building,"ammo_crate",Vector2(-size.x*0.20,front_y-16),0.54)
             _archetype_prop(building,"locker",Vector2(size.x*0.30,back_y),0.50)
         "comms":
-            _layout_wall_v(building,-size.x*0.12,inner_h,2.0,26.0)
             _archetype_prop(building,"desk",Vector2(-size.x*0.27,back_y),0.48)
             _archetype_prop(building,"filing_cabinet",Vector2(size.x*0.20,back_y),0.50)
             _archetype_prop(building,"generator",Vector2(size.x*0.24,front_y-18),0.46)
         _:
-            _layout_wall_v(building,0.0,inner_h,4.0,28.0)
             _archetype_prop(building,"cabinet",Vector2(-size.x*0.22,back_y),0.48)
 
+    _build_room_plan(building,size,door_x,_room_plan_for(layout,size))
     _decorate_world_content_variant_interior(building,archetype_id,data,size)
     _furnish_interior(building,layout,size,building_id)
     _settle_interior_props(building,size)
