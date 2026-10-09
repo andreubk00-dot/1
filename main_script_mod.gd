@@ -24604,7 +24604,9 @@ func _settlement_smoke_emitter(parent,pos:Vector2,kind:String = "smoke"):
         # stove smoke: pale blue-grey, reads against dark roofs
         base = Color(0.76,0.79,0.84)
         p.lifetime = 4.6
-        p.preprocess = p.lifetime
+        # no warm-up: chunks load off screen and the plume fills in on its own
+        # (preprocessing 4.6 s of particles per chimney cost chunk loads ms)
+        p.preprocess = 0.0
     ramp.set_color(0,Color(base.r,base.g,base.b,0.0))
     ramp.set_color(1,Color(base.r,base.g,base.b,0.0))
     ramp.add_point(0.1,Color(base.r,base.g,base.b,0.72 if kind != "steam" else 0.6))
