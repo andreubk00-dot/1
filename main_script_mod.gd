@@ -27628,6 +27628,188 @@ void fragment() {
 var _wet_ground_mat = null
 var _ground_wet = 0.0
 
+# 1.38: footprints and splashes. Every 13 units a walker (the player and the
+# infected near them) sets down a boot: left, right, left, aimed along the
+# step. On wet ground, and for a few steps after wading through a puddle,
+# the boot leaves a dark print that dries away in ~30 s; a foot landing in a
+# puddle throws up droplets and a ring. Prints and splashes live in one
+# world-level layer above the ground and below decals, puddles and floors.
+const FOOT_STEP = 11.0
+const FOOTPRINT_LIFE = 30.0
+const FOOTPRINT_POOL = 140
+var footprint_layer = null
+var _footprints = []
+var _footprint_tex = {}
+var _splash_tex = null
+var _splashes = []
+
+func _make_print_texture(horizontal:bool) -> ImageTexture:
+    # a boot sole in HD texels (vertical: 4 x 8): one dark pressed sole, narrow
+    # at the arch (shows on pale paving and dirt), inside a faint pale rim of
+    # squeezed-out water (shows on dark wet asphalt)
+    var rows = [
+        ".oo.",
+        "o##o",
+        "o##o",
+        "o##o",
+        ".##.",
+        ".##.",
+        "o##o",
+        ".oo."]
+    var w = 4
+    var h = 8
+    var img = Image.create(h if horizontal else w,w if horizontal else h,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    for y in range(h):
+        for x in range(w):
+            var ch = rows[y][x]
+            if ch == ".":
+                continue
+            var col = Color(0.05,0.05,0.05,1.0) if ch == "#" else Color(0.70,0.74,0.78,0.5)
+            if horizontal:
+                img.set_pixel(h - 1 - y,x,col)
+            else:
+                img.set_pixel(x,y,col)
+    return ImageTexture.create_from_image(img)
+
+func _make_splash_texture() -> ImageTexture:
+    # four frames of 16 x 10 texels: droplets up, then a ring widening out
+    var img = Image.create(64,10,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    var c = Color(1,1,1,1)
+    for f in range(4):
+        var ox = f * 16
+        if f == 0:
+            for p in [Vector2i(8,2),Vector2i(7,4),Vector2i(9,4),Vector2i(8,6),Vector2i(5,5),Vector2i(11,5)]:
+                img.set_pixel(ox + p.x,p.y,c)
+        var r = [1.5,3.0,4.5,6.0][f]
+        for y in range(10):
+            for x in range(16):
+                var d = Vector2(float(x) - 8.0,(float(y) - 6.0) * 2.0)
+                var e = d.length()
+                if abs(e - r * 1.2) < 0.7:
+                    img.set_pixel(ox + x,y,Color(1,1,1,1.0 - float(f) * 0.22))
+        if f == 1:
+            for p in [Vector2i(5,1),Vector2i(11,1),Vector2i(3,3),Vector2i(13,3)]:
+                img.set_pixel(ox + p.x,p.y,c)
+    return ImageTexture.create_from_image(img)
+
+func _footprint_texture(dir:Vector2):
+    var horizontal = abs(dir.x) > abs(dir.y)
+    var key = "h" if horizontal else "v"
+    if not _footprint_tex.has(key):
+        _footprint_tex[key] = _make_print_texture(horizontal)
+    return _footprint_tex[key]
+
+func _puddle_under(pos:Vector2):
+    for p in get_tree().get_nodes_in_group("puddles"):
+        if not is_instance_valid(p):
+            continue
+        var half = p.texture.region.size * p.scale.x * 0.5
+        var d = pos - p.global_position
+        # the water itself is roughly the middle two thirds of the cell
+        if (d.x * d.x) / (half.x * half.x * 0.45) + (d.y * d.y) / (half.y * half.y * 0.42) < 1.0:
+            return p
+    return null
+
+func _spawn_splash(pos:Vector2):
+    if _splash_tex == null:
+        _splash_tex = _make_splash_texture()
+    var s = Sprite2D.new()
+    var tex = AtlasTexture.new()
+    tex.atlas = _splash_tex
+    tex.region = Rect2(0,0,16,10)
+    s.texture = tex
+    s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    s.scale = Vector2(0.5,0.5)
+    s.global_position = (pos + Vector2(0,-1)).round()
+    s.modulate = Color(0.76,0.82,0.88,0.85)
+    s.z_as_relative = false
+    s.z_index = -48                   # over the puddle (chunk -50 + 1)
+    s.set_meta("age",0.0)
+    footprint_layer.add_child(s)
+    _splashes.append(s)
+
+func _set_down_foot(walker,foot:Vector2,dir:Vector2):
+    var side = 1.0 if bool(walker.get_meta("fp_side",false)) else -1.0
+    walker.set_meta("fp_side",side < 0.0)
+    var perp = Vector2(-dir.y,dir.x) * 2.0 * side
+    var at = foot + perp
+    if _puddle_under(at) != null:
+        _spawn_splash(at)
+        walker.set_meta("wet_soles",8)
+        return
+    var soles = int(walker.get_meta("wet_soles",0))
+    var wetness = _ground_wet
+    if soles > 0:
+        walker.set_meta("wet_soles",soles - 1)
+        wetness = max(wetness,float(soles) / 8.0)
+    if wetness < 0.2:
+        return
+    var fp = null
+    if _footprints.size() >= FOOTPRINT_POOL:
+        fp = _footprints.pop_front()
+    else:
+        fp = Sprite2D.new()
+        fp.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        fp.scale = Vector2(0.5,0.5)
+        fp.z_as_relative = false
+        fp.z_index = -67
+        footprint_layer.add_child(fp)
+    fp.texture = _footprint_texture(dir)
+    fp.flip_v = dir.y > 0.0 and abs(dir.y) >= abs(dir.x)
+    fp.flip_h = dir.x < 0.0 and abs(dir.x) > abs(dir.y)
+    fp.global_position = at.round()
+    fp.set_meta("age",0.0)
+    fp.set_meta("strength",clamp(wetness,0.0,1.0))
+    fp.modulate = Color(1,1,1,0.0)
+    fp.visible = true
+    _footprints.append(fp)
+
+func _update_footprints(delta):
+    if footprint_layer == null:
+        footprint_layer = Node2D.new()
+        footprint_layer.name = "Footprints"
+        add_child(footprint_layer)
+    if player == null:
+        return
+    var walkers = []
+    if not _high_risk_floor_active():
+        walkers.append(player)
+        for e in get_tree().get_nodes_in_group("infected"):
+            if is_instance_valid(e) and e.global_position.distance_squared_to(player.global_position) < 380.0 * 380.0:
+                walkers.append(e)
+    for w in walkers:
+        var foot = w.global_position + Vector2(0,12)
+        if not w.has_meta("fp_last"):
+            w.set_meta("fp_last",foot)
+            continue
+        var last:Vector2 = w.get_meta("fp_last")
+        var moved = foot - last
+        if moved.length() > 60.0:              # teleport / respawn: start over
+            w.set_meta("fp_last",foot)
+            continue
+        if moved.length() >= FOOT_STEP:
+            w.set_meta("fp_last",foot)
+            _set_down_foot(w,foot,moved.normalized())
+    for fp in _footprints:
+        var age = float(fp.get_meta("age",0.0)) + delta
+        fp.set_meta("age",age)
+        fp.modulate.a = float(fp.get_meta("strength",1.0)) * 0.7 * clamp(1.0 - age / FOOTPRINT_LIFE,0.0,1.0)
+    var keep = []
+    for s in _splashes:
+        if not is_instance_valid(s):
+            continue
+        var age = float(s.get_meta("age",0.0)) + delta
+        s.set_meta("age",age)
+        var f = int(age / 0.08)
+        if f >= 4:
+            s.queue_free()
+            continue
+        s.texture.region = Rect2(f * 16,0,16,10)
+        keep.append(s)
+    _splashes = keep
+
 # High-risk sites draw their buildings from four 4K model atlases. Loaded on
 # the spot, the first building of a site stalled its chunk by ~200 ms. When
 # the player comes within three chunks of a site, its atlas is loaded on a
@@ -27892,6 +28074,7 @@ func _update_weather_visuals(delta):
 
     _update_fog(delta)
     _prefetch_high_risk_art(delta)
+    _update_footprints(delta)
 
     var wet_goal = 1.0 if weather_state == "rain" else 0.0
     var prev_wet = _ground_wet
