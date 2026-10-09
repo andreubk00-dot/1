@@ -9,9 +9,10 @@ const BALANCE={ads:{doubleRewardDailyLimit:3,reviveCorePct:.62,reviveEnergy:45,r
 const now=()=>1000000000;
 const document={hidden:false},navigator={language:'ru'},window={ED_YANDEX_BUILD:true};
 const $elements=new Map();
-function $(id){if(!$elements.has(id)){const classes=new Set();$elements.set(id,{textContent:'',disabled:false,classList:{add:(x)=>classes.add(x),remove:(x)=>classes.delete(x)}});}return $elements.get(id);}
+function $(id){if(!$elements.has(id)){const classes=new Set();$elements.set(id,{textContent:'',disabled:false,classList:{add:(x)=>classes.add(x),remove:(x)=>classes.delete(x),contains:(x)=>classes.has(x)}});}return $elements.get(id);}
 const Bridge=new Function('window','navigator','document','BALANCE','now',section('  class YandexBridge {','\n\n  /*')+'\nreturn YandexBridge;')(window,navigator,document,BALANCE,now);
-const Game=new Function('BALANCE','$','fmt','now','return ('+section('  class Game {',"\n\n  window.addEventListener('DOMContentLoaded'").trim()+')')(BALANCE,$,String,now);
+let scheduledFrames=0;
+const Game=new Function('BALANCE','$','fmt','now','document','requestAnimationFrame','return ('+section('  class Game {',"\n\n  window.addEventListener('DOMContentLoaded'").trim()+')')(BALANCE,$,String,now,document,()=>++scheduledFrames);
 function fixture(){
   const g=Object.create(Game.prototype);
   g.inRun=false;g.paused=false;g.pauseOverlay=false;g.externalPauseWasPaused=false;
@@ -205,6 +206,21 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     const warn=console.warn;console.warn=()=>{};
     try{await g.processPendingPurchases();}finally{console.warn=warn;}
     assert.deepEqual(seen,['bad-receipt','good-receipt']);
+  });
+  await test('Paused and background gameplay stops heavy canvas draws',async()=>{
+    const {g}=fixture();let draws=0,steps=0,samples=0;
+    g.lastFrame=100;g.paused=false;g.externalPause=false;
+    g.draw=()=>{draws++;};g.stepCombat=()=>{steps++;};g.samplePerformance=()=>{samples++;};
+    const first=scheduledFrames;
+    const frame=(ts,drawCount)=>{g.loop(ts);assert.equal(draws,drawCount);};
+    frame(116,1);
+    document.hidden=true;frame(132,1);
+    document.hidden=false;g.paused=true;frame(148,1);
+    g.paused=false;g.externalPause=true;frame(164,1);
+    g.externalPause=false;$('battleScreen').classList.add('hidden');frame(180,1);
+    $('battleScreen').classList.remove('hidden');frame(196,2);
+    assert.equal(steps,6);assert.equal(samples,6);
+    assert.equal(scheduledFrames-first,6,'Animation loop scheduling changed');
   });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
