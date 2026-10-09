@@ -5774,9 +5774,9 @@ func _modern_survivor_idle_sheet(weapon_id):
     # 1.27-dev1: the imported survivor set already contains two authored idle variations
     # for every firearm/melee prefix. Use them only after genuine uninterrupted idle so
     # they read as weight shifts rather than random animation noise.
-    if modern_survivor_idle_time < 3.5:
+    if modern_survivor_idle_time < 5.0:
         return "Idle"
-    var cycle = fposmod(modern_survivor_idle_time - 3.5,10.0)
+    var cycle = fposmod(modern_survivor_idle_time - 5.0,12.0)
     if cycle < 2.25:
         return "Idle2"
     if cycle >= 6.25 and cycle < 8.50:
@@ -5793,7 +5793,7 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         # The old wall-clock frame could enter mid-pose on any weapon or after
         # a hit/reload, producing a visible one-frame jump. Keep the full 8-frame
         # animation within its existing 2.25s window; no gameplay timers change.
-        var cycle = fposmod(modern_survivor_idle_time - 3.5,10.0)
+        var cycle = fposmod(modern_survivor_idle_time - 5.0,12.0)
         var window_start = 0.0 if sheet_name == "Idle2" else 6.25
         var window_elapsed = clamp(cycle - window_start,0.0,2.25)
         var frames = max(1,int(count))
