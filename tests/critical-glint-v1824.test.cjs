@@ -1,0 +1,36 @@
+'use strict';
+// Cosmetic critical-hit highlight must never affect combat balance or mobile FX budgets.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const pc=fs.readFileSync(path.join(__dirname,'..','pc','index.html'),'utf8');
+const mobile=fs.readFileSync(path.join(__dirname,'..','iphone','index.html'),'utf8');
+const scripts=s=>[...s.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
+assert.equal(scripts(pc)[1],scripts(mobile)[1],'PC/iPhone game scripts diverged');
+const start=pc.indexOf('  class Game {'),end=pc.indexOf("\n\n  window.addEventListener('DOMContentLoaded'",start);
+assert(start>0&&end>start,'Game class not found');
+const Game=new Function('return ('+pc.slice(start,end).trim()+')')();
+const game=Object.create(Game.prototype);
+game.save={lowFx:false};
+game.autoLowFx=false;
+game.run={wave:10,enemies:[],effects:[]};
+function glints(){return game.run.effects.filter(e=>e.type==='crit');}
+game.spawnCritGlint(320,200);
+assert.equal(glints().length,1);
+assert.equal(glints()[0].x,320);
+assert.equal(glints()[0].y,200);
+assert(glints()[0].life>0&&glints()[0].maxLife>0);
+for(let i=0;i<100;i++)game.spawnCritGlint(320,200);
+assert.equal(glints().length,5,'Unbounded highlight count');
+game.run.effects=[];
+game.save.lowFx=true;
+game.spawnCritGlint(320,200);
+assert.equal(glints().length,0,'Low-FX setting must suppress glints');
+game.save.lowFx=false;game.autoLowFx=true;
+game.spawnCritGlint(320,200);
+assert.equal(glints().length,0,'Automatic low-FX must suppress glints');
+game.autoLowFx=false;
+game.run.enemies=new Array(72).fill(null);
+game.spawnCritGlint(320,200);
+assert.equal(glints().length,0,'Dense combat must suppress glints');
+assert(pc.includes("if(p.crit){this.spawnRing(e.x,e.y,'#ffe27d',5,32,.2);this.spawnCritGlint(e.x,e.y);}"),'Only critical hits should trigger glint');
+assert(pc.includes("fx.type==='crit'"),'Critical highlight renderer missing');
+console.log('PASS cosmetic crit glint budget, low-FX fallback and PC/mobile parity');
