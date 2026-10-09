@@ -15678,6 +15678,38 @@ func _roof_edge_strips(parent,style,center,area):
         strip.add_to_group("roof_edge_strips")
         parent.add_child(strip)
 
+var _chimney_tex = null
+
+func _chimney_texture():
+    # a brick stack seen from above at 3/4: lit west face, shaded east face,
+    # a dark flue mouth on a pale cap (HD texels, 10 x 18)
+    if _chimney_tex != null:
+        return _chimney_tex
+    var img = Image.create(10,18,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    var brick = Color(0.55,0.30,0.22)
+    for y in range(4,18):
+        for x in range(1,9):
+            var c = brick
+            if x < 3:
+                c = brick.lightened(0.12)
+            elif x > 6:
+                c = brick.darkened(0.3)
+            # mortar: a course line every third row, staggered head joints
+            if y % 3 == 0 or (x + ((y / 3) % 2) * 2) % 4 == 0:
+                c = c.darkened(0.25)
+            img.set_pixel(x,y,c)
+    for x in range(0,10):
+        for y in range(1,5):
+            img.set_pixel(x,y,Color(0.62,0.60,0.56))
+    for x in range(2,8):
+        for y in range(2,4):
+            img.set_pixel(x,y,Color(0.08,0.07,0.07))
+    for y in range(4,18):
+        img.set_pixel(9,y,Color(0,0,0,0.35))
+    _chimney_tex = ImageTexture.create_from_image(img)
+    return _chimney_tex
+
 func _roof_prop_texture(index):
     var hd = _hd_exists("res://art/world_hd/roof_props_hd.png")
     var atlas = load("res://art/world_hd/roof_props_hd.png" if hd else "res://roof_props_v4.png")
@@ -15719,6 +15751,26 @@ func _decorate_roof_art(roof,sign_text,size,building_id):
         _roof_prop_sprite(roof,1,Vector2(-size.x*0.28,-size.y*0.08),main_scale*0.72,2)
     elif rng.randf() > 0.45:
         _roof_prop_sprite(roof,3,Vector2(-size.x*0.20,size.y*0.02),main_scale*0.66,2)
+    # 1.38: about a third of the homes keep a stove going: a brick chimney with
+    # smoke drifting off on the wind
+    var homes = ["ДОМ","ПОДЪЕЗД","ДАЧ","ЖИЛ","ЛЕСНИК","КОРДОН","СТОРОЖ","ИЗБ"]
+    var is_home = false
+    for h in homes:
+        if s.find(h) >= 0:
+            is_home = true
+    if is_home and int(seed_value) % 100 < 35:
+        # the free top-right corner (the roof props sit centre-left)
+        var at = Vector2(size.x * 0.36,-size.y * 0.32).round()
+        var ch = Sprite2D.new()
+        ch.texture = _chimney_texture()
+        ch.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        ch.scale = Vector2(0.5,0.5)
+        ch.position = at
+        ch.z_index = 3
+        roof.add_child(ch)
+        var smoke = _settlement_smoke_emitter(roof,at + Vector2(0,-8),"wood")
+        smoke.amount = 12
+        smoke.z_index = 4
 
 func _interior_tile_region(sign_text):
     var s = str(sign_text).to_upper()
@@ -24548,6 +24600,11 @@ func _settlement_smoke_emitter(parent,pos:Vector2,kind:String = "smoke"):
     p.scale_amount_curve = curve
     var ramp = Gradient.new()
     var base = Color(0.58,0.57,0.55) if kind == "smoke" else (Color(0.86,0.87,0.86) if kind == "steam" else Color(0.40,0.38,0.36))
+    if kind == "wood":
+        # stove smoke: pale blue-grey, reads against dark roofs
+        base = Color(0.76,0.79,0.84)
+        p.lifetime = 4.6
+        p.preprocess = p.lifetime
     ramp.set_color(0,Color(base.r,base.g,base.b,0.0))
     ramp.set_color(1,Color(base.r,base.g,base.b,0.0))
     ramp.add_point(0.1,Color(base.r,base.g,base.b,0.72 if kind != "steam" else 0.6))
@@ -25078,6 +25135,7 @@ func _decorate_street_furniture(chunk,coord):
         placed += 1
     chunk.set_meta("street_furniture_count",placed)
     _place_street_lamps(chunk,coord,district_id)
+    _place_fire_barrels(chunk,coord,district_id)
     _dress_service_verges(chunk,coord,district_id,rng)
     _scatter_vegetation(chunk,coord,district_id)
 
@@ -25203,6 +25261,29 @@ func _lamp_kerb_position(chunk,pos:Vector2) -> Vector2:
         if v >= STREET_BAND_MIN and v < STREET_BAND_MAX:
             out[axis] = LAMP_VERGE[0] if abs(v - LAMP_VERGE[0]) <= abs(v - LAMP_VERGE[1]) else LAMP_VERGE[1]
     return out
+
+# Somebody's camp: now and then a yard holds a burning barrel (the settlement
+# piece: flames, smoke, sparks and a flickering light that also shows in the
+# puddles). Rare, and never on the street, in a doorway or in an authored POI.
+func _place_fire_barrels(chunk,coord,district_id:String):
+    if not RegionCatalog.poi_for_chunk(coord).is_empty():
+        return
+    var chance = 0.16
+    if district_id.find("woodland") >= 0:
+        chance = 0.08
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 15731 + coord.y * 789221 + 3301)) + 1
+    if rng.randf() > chance:
+        return
+    for attempt in range(14):
+        var pos = Vector2(rng.randi_range(40,CHUNK_SIZE - 40),rng.randi_range(40,CHUNK_SIZE - 40))
+        if _tree_position_forbidden(chunk,pos):
+            continue
+        var node = _settlement_piece(chunk,{"kind":"fire_barrel","pos":pos,"scale":0.5,"solid":Vector2(10,6),"flip":rng.randf() < 0.5})
+        if node != null:
+            node.set_meta("yard_fire",true)
+            chunk.set_meta("fire_barrel",pos)
+            return
 
 func _create_lamp(chunk,pos):
     pos = _lamp_kerb_position(chunk,pos)
