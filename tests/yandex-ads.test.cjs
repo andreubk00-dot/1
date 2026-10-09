@@ -307,6 +307,25 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
       assert.equal(resumed,1);
     }finally{doc.hidden=oldHidden;}
   });
+  await test('Result screens and ads do not double-count final run depth',async()=>{
+    const {g}=fixture();g.track=Game.prototype.track;
+    g.save.analytics={events:{},waves:{},recent:[]};g.save.runs=1;g.save.sound=false;
+    g.canShowInterstitial=()=>false;g.audio.startMenuMusic=()=>{};g.showScreen=()=>{};
+    g.run.reached=5;g.run.completed=4;g.run.startedAt=999990000;g.run.firstRun=true;
+    g.track('boss_kill',{wave:5});g.track('reward_ad_attempt',{wave:5});
+    g.track('run_result',g.runOutcomeMeta(g.run));
+    g.run.revived=true;g.run.reached=10;g.run.completed=9;g.run.wave=10;
+    g.track('run_result',g.runOutcomeMeta(g.run));
+    assert.deepEqual(g.save.analytics.waves,{});
+    await g.leaveResult();
+    assert.equal(g.save.analytics.events.run_finish,1);
+    assert.equal(g.save.analytics.events.run_result,2);
+    assert.equal(g.save.analytics.events.run_end_defeat,1);
+    assert.deepEqual(g.save.analytics.waves,{'10':1});
+    const outcome=g.save.analytics.recent.at(-1);
+    assert.equal(outcome.meta.revived,true);assert.equal(outcome.meta.completed,9);
+    assert.equal(g.analyticsSummary().runs.defeats,1);
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
