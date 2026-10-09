@@ -4176,6 +4176,7 @@ func _process(delta):
     _update_weather(delta)
     # after the weather pass has set this frame's street-lamp energy (flicker)
     _update_puddle_reflections()
+    _cull_dark_lights()
     _update_ambience_audio(delta)
     _update_exterior_atmosphere(delta)
     _update_base_system(delta)
@@ -9523,8 +9524,13 @@ func _consume_inventory_item(id, amount):
 
 
 func _inventory_weight():
-    _ensure_runtime_item_instance_ids()
-    _ensure_water_container_runtime_state()
+    # Only the carried entries need valid instance ids here (a water bottle's
+    # fill is looked up by id). The full pass also walks every container ever
+    # opened in the world; run from the HUD and the movement step several
+    # times a frame it grew to tens of ms per frame as the world was explored.
+    # The inventory is checked first in that pass too, so its ids come out
+    # the same either way.
+    _ensure_entries_instance_ids(inventory_entries,{})
     var total = 0.0
 
     for entry in inventory_entries:
@@ -10474,8 +10480,18 @@ func _hud_make_row_label(parent,x,center_y,width,height,text,font_size,color,ali
 func _hud_set_label_font_size(label,size):
     if label == null:
         return
+    if label.has_theme_font_size_override("font_size") and label.get_theme_font_size("font_size") == size:
+        return
     label.add_theme_font_size_override("font_size",size)
     label.add_theme_constant_override("outline_size",1 if size >= 5 else 0)
+
+func _hud_font_color(label,color:Color):
+    # the HUD refreshes every frame; an unchanged override is skipped
+    if label == null:
+        return
+    if label.has_theme_color_override("font_color") and label.get_theme_color("font_color") == color:
+        return
+    label.add_theme_color_override("font_color",color)
 
 func _hud_text_width(label,text,size):
     if label == null:
@@ -10492,6 +10508,11 @@ func _hud_text_width(label,text,size):
 func _hud_set_fitted_text(label,text,base_size,min_size,_compact_threshold = 999,_hard_threshold = 999):
     if label == null:
         return
+    # same text in the same box at the same base size: the fit already holds
+    var fit_key = "%s|%d|%d|%.1f" % [text,base_size,min_size,label.size.x]
+    if label.text == text and str(label.get_meta("hud_fit_key","")) == fit_key:
+        return
+    label.set_meta("hud_fit_key",fit_key)
     label.text = text
     var size = base_size
     var allowed_width = max(1.0,label.size.x - 2.0)
@@ -13219,28 +13240,25 @@ func _update_hud():
     hud_vital_values["infection"].text = "%d%%" % int(wound_infection)
     hud_vital_values["fatigue"].text = "%d%%" % int(fatigue)
 
-    hud_vital_values["health"].add_theme_color_override("font_color",_hud_vital_text_color(health,35.0,15.0,false))
-    hud_vital_values["stamina"].add_theme_color_override("font_color",_hud_vital_text_color(stamina_pct,30.0,12.0,false))
-    hud_vital_values["hunger"].add_theme_color_override("font_color",_hud_vital_text_color(hunger,30.0,12.0,false))
-    hud_vital_values["thirst"].add_theme_color_override("font_color",_hud_vital_text_color(thirst,30.0,12.0,false))
-    hud_vital_values["temperature"].add_theme_color_override("font_color",_hud_temperature_text_color(body_temperature))
-    hud_vital_values["infection"].add_theme_color_override("font_color",_hud_vital_text_color(wound_infection,35.0,70.0,true))
-    hud_vital_values["fatigue"].add_theme_color_override("font_color",_hud_vital_text_color(fatigue,60.0,82.0,true))
-
+    _hud_font_color(hud_vital_values["health"],_hud_vital_text_color(health,35.0,15.0,false))
+    _hud_font_color(hud_vital_values["stamina"],_hud_vital_text_color(stamina_pct,30.0,12.0,false))
+    _hud_font_color(hud_vital_values["hunger"],_hud_vital_text_color(hunger,30.0,12.0,false))
+    _hud_font_color(hud_vital_values["thirst"],_hud_vital_text_color(thirst,30.0,12.0,false))
+    _hud_font_color(hud_vital_values["temperature"],_hud_temperature_text_color(body_temperature))
+    _hud_font_color(hud_vital_values["infection"],_hud_vital_text_color(wound_infection,35.0,70.0,true))
+    _hud_font_color(hud_vital_values["fatigue"],_hud_vital_text_color(fatigue,60.0,82.0,true))
     if hud_condition_label.visible:
         hud_condition_label.text = _hud_compact_condition_text()
-        hud_condition_label.add_theme_color_override("font_color",_hud_status_color())
-
+        _hud_font_color(hud_condition_label,_hud_status_color())
     if hud_condition_values.has("blood"):
         hud_condition_values["blood"].text = "%d%%" % int(clamp(100.0 - bleed_damage_taken / MAX_BLEED_DAMAGE * 100.0,0.0,100.0))
         hud_condition_values["pain"].text = "%d%%" % int(_effective_pain())
         hud_condition_values["wet"].text = "%d%%" % int(wetness)
         hud_condition_values["contam"].text = "%d%%" % int(wound_contamination)
-        hud_condition_values["blood"].add_theme_color_override("font_color",Color(0.90,0.46,0.42) if bleeding else Color(0.68,0.73,0.70))
-        hud_condition_values["pain"].add_theme_color_override("font_color",Color(0.90,0.68,0.40) if _effective_pain() >= 35.0 else Color(0.68,0.73,0.70))
-        hud_condition_values["wet"].add_theme_color_override("font_color",Color(0.48,0.70,0.91) if wetness >= 35.0 else Color(0.68,0.73,0.70))
-        hud_condition_values["contam"].add_theme_color_override("font_color",Color(0.90,0.66,0.36) if wound_contamination >= 35.0 else Color(0.68,0.73,0.70))
-
+        _hud_font_color(hud_condition_values["blood"],Color(0.90,0.46,0.42) if bleeding else Color(0.68,0.73,0.70))
+        _hud_font_color(hud_condition_values["pain"],Color(0.90,0.68,0.40) if _effective_pain() >= 35.0 else Color(0.68,0.73,0.70))
+        _hud_font_color(hud_condition_values["wet"],Color(0.48,0.70,0.91) if wetness >= 35.0 else Color(0.68,0.73,0.70))
+        _hud_font_color(hud_condition_values["contam"],Color(0.90,0.66,0.36) if wound_contamination >= 35.0 else Color(0.68,0.73,0.70))
     if hud_day_label != null:
         hud_day_label.text = "ДЕНЬ %02d" % world_day
     if hud_time_label != null:
@@ -13267,15 +13285,15 @@ func _update_hud():
     if hud_env_camp_label != null and hud_env_camp_sub_label != null:
         if heat_bonus > 0.05:
             _hud_set_fitted_text(hud_env_camp_label,"ИСТОЧНИК ТЕПЛА",5,4,11,14)
-            hud_env_camp_label.add_theme_color_override("font_color",Color(0.61,0.78,0.61))
+            _hud_font_color(hud_env_camp_label,Color(0.61,0.78,0.61))
             _hud_set_fitted_text(hud_env_camp_sub_label,"Тепло +%.0f°C" % heat_bonus,5,4,12,16)
         elif is_sheltered:
             _hud_set_fitted_text(hud_env_camp_label,"УКРЫТИЕ",5,4,11,14)
-            hud_env_camp_label.add_theme_color_override("font_color",Color(0.78,0.72,0.48))
+            _hud_font_color(hud_env_camp_label,Color(0.78,0.72,0.48))
             _hud_set_fitted_text(hud_env_camp_sub_label,"Нет огня",5,4,12,16)
         else:
             _hud_set_fitted_text(hud_env_camp_label,"ОТКРЫТОЕ МЕСТО",5,4,11,14)
-            hud_env_camp_label.add_theme_color_override("font_color",Color(0.68,0.72,0.70))
+            _hud_font_color(hud_env_camp_label,Color(0.68,0.72,0.70))
             _hud_set_fitted_text(hud_env_camp_sub_label,"Нет укрытия",5,4,12,16)
 
     var objective = _hud_survival_objective()
@@ -13296,10 +13314,9 @@ func _update_hud():
     _hud_set_fitted_text(hud_stealth_label,movement_text,6,5,8,10)
     if hud_stealth_noise_label != null:
         _hud_set_fitted_text(hud_stealth_noise_label,noise_text,5,4,6,9)
-        hud_stealth_noise_label.add_theme_color_override("font_color",Color(0.92,0.77,0.44) if noise >= 55.0 else Color(0.58,0.64,0.62))
+        _hud_font_color(hud_stealth_noise_label,Color(0.92,0.77,0.44) if noise >= 55.0 else Color(0.58,0.64,0.62))
     _hud_set_fitted_text(hud_weight_label,("%.1f" % _inventory_weight()).replace(".",",") + " / %.0f кг" % _carry_limit(),5,4,10,13)
-    hud_weight_label.add_theme_color_override("font_color",Color(0.92,0.77,0.44) if _inventory_weight() > _carry_limit() * 0.9 else Color(0.58,0.64,0.62))
-
+    _hud_font_color(hud_weight_label,Color(0.92,0.77,0.44) if _inventory_weight() > _carry_limit() * 0.9 else Color(0.58,0.64,0.62))
     var active_id = equipped_melee_id if equipped_melee_id != "" else current_weapon_id
     if hud_weapon_icon_id != active_id:
         hud_weapon_icon_id = active_id
@@ -13317,14 +13334,19 @@ func _update_hud():
         slot_button.modulate = Color.WHITE if owned else Color(0.68,0.70,0.68,0.88)
 
         var active = slot_id == active_id
-        var style = hud_quick_style_active if active else hud_quick_style_normal
-        slot_button.add_theme_stylebox_override("normal",style)
-        slot_button.add_theme_stylebox_override("hover",hud_quick_style_active if active else hud_quick_style_hover)
-        slot_button.add_theme_stylebox_override("pressed",hud_quick_style_active)
-        slot_button.add_theme_stylebox_override("focus",style)
-        var slot_back = slot.get("back",null)
-        if slot_back != null:
-            slot_back.add_theme_stylebox_override("panel",_hud_quick_art_style(active,owned))
+        # restyle only when the slot's state changes: every override sends a
+        # theme notification down the tree and re-lays the control out
+        var slot_state = "%s:%s" % [active,owned]
+        if str(slot_button.get_meta("hud_slot_state","")) != slot_state:
+            slot_button.set_meta("hud_slot_state",slot_state)
+            var style = hud_quick_style_active if active else hud_quick_style_normal
+            slot_button.add_theme_stylebox_override("normal",style)
+            slot_button.add_theme_stylebox_override("hover",hud_quick_style_active if active else hud_quick_style_hover)
+            slot_button.add_theme_stylebox_override("pressed",hud_quick_style_active)
+            slot_button.add_theme_stylebox_override("focus",style)
+            var slot_back = slot.get("back",null)
+            if slot_back != null:
+                slot_back.add_theme_stylebox_override("panel",_hud_quick_art_style(active,owned))
         var slot_rail = slot.get("rail",null)
         if slot_rail != null:
             slot_rail.visible = active and owned
@@ -16564,6 +16586,16 @@ func _update_puddle_reflections():
             r.material.set_shader_parameter("rain",rain_value)
     if rain_changed and _puddle_mat != null:
         _puddle_mat.set_shader_parameter("rain",rain_value)
+
+func _cull_dark_lights():
+    # a street lamp by day (or a dead one at night) sits at zero energy but an
+    # enabled Light2D is still drawn over everything in its rect; switch it
+    # off while it gives no light. Nothing on screen changes.
+    for light in get_tree().get_nodes_in_group("street_lights"):
+        if light is PointLight2D:
+            var lit = light.energy > 0.002
+            if light.enabled != lit:
+                light.enabled = lit
 
 func _update_detail_lights(delta):
     # Slight practical-light instability keeps abandoned interiors from looking
@@ -20736,6 +20768,34 @@ bool reaches(vec2 lp, int s) {
     float spike = tuft > 0.62 ? 1.5 + 4.5 * h(vec2(floor(along * texel_per_unit / 2.0), 2.0)) : 0.0;
     return d < line + (soft_lp(lp) ? spike : 0.0);
 }
+// Fast classification for the fragment and every neighbour the full path
+// looks at (up to 2 texels = 1 unit away): 1 = edge s certainly reaches all of
+// them, -1 = certainly reaches none, 0 = near the line, take the full path.
+// The margin (2.6 units) covers the 1-unit neighbour offset plus how far the
+// meandering line itself can move over one unit along the edge.
+// Most of a band lies well inside or outside its line, so the noise-heavy
+// reaches() runs only on a thin strip along it.
+int classify(vec2 lp, int s) {
+    // paved/soft switches at the road and walkway lines: decide those exactly
+    if (mode == 0) {
+        vec2 q = min(min(abs(lp - 274.0), abs(lp - 299.0)), min(abs(lp - 469.0), abs(lp - 494.0)));
+        if (min(q.x, q.y) < 1.6) return 0;
+    }
+    float d = edge_dist(lp, s);
+    vec2 wp = world_origin + lp;
+    float along = s < 2 ? wp.y : wp.x;
+    if (paved(lp)) {
+        float e = 22.0 + 4.0 * (vn(vec2(along / 9.0, 3.1 + float(s))) - 0.5);
+        if (d < e - 2.6) return 1;
+        if (d > e + 9.0 + 2.6) return -1;
+        return 0;
+    }
+    float line = 34.0 + 52.0 * (vn(vec2(along / 150.0, 1.7 + float(s))) - 0.5)
+        + 10.0 * (vn(vec2(along / 26.0, 5.3)) - 0.5);
+    if (d < line - 2.6) return 1;
+    if (d > line + 6.0 + 2.6) return -1;
+    return 0;
+}
 bool shown(vec2 lp) {
     if (mode == 0) return reaches(lp, side);
     for (int s = 0; s < 4; s++) {
@@ -20748,27 +20808,47 @@ void fragment() {
     vec2 t = floor(local);
     float px = 1.0 / texel_per_unit;
     vec2 lp = origin + (t + 0.5) * px;
-    bool on = shown(lp);
-    if (!on) {
-        // the raised edge casts a short shadow down-right onto the lower ground
-        if (styled && (shown(lp - vec2(px, px) * 2.0) || shown(lp - vec2(0.0, px) * 2.0))) {
-            COLOR = vec4(0.0, 0.0, 0.0, paved(lp) ? 0.32 : 0.26);
-        } else {
-            discard;
-        }
+    // 1 = shown here and around (plain texture), -1 = hidden here and around
+    // (no shadow either), 0 = near the border line
+    int fast = 0;
+    if (mode == 0) {
+        fast = classify(lp, side);
     } else {
-        vec4 c = texture(TEXTURE, UV);
-        if (styled) {
-            // lit lip on the top-left side of the edge, dark crack on paving
-            bool lip = !shown(lp - vec2(px, 0.0)) || !shown(lp - vec2(0.0, px));
-            bool rim = lip || !shown(lp + vec2(px, 0.0)) || !shown(lp + vec2(0.0, px));
-            if (paved(lp)) {
-                if (rim) c.rgb *= 0.6;
-            } else if (lip) {
-                c.rgb = min(c.rgb * 1.18 + 0.03, vec3(1.0));
+        fast = 1;
+        for (int s = 0; s < 4; s++) {
+            if (outer[s] > 0.5) {
+                int k = classify(lp, s);
+                if (k == 1) { fast = -1; break; }
+                if (k == 0) fast = 0;
             }
         }
-        COLOR = c;
+    }
+    if (fast == -1) discard;
+    if (fast == 1) {
+        COLOR = texture(TEXTURE, UV);
+    } else {
+        bool on = shown(lp);
+        if (!on) {
+            // the raised edge casts a short shadow down-right onto the lower ground
+            if (styled && (shown(lp - vec2(px, px) * 2.0) || shown(lp - vec2(0.0, px) * 2.0))) {
+                COLOR = vec4(0.0, 0.0, 0.0, paved(lp) ? 0.32 : 0.26);
+            } else {
+                discard;
+            }
+        } else {
+            vec4 c = texture(TEXTURE, UV);
+            if (styled) {
+                // lit lip on the top-left side of the edge, dark crack on paving
+                bool lip = !shown(lp - vec2(px, 0.0)) || !shown(lp - vec2(0.0, px));
+                bool rim = lip || !shown(lp + vec2(px, 0.0)) || !shown(lp + vec2(0.0, px));
+                if (paved(lp)) {
+                    if (rim) c.rgb *= 0.6;
+                } else if (lip) {
+                    c.rgb = min(c.rgb * 1.18 + 0.03, vec3(1.0));
+                }
+            }
+            COLOR = c;
+        }
     }
 }"""
 var _ground_edge_shader = null

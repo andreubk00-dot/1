@@ -794,3 +794,29 @@ QA: `tests/qa_vertical_fence_capture.gd`.
   Applied to `world_cars_hd_v1` (1362 px), `vehicles_hd_v1` (6161 px) and
   `hr_props_v1` (45 px). `to_sprite` now runs the same pass, so a re-bake
   cannot bring the ring back.
+
+## dev47 — performance (no visual change)
+
+Measured with a per-call profiler on a scripted night walk (600 frames):
+
+- **`_inventory_weight` walked the whole world.** It re-validated item instance
+  ids across every container ever opened and every dropped item, and the HUD
+  and the movement step called it 4-5 times a frame: ~45 ms of CPU per frame,
+  growing as the world was explored. It now checks the carried entries only
+  (the inventory was always validated first in the full pass, so its ids come
+  out the same). CPU frame time, headless: **57.8 → 6.9 ms**.
+- **HUD.** Colour and font-size overrides were re-applied every frame even when
+  unchanged (each one is a theme notification and a re-layout); quick-slot
+  styles likewise. They are now applied only on change, and a fitted label
+  skips the width search when its text and box are unchanged.
+  `_update_hud`: 2.1 → 0.85 ms.
+- **District band shader.** The seam strip ran its noise border test up to
+  five times per texel (twenty in compound yards) over ~60 % of the screen. A
+  conservative pre-check now classifies each texel as well inside / well
+  outside the border (with a 2.6-unit margin covering every neighbour the full
+  path samples) and only the thin strip along the line takes the full path.
+  Verified pixel-identical against the old shader on 52 bands (all three
+  modes). Render time (llvmpipe): **118 → ~55 ms**.
+- **Dark street lamps.** A lamp at zero energy (by day, or a dead one) stays an
+  enabled Light2D drawn over its whole rect; it is switched off while it gives
+  no light (`_cull_dark_lights`).
