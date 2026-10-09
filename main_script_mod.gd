@@ -15118,6 +15118,7 @@ func _scatter_vegetation(chunk,coord,district_id):
             r -= weights[kind]
             kind += 1
         var sprite = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),pos,0.5)
+        _vegetation_sway(sprite,kind)
         if sprite != null:
             sprite.z_as_relative = false
             sprite.z_index = -6 if kind >= 5 else 6
@@ -16140,8 +16141,11 @@ func _update_puddle_reflections():
     _puddle_rain_state = rain_value
     if _lamp_post_mat != null:
         _lamp_post_mat.set_shader_parameter("hide",clamp(night * 1.2,0.0,1.0))
+    var wind_k = clamp(0.25 + wind_speed_kmh / 25.0,0.25,1.4)
     if _tree_sway_mat != null:
-        _tree_sway_mat.set_shader_parameter("wind",clamp(0.25 + wind_speed_kmh / 25.0,0.25,1.4))
+        _tree_sway_mat.set_shader_parameter("wind",wind_k)
+    for m in _veg_sway_mats.values():
+        m.set_shader_parameter("wind",wind_k)
     var tw = Time.get_ticks_msec() * 0.001
     for g in get_tree().get_nodes_in_group("window_glows"):
         if not is_instance_valid(g):
@@ -20472,6 +20476,7 @@ func _dress_ground_seams(chunk,coord):
             if free:
                 var kind = kinds[rng.randi_range(0,kinds.size() - 1)]
                 var spr = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),lp,rng.randf_range(0.42,0.56))
+                _vegetation_sway(spr,kind)
                 if spr != null:
                     spr.offset = Vector2(0,-24)
                     spr.flip_h = rng.randf() < 0.5
@@ -21999,6 +22004,7 @@ func _settlement_clutter(chunk,coord,cell_data:Dictionary,style:String):
                 continue
             var kind = [5,5,3,4,6,3][rng.randi_range(0,5)]
             var veg = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),p,rng.randf_range(0.4,0.55))
+            _vegetation_sway(veg,kind)
             if veg != null:
                 veg.z_as_relative = false
                 veg.z_index = -6 if kind >= 5 else 6
@@ -22013,6 +22019,7 @@ func _settlement_clutter(chunk,coord,cell_data:Dictionary,style:String):
                     if style == "rubezh" or style == "mechanics":
                         kind = [7,3,4,2][rng.randi_range(0,3)]
                     var bush = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),p,0.5)
+                    _vegetation_sway(bush,kind)
                     if bush != null:
                         bush.z_as_relative = false
                         bush.z_index = 6
@@ -22886,6 +22893,7 @@ func _hr_vegetation(chunk,coord,style:String,cell:Dictionary,rng):
         if style == "vector":
             kind = [0,1,2,4,3,7][rng.randi_range(0,5)]
         var veg = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),p,rng.randf_range(0.42,0.58))
+        _vegetation_sway(veg,kind)
         if veg != null:
             veg.z_as_relative = false
             veg.z_index = -6 if kind >= 5 else 6
@@ -24784,11 +24792,15 @@ func _create_tree(chunk,pos,scale_factor,force = false):
 
 # Wind in the crowns: each texel row of the canopy is pushed sideways by a
 # whole number of texels (pixel art stays crisp), most at the top, nothing at
-# the trunk (cells start at atlas row 0; crowns end around row 140). Two slow
+# the trunk / root (cells start at atlas row 0; tree crowns end around row
+# 140, shrubs around row 54 of their 64-row cells). Two slow
 # waves per tree with a phase from its world position; "wind" follows the
 # weather's wind speed. One shared material.
 const TREE_SWAY_SHADER = """shader_type canvas_item;
 uniform float wind = 0.3;
+uniform float base_row = 140.0;   // cell row where the plant stops moving
+uniform float span = 110.0;       // rows over which the sway builds up
+uniform float amp = 3.0;          // texels at full wind, at the very top
 varying float phase;
 varying vec4 tint;
 void vertex() {
@@ -24798,21 +24810,47 @@ void vertex() {
 }
 void fragment() {
     float ly = UV.y / TEXTURE_PIXEL_SIZE.y;
-    float k = clamp((140.0 - ly) / 110.0, 0.0, 1.0);
+    float k = clamp((base_row - ly) / span, 0.0, 1.0);   // atlases are one cell row tall
     k = k * sqrt(k);
     float s = sin(TIME * 1.1 + phase) * 0.65 + sin(TIME * 2.7 + phase * 1.7) * 0.35;
-    float shift = floor(s * wind * 3.0 * k + 0.5);
+    float shift = floor(s * wind * amp * k + 0.5);
     COLOR = texture(TEXTURE, UV - vec2(shift * TEXTURE_PIXEL_SIZE.x, 0.0)) * tint;
 }"""
 var _tree_sway_mat = null
+var _sway_shader = null
+var _veg_sway_mats = {}
+
+func _sway_material(base_row:float,span:float,amp:float):
+    if _sway_shader == null:
+        _sway_shader = Shader.new()
+        _sway_shader.code = TREE_SWAY_SHADER
+    var m = ShaderMaterial.new()
+    m.shader = _sway_shader
+    m.set_shader_parameter("base_row",base_row)
+    m.set_shader_parameter("span",span)
+    m.set_shader_parameter("amp",amp)
+    return m
 
 func _tree_sway_material():
     if _tree_sway_mat == null:
-        var sh = Shader.new()
-        sh.code = TREE_SWAY_SHADER
-        _tree_sway_mat = ShaderMaterial.new()
-        _tree_sway_mat.shader = sh
+        _tree_sway_mat = _sway_material(140.0,110.0,3.0)
     return _tree_sway_mat
+
+# bushes give a little at the crown, weeds and tall grass bend more; leaf piles
+# and fallen branches lie still (vegetation_v1 cells are 64 rows, rooted ~row 58)
+func _vegetation_sway(sprite,kind:int):
+    if sprite == null:
+        return
+    var key = ""
+    if kind in [0,1,2,7]:
+        key = "bush"
+    elif kind in [3,4]:
+        key = "grass"
+    else:
+        return
+    if not _veg_sway_mats.has(key):
+        _veg_sway_mats[key] = _sway_material(54.0,40.0,1.6) if key == "bush" else _sway_material(58.0,34.0,2.6)
+    sprite.material = _veg_sway_mats[key]
 
 var _fence_mesh_tex = null
 
@@ -27520,7 +27558,51 @@ func _weather_next_state():
         weather_state = "clear"
         weather_timer = 105.0
 
+# Rain hitting the ground: a world-anchored layer of pixel splashes under the
+# camera (above the ground, below puddles, decals, interiors and props). The
+# ground is cut into 11 x 7 unit cells; each restarts every half second at a
+# hashed spot, about a fifth of them per round: an impact texel with two
+# droplets flung up, then a small flat ring.
+const RAIN_SPLASH_SHADER = """shader_type canvas_item;
+uniform float rain = 0.0;
+varying vec2 wpos;
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
+void fragment() {
+    vec2 tp = floor(wpos * 2.0);
+    vec2 cell = floor(tp / vec2(22.0, 14.0));
+    float tt = TIME / 0.5 + h2(cell);
+    float rnd = floor(tt);
+    float t = fract(tt);
+    float a = 0.0;
+    if (h2(cell + rnd * 1.91) < 0.22 * rain) {
+        vec2 ctr = cell * vec2(22.0, 14.0) + floor(vec2(h2(cell + rnd) * 18.0 + 2.0, h2(cell - rnd) * 10.0 + 2.0));
+        vec2 d = tp - ctr;
+        if (t < 0.28) {
+            if (d.x == 0.0 && d.y == 0.0) a = 0.75;
+            if (abs(d.x) == 2.0 && d.y == -1.0) a = 0.5;
+        } else if (t < 0.62) {
+            vec2 ro = vec2(3.5, 1.6);
+            vec2 ri = vec2(2.3, 0.7);
+            if (dot(d / ro, d / ro) <= 1.0 && dot(d / ri, d / ri) > 1.0) a = 0.42;
+        }
+    }
+    COLOR = vec4(0.78, 0.83, 0.88, a);
+}"""
+var rain_splash_layer = null
+
 func _create_weather_visuals():
+    rain_splash_layer = Polygon2D.new()
+    rain_splash_layer.name = "RainSplashes"
+    rain_splash_layer.z_as_relative = false
+    rain_splash_layer.z_index = -66
+    var splash_shader = Shader.new()
+    splash_shader.code = RAIN_SPLASH_SHADER
+    var splash_mat = ShaderMaterial.new()
+    splash_mat.shader = splash_shader
+    rain_splash_layer.material = splash_mat
+    rain_splash_layer.visible = false
+    add_child(rain_splash_layer)
     weather_visual_root = Node2D.new()
     weather_visual_root.name = "WeatherVisuals"
     weather_visual_root.z_as_relative = false
@@ -27594,6 +27676,18 @@ func _lamp_flicker_gate(t:float,phase:float) -> float:
 func _update_weather_visuals(delta):
     var indoors = _high_risk_floor_active()
     var raining = weather_state == "rain" and not indoors
+
+    if is_instance_valid(rain_splash_layer):
+        rain_splash_layer.visible = raining
+        if raining:
+            # cover what the camera sees (plus a margin); the shader works in
+            # world space, so moving the quad never drags the splashes along
+            var cam = get_viewport().get_camera_2d()
+            var center = cam.get_screen_center_position() if cam != null else player.global_position
+            var half = get_viewport().get_visible_rect().size * 0.5 / (cam.zoom if cam != null else Vector2.ONE) + Vector2(24,24)
+            rain_splash_layer.global_position = center.round()
+            rain_splash_layer.polygon = PackedVector2Array([Vector2(-half.x,-half.y),Vector2(half.x,-half.y),Vector2(half.x,half.y),Vector2(-half.x,half.y)])
+            rain_splash_layer.material.set_shader_parameter("rain",1.0)
 
     for i in range(rain_lines.size()):
         var line = rain_lines[i]
