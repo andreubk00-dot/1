@@ -6,10 +6,9 @@ const path=require('node:path');
 const assert=require('node:assert/strict');
 const pc=fs.readFileSync(path.join(__dirname,'..','pc','index.html'),'utf8');
 const mobile=fs.readFileSync(path.join(__dirname,'..','iphone','index.html'),'utf8');
-const scripts=s=>[...s.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)].map(x=>x[1]);
+const scripts=s=>[...s.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(x=>x[1]);
 assert.equal(scripts(pc)[1],scripts(mobile)[1],'PC/mobile game JavaScript diverged');
 const begin='  class Game {';
-const end="\\n\\n  window.addEventListener('DOMContentLoaded'";
 function extract(src){
   const i=src.indexOf(begin),j=src.indexOf('\n\n  window.addEventListener(\'DOMContentLoaded\'',i);
   assert(i>=0&&j>i,'Cannot isolate Game class');
