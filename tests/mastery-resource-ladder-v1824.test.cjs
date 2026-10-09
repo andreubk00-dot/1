@@ -23,6 +23,7 @@ new Function('window','document','navigator','performance','Math','setTimeout',
 const {Game,BALANCE,DEFAULT_SAVE,LABS,DEFENDER_CONTRACTS,TEXT,
  MASTERY_MILESTONES,PROMOTION_COSTS,PROMOTION_BLUEPRINT_COSTS}=win.__mastery;
 const e=BALANCE.economy,units=['spark','prism','ember'],costLab={damage:18,core:16,income:8,start:10};
+const metaTarget={damage:17,core:11}; // snapshot meta35 spends actual earned tokens (28 of 34).
 function game(){
  const g=Object.create(Game.prototype);
  g.save=JSON.parse(JSON.stringify(DEFAULT_SAVE));g.lang='ru';g.t=TEXT.ru;
@@ -88,6 +89,9 @@ function simulate(seed,depth,maxRuns=550){
   }
   if(depth>=e.runGemWaveThreshold){save.gems++;gemsEarned++;}
   save.shards+=earnedPerRun;
+  // Actually buy the tested rank-35 Core upgrades; each spends one rank token.
+  for(const key of ['damage','core'])while(save.meta.spent[key]<metaTarget[key]&&save.meta.tokens>0)
+   g.buyMeta(key);
   for(const id of units){
    for(let i=0;i<MASTERY_MILESTONES.length;i++){
     if(g.masteryState(id).level>=MASTERY_MILESTONES[i].level){
@@ -113,6 +117,7 @@ function simulate(seed,depth,maxRuns=550){
   if(!record.shardsForLab&&save.shards>=labCosts)record.shardsForLab=run;
   if(!record.shardsForPriorContractsAndNextLab&&save.shards>=totalShardTarget)record.shardsForPriorContractsAndNextLab=run;
   if(!record.fullSnapshotBudget&&record.level20All&&record.star4All&&record.meta35&&
+     save.meta.spent.damage>=metaTarget.damage&&save.meta.spent.core>=metaTarget.core&&
      record.shardsForPriorContractsAndNextLab&&record.gemsForContracts)
    record.fullSnapshotBudget=run;
   if(record.fullSnapshotBudget)break;
@@ -122,10 +127,13 @@ function simulate(seed,depth,maxRuns=550){
   'Unreachable fixed-depth scenario '+depth);
  assert(save.gems>=0&&save.shards>=0,'Negative currency during legitimate progression');
  assert.equal(spentGems,58*3,'Unexpected spent promotion gems');
- assert.equal(save.meta.level-1,save.meta.tokens,
-  'Meta tokens should remain unspent and track rank-ups');
+ assert.equal(save.meta.level-1,save.meta.tokens+save.meta.spent.damage+save.meta.spent.core,
+  'Meta rank-ups must fund both actual Core upgrade paths');
+ assert.equal(save.meta.spent.damage,metaTarget.damage);
+ assert.equal(save.meta.spent.core,metaTarget.core);
  assert(g.masteryState(units[0]).stars>=4);
- return {...record,earnedPerRun,gemsEarned,bossCount,left:{shards:save.shards,gems:save.gems},snapshots};
+ return {...record,earnedPerRun,gemsEarned,bossCount,
+  metaSpent:{...save.meta.spent},left:{shards:save.shards,gems:save.gems},snapshots};
 }
 function summary(depth){
  const samples=Array.from({length:40},(_,i)=>simulate(i*911+1419,depth));
@@ -145,6 +153,9 @@ for(const row of results){
   'Contract budget vanished');
  assert(row.values.star4All.p90<90,'Blueprint RNG became excessive');
 }
+assert(results[1].values.fullSnapshotBudget.median>=180&&
+       results[1].values.fullSnapshotBudget.median<=300,
+ 'Full-depth 65 grind changed by too many attempts');
 for(let i=1;i<results.length;i++){
  assert(results[i].values.meta35.median<results[i-1].values.meta35.median,
   'Deeper boss kills do not advance Core rank faster');
