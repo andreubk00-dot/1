@@ -16206,6 +16206,11 @@ func _update_puddle_reflections():
         _tree_sway_mat.set_shader_parameter("wind",wind_k)
     for m in _veg_sway_mats.values():
         m.set_shader_parameter("wind",wind_k)
+    # the moon gets in through clear skies; cloud, rain and fog dull it
+    var moon_in = night * (1.0 if weather_state == "clear" else (0.5 if weather_state == "cloudy" else 0.25)) * (1.0 - fog_density * 0.5)
+    for wp in get_tree().get_nodes_in_group("window_light_patches"):
+        if is_instance_valid(wp):
+            wp.modulate.a = night * 0.55 if bool(wp.get_meta("warm",false)) else moon_in * 0.8
     var tw = Time.get_ticks_msec() * 0.001
     for g in get_tree().get_nodes_in_group("window_glows"):
         if not is_instance_valid(g):
@@ -24429,6 +24434,8 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     else:
         _build_settlement_model_facade(facade,settlement_model,size,door_x,sign_text)
 
+    if open_interior:
+        _add_window_light_patches(building,facade,size)
     var facade_style = _exterior_style_index(sign_text)
     for window_slot in range(breach_window_xs.size()):
         var wx = float(breach_window_xs[window_slot])
@@ -24639,6 +24646,86 @@ func _settlement_spark_emitter(parent,pos:Vector2):
     p.color_ramp = ramp
     parent.add_child(p)
     return p
+
+# Light through the ground-floor windows onto the floor inside: a pale cold
+# patch of moonlight (or a warm one under a lit window), skewed as it falls
+# in, with the shadow of the window cross and two flat brightness steps.
+# Additive and over-bright so it reads through the night CanvasModulate; only
+# visible once the roof has lifted (the player inside or behind the house).
+const WINDOW_PATCH_SHADER = """shader_type canvas_item;
+render_mode blend_add;
+uniform vec3 tint = vec3(1.0);
+void fragment() {
+    vec4 c = texture(TEXTURE, UV);
+    COLOR = vec4(c.rgb * tint, c.a * COLOR.a);
+}"""
+var _window_patch_tex = null
+var _window_patch_mats = {}
+
+func _window_patch_texture():
+    # 40 x 80 HD texels: a parallelogram leaning east as it reaches into the
+    # room, the frame cross as darker bars, brighter near the window
+    if _window_patch_tex != null:
+        return _window_patch_tex
+    var w = 40
+    var h = 80
+    var img = Image.create(w + 22,h,false,Image.FORMAT_RGBA8)
+    img.fill(Color(0,0,0,0))
+    for y in range(h):
+        var depth = float(h - 1 - y) / float(h - 1)      # 0 at the window (bottom)
+        var shift = int(round(depth * 20.0))
+        var a = 0.9 if depth < 0.45 else 0.55
+        if y < 3:
+            a *= 0.5
+        for x in range(w):
+            var aa = a
+            if abs(x - w / 2) <= 1 or abs(y - int(h * 0.55)) <= 1:
+                aa *= 0.25                                 # the window cross
+            if x < 2 or x > w - 3:
+                aa *= 0.5                                  # soft-stepped sides
+            img.set_pixel(x + shift,y,Color(1,1,1,aa))
+    _window_patch_tex = ImageTexture.create_from_image(img)
+    return _window_patch_tex
+
+func _window_patch_material(warm:bool):
+    var key = "warm" if warm else "moon"
+    if not _window_patch_mats.has(key):
+        var sh = Shader.new()
+        sh.code = WINDOW_PATCH_SHADER
+        var m = ShaderMaterial.new()
+        m.shader = sh
+        m.set_shader_parameter("tint",Vector3(3.4,2.4,1.3) if warm else Vector3(2.2,2.7,3.6))
+        _window_patch_mats[key] = m
+    return _window_patch_mats[key]
+
+func _add_window_light_patches(building,facade,size:Vector2):
+    if not is_instance_valid(facade):
+        return
+    for wnd in facade.get_children():
+        if not wnd.is_in_group("architecture_windows"):
+            continue
+        var state = int(wnd.get_meta("window_state",0))
+        # ground-floor openings only; boarded ones let no light in
+        if wnd.position.y < -34.0 or state == 2:
+            continue
+        var warm = state == 3
+        for g in wnd.get_children():
+            if g.is_in_group("window_glows"):
+                warm = true
+        var patch = Sprite2D.new()
+        patch.texture = _window_patch_texture()
+        patch.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        patch.scale = Vector2(0.5,0.5)
+        patch.centered = false
+        # the bottom of the patch sits on the inside of the south wall
+        patch.position = Vector2(wnd.position.x - 10.0,size.y * 0.5 - 14.0 - 40.0).round()
+        patch.z_index = -1
+        patch.light_mask = 0
+        patch.material = _window_patch_material(warm)
+        patch.modulate = Color(1,1,1,0)
+        patch.set_meta("warm",warm)
+        patch.add_to_group("window_light_patches")
+        building.add_child(patch)
 
 func _update_roofs(delta):
     for rec in roof_records:
@@ -30248,6 +30335,44 @@ func _update_day_night(delta):
             player_light.visible = false
     else:
         player_light.visible = false
+    _update_flashlight_dust()
+
+# Dust in the torch light: pale motes drift slowly around the player. They
+# take the scene's lighting like everything else, so in the dark they vanish
+# and only the ones inside the torch's pool show, turning in the beam.
+var flashlight_dust = null
+
+func _update_flashlight_dust():
+    if flashlight_dust == null:
+        flashlight_dust = CPUParticles2D.new()
+        flashlight_dust.name = "TorchDust"
+        flashlight_dust.local_coords = false
+        flashlight_dust.z_as_relative = false
+        flashlight_dust.z_index = 24
+        var img = Image.create(2,2,false,Image.FORMAT_RGBA8)
+        img.fill(Color(1,1,1,1))
+        flashlight_dust.texture = ImageTexture.create_from_image(img)
+        flashlight_dust.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        flashlight_dust.amount = 36
+        flashlight_dust.lifetime = 4.5
+        flashlight_dust.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+        flashlight_dust.emission_sphere_radius = 85.0
+        flashlight_dust.direction = Vector2(1,0)
+        flashlight_dust.spread = 180.0
+        flashlight_dust.gravity = Vector2(0.6,1.2)
+        flashlight_dust.initial_velocity_min = 1.5
+        flashlight_dust.initial_velocity_max = 5.0
+        flashlight_dust.scale_amount_min = 0.5
+        flashlight_dust.scale_amount_max = 0.5
+        var ramp = Gradient.new()
+        ramp.set_color(0,Color(0.85,0.82,0.74,0.0))
+        ramp.set_color(1,Color(0.85,0.82,0.74,0.0))
+        ramp.add_point(0.25,Color(0.85,0.82,0.74,0.55))
+        ramp.add_point(0.75,Color(0.85,0.82,0.74,0.45))
+        flashlight_dust.color_ramp = ramp
+        player.add_child(flashlight_dust)
+    # by day the light around is too strong for motes to show in a beam
+    flashlight_dust.emitting = player_light.visible and _time_night_factor() > 0.35
 
 func _toggle_flashlight():
     if str(equipment.get("utility","")) != "flashlight":
