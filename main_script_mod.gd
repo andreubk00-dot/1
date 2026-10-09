@@ -16140,6 +16140,8 @@ func _update_puddle_reflections():
     _puddle_rain_state = rain_value
     if _lamp_post_mat != null:
         _lamp_post_mat.set_shader_parameter("hide",clamp(night * 1.2,0.0,1.0))
+    if _tree_sway_mat != null:
+        _tree_sway_mat.set_shader_parameter("wind",clamp(0.25 + wind_speed_kmh / 25.0,0.25,1.4))
     var tw = Time.get_ticks_msec() * 0.001
     for g in get_tree().get_nodes_in_group("window_glows"):
         if not is_instance_valid(g):
@@ -24771,12 +24773,46 @@ func _create_tree(chunk,pos,scale_factor,force = false):
             sprite.scale = Vector2(0.75,0.75)
         sprite.texture = tree_atlas_tex
         sprite.z_index = 0
+        if hd_trees:
+            sprite.material = _tree_sway_material()
         tree.add_child(sprite)
     else:
         _world_prop_sprite("tree",tree,Vector2(0,-5),0,1.0)
 
     _add_static_rect(tree,Vector2(0,7),Vector2(12,12))
     return tree
+
+# Wind in the crowns: each texel row of the canopy is pushed sideways by a
+# whole number of texels (pixel art stays crisp), most at the top, nothing at
+# the trunk (cells start at atlas row 0; crowns end around row 140). Two slow
+# waves per tree with a phase from its world position; "wind" follows the
+# weather's wind speed. One shared material.
+const TREE_SWAY_SHADER = """shader_type canvas_item;
+uniform float wind = 0.3;
+varying float phase;
+varying vec4 tint;
+void vertex() {
+    vec2 wp = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xy;
+    phase = wp.x * 0.031 + wp.y * 0.017;
+    tint = COLOR;
+}
+void fragment() {
+    float ly = UV.y / TEXTURE_PIXEL_SIZE.y;
+    float k = clamp((140.0 - ly) / 110.0, 0.0, 1.0);
+    k = k * sqrt(k);
+    float s = sin(TIME * 1.1 + phase) * 0.65 + sin(TIME * 2.7 + phase * 1.7) * 0.35;
+    float shift = floor(s * wind * 3.0 * k + 0.5);
+    COLOR = texture(TEXTURE, UV - vec2(shift * TEXTURE_PIXEL_SIZE.x, 0.0)) * tint;
+}"""
+var _tree_sway_mat = null
+
+func _tree_sway_material():
+    if _tree_sway_mat == null:
+        var sh = Shader.new()
+        sh.code = TREE_SWAY_SHADER
+        _tree_sway_mat = ShaderMaterial.new()
+        _tree_sway_mat.shader = sh
+    return _tree_sway_mat
 
 var _fence_mesh_tex = null
 
@@ -29336,6 +29372,24 @@ func _create_day_night():
 
     _update_day_night(0.0)
 
+# Colour of the light through the day (multiplied into the CanvasModulate):
+# blue before dawn, a pink-violet first light, a short golden sunrise, plain
+# overcast daylight, then the golden hour, an orange sunset, a rose-violet
+# dusk and the blue hour sliding into night.
+const SKY_TINT_KEYS = [
+    [4.5,Color(0.84,0.88,1.10)],[5.5,Color(0.98,0.86,1.04)],[6.3,Color(1.14,0.94,0.80)],[7.6,Color(1,1,1)],
+    [16.6,Color(1,1,1)],[18.0,Color(1.12,0.96,0.80)],[19.0,Color(1.16,0.86,0.72)],[20.0,Color(0.98,0.82,0.98)],
+    [21.0,Color(0.86,0.88,1.08)],[22.0,Color(1,1,1)]
+]
+
+func _sky_tint(hour:float) -> Color:
+    for i in range(SKY_TINT_KEYS.size() - 1):
+        var a = SKY_TINT_KEYS[i]
+        var b = SKY_TINT_KEYS[i + 1]
+        if hour >= a[0] and hour < b[0]:
+            return a[1].lerp(b[1],(hour - a[0]) / (b[0] - a[0]))
+    return Color(1,1,1)
+
 func _update_day_night(delta):
     var previous_day = world_day
     var advanced_minutes = world_minutes + delta * day_speed
@@ -29385,10 +29439,14 @@ func _update_day_night(delta):
             weather_dim = 0.86
             blue_shift += 0.10
 
+        # dawn and dusk colour: muted by cloud, barely there in the rain
+        var sky_tint = _sky_tint(hour)
+        var clear_k = 1.0 if weather_state == "clear" else (0.5 if weather_state == "cloudy" else 0.3)
+        sky_tint = Color(1,1,1).lerp(sky_tint,clear_k)
         canvas_modulate.color = Color(
-            brightness * (0.93 - 0.07 * moon) * weather_dim,
-            brightness * 0.96 * weather_dim,
-            min(1.0,brightness * 1.04 * weather_dim * blue_shift),
+            min(1.0,brightness * (0.93 - 0.07 * moon) * weather_dim * sky_tint.r),
+            min(1.0,brightness * 0.96 * weather_dim * sky_tint.g),
+            min(1.0,brightness * 1.04 * weather_dim * blue_shift * sky_tint.b),
             1.0
         )
 
