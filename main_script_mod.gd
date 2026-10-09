@@ -15813,60 +15813,58 @@ func _add_detail_light(parent,pos,color,energy,texture_scale,exterior=false):
 # Their strength follows the night and the lamp's own flicker; rain makes them
 # shimmer.
 const PUDDLE_TEX = "res://art/world_hd/puddles_hd.png"
-var _reflection_tex = null
 var _reflection_shader = null
-# clip_children is not available in the Compatibility renderer: the reflection
-# clips itself against the puddle's alpha in this shader instead
+# A lamp seen in a puddle at night. Drawn over the whole puddle with the
+# puddle's own texture (so it is clipped to the water; clip_children does not
+# exist in the Compatibility renderer) and additive. Per water texel:
+#   - the mirrored lamp: a hot near-white core at the top of the column,
+#   - the column of light: wide at the top, narrowing down the puddle, each
+#     texel row pushed sideways by the ripples (faster in the rain),
+#   - a stepped glow of the light colour over the water around it,
+#   - the rim of the water nearest the lamp catching the light.
+# Everything is quantised to whole texels and flat alpha steps, no gradients.
 const PUDDLE_REFLECTION_SHADER = """shader_type canvas_item;
 render_mode blend_add;
-uniform sampler2D mask : filter_nearest;
-uniform vec4 mask_region;   // puddle cell in the atlas, texels (x, y, w, h)
-uniform vec2 mask_size;     // atlas size, texels
-uniform vec2 origin;        // reflection origin in puddle-cell texels
-uniform vec2 scl;           // reflection texel -> puddle-cell texel
-uniform bool flip;
-uniform vec3 tint = vec3(1.0);  // over-bright light colour (vertex COLOR clamps at 1)
-varying vec2 lv;
-void vertex() { lv = VERTEX; }
+uniform vec4 region;           // puddle cell in the atlas, texels (x, y, w, h)
+uniform vec2 axis;             // x of the column, y of the mirrored lamp (cell texels)
+uniform float len = 40.0;      // column length, texels
+uniform float half_w = 6.0;    // column half width at the top, texels
+uniform float rain = 0.0;
+uniform vec3 tint = vec3(1.0); // over-bright light colour (vertex COLOR clamps at 1)
+float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
 void fragment() {
-    vec2 p = floor(origin + lv * scl);
-    if (flip) p.x = mask_region.z - 1.0 - p.x;
-    float inside = 0.0;
-    if (p.x >= 0.0 && p.y >= 0.0 && p.x < mask_region.z && p.y < mask_region.w) {
-        inside = texture(mask, (mask_region.xy + p + 0.5) / mask_size).a;
+    vec2 px = TEXTURE_PIXEL_SIZE;
+    float water = step(0.5, texture(TEXTURE, UV).a);
+    vec2 p = floor(UV / px) - region.xy;
+    float dy = p.y - axis.y;
+    // ripples: every texel row shifts sideways by -1..1 (2 in rain)
+    float speed = mix(1.5, 7.0, rain);
+    float tick = floor(TIME * speed);
+    float amp = mix(1.0, 2.0, rain);
+    float shift = floor((h1(p.y + tick * 7.31) * 2.0 - 1.0) * amp + 0.5);
+    float dx = abs(p.x - axis.x - shift);
+    float t = clamp(dy / len, 0.0, 1.0);
+    float w = max(1.0, floor(mix(half_w, 1.5, t)));
+    float col = 0.0;
+    if (dy >= 0.0 && dy <= len && dx < w) {
+        col = dy < len * 0.35 ? 1.0 : (dy < len * 0.7 ? 0.72 : 0.45);
+        if (dx >= w - 1.0) col *= 0.55;
+        // dark ripple gaps, more of them further from the lamp and in the rain
+        if (h1(p.y * 3.7 + tick * 1.93) < mix(0.08, 0.3, rain) + t * 0.25) col *= 0.35;
     }
-    vec4 c = texture(TEXTURE, UV);
-    COLOR = vec4(c.rgb * tint, c.a * COLOR.a * step(0.5, inside));
+    // mirrored lamp: a hot core at the top of the column
+    float core = 0.0;
+    if (dy >= 0.0 && dy < 5.0 && abs(p.x - axis.x) < 3.0) core = 1.0;
+    // stepped glow around the column
+    float d = length(vec2((p.x - axis.x - shift) * 0.8, (p.y - axis.y - len * 0.2) * 0.7));
+    float glow = d < w + 3.0 ? 0.22 : (d < w + 8.0 ? 0.1 : 0.0);
+    // the far rim of the water facing the lamp
+    float above = step(0.5, texture(TEXTURE, UV - vec2(0.0, 2.0 * px.y)).a);
+    float rim = (water > 0.5 && above < 0.5 && abs(p.x - axis.x) < 14.0) ? 0.5 : 0.0;
+    float k = max(max(col, glow), rim);
+    vec3 c = tint * max(k, core * 1.25);
+    COLOR = vec4(c, water * COLOR.a);
 }"""
-
-func _puddle_reflection_texture():
-    if _reflection_tex != null:
-        return _reflection_tex
-    # 12 x 48 texels: the lamp broken up by ripples into stacked horizontal
-    # glints, wide and dense near the lamp, thinner and sparser further down,
-    # each one nudged sideways; a hot core with a dimmer fringe
-    var img = Image.create(12,48,false,Image.FORMAT_RGBA8)
-    img.fill(Color(0,0,0,0))
-    var widths = [5,6,5,4,6,5,4,5,3,4,3,4,2,3,2,2]
-    var shifts = [0,-1,1,0,1,-1,0,1,-1,0,1,0,-1,1,0,0]
-    var y = 0
-    var i = 0
-    while y < 48 and i < widths.size():
-        var half = widths[i]
-        var cx = 6 + shifts[i]
-        var a = 1.0 if y < 14 else (0.8 if y < 28 else 0.55)
-        var rows = 2 if y < 30 else 1
-        for dy in range(rows):
-            for x in range(cx - half,cx + half):
-                if x < 0 or x >= 12:
-                    continue
-                var d = abs(float(x) + 0.5 - float(cx))
-                var k = 1.0 if d < 1.5 else (0.62 if d < float(half) - 1.0 else 0.32)
-                img.set_pixel(x,y + dy,Color(1,1,1,a * k))
-        y += rows + (1 if y < 14 else 2)
-        i += 1
-    _reflection_tex = ImageTexture.create_from_image(img)
-    return _reflection_tex
 
 func _chunk_light_sources(chunk):
     # [{pos (light, global), ground (foot, global), color, light}]
@@ -15883,10 +15881,11 @@ func _chunk_light_sources(chunk):
         out.append({"pos":light.global_position,"ground":Vector2(light.global_position.x,ground_y),"color":light.color,"light":light})
     return out
 
-func _make_puddle(chunk,local_pos:Vector2,variant:int):
+func _make_puddle(chunk,local_pos:Vector2,variant:int,big:bool = false):
     var tex = AtlasTexture.new()
     tex.atlas = load(PUDDLE_TEX)
-    tex.region = Rect2((variant % 4) * 112,0,112,56)
+    # row 0: 112 x 56 cells; row 1: large 160 x 80 cells for under the lamps
+    tex.region = Rect2((variant % 4) * 160,56,160,80) if big else Rect2((variant % 4) * 112,0,112,56)
     var p = Sprite2D.new()
     p.texture = tex
     p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -15915,15 +15914,15 @@ func _place_puddles(chunk,coord):
             # right under the head: the mirrored lamp lands on the water just
             # below the foot of the post, a little out toward the arm
             var side = signf(src["light"].position.x) if src["light"].position.x != 0.0 else 1.0
-            spots.append([src["ground"] - chunk.global_position + Vector2(side * 8.0 + rng.randf_range(-2.0,2.0),16.0),0.0])
+            spots.append([src["ground"] - chunk.global_position + Vector2(side * 4.0 + rng.randf_range(-2.0,2.0),17.0),0.0,true])
         elif rng.randf() < 0.55:
             var h = src["ground"].y - src["pos"].y
-            spots.append([src["ground"] - chunk.global_position + Vector2(rng.randf_range(-8.0,8.0),h * 0.45 + 12.0),30.0])
+            spots.append([src["ground"] - chunk.global_position + Vector2(rng.randf_range(-8.0,8.0),h * 0.45 + 12.0),30.0,false])
     # a few on the carriageway
     for i in range(rng.randi_range(2,4)):
         var t = rng.randf_range(40.0,728.0)
         var a = rng.randf_range(312.0,456.0)
-        spots.append([Vector2(a,t) if rng.randf() < 0.5 else Vector2(t,a),30.0])
+        spots.append([Vector2(a,t) if rng.randf() < 0.5 else Vector2(t,a),30.0,false])
     var placed = []
     for spot in spots:
         var sp:Vector2 = spot[0]
@@ -15957,60 +15956,90 @@ func _place_puddles(chunk,coord):
         if rail:
             continue
         placed.append(sp)
-        var puddle = _make_puddle(chunk,sp,rng.randi_range(0,7))
+        var puddle = _make_puddle(chunk,sp,rng.randi_range(0,7),spot[2])
         _add_puddle_reflections(puddle,sources)
     chunk.set_meta("puddle_count",placed.size())
 
+var _puddle_image = null
+
+func _puddle_water_span(region:Rect2,col:int,flip:bool):
+    # first and last water rows of a puddle cell in one texel column
+    if _puddle_image == null:
+        _puddle_image = load(PUDDLE_TEX).get_image()
+    var w = int(region.size.x)
+    var x = clampi(col,0,w - 1)
+    if flip:
+        x = w - 1 - x
+    var top = -1
+    var bottom = -1
+    for y in range(int(region.size.y)):
+        if _puddle_image.get_pixel(int(region.position.x) + x,int(region.position.y) + y).a > 0.5:
+            if top < 0:
+                top = y
+            bottom = y
+    return Vector2i(top,bottom)
+
 func _add_puddle_reflections(puddle,sources):
-    var prect = Rect2(puddle.global_position - Vector2(28,14),Vector2(56,28))
+    var region:Rect2 = puddle.texture.region
+    var half = region.size * puddle.scale.x * 0.5
+    var prect = Rect2(puddle.global_position - half,half * 2.0)
     for src in sources:
         var h = src["ground"].y - src["pos"].y
-        # mirror the lamp about its foot; the column runs down from there
-        var top = Vector2(src["pos"].x,src["ground"].y + h * 0.45)
-        # the mirrored lamp lies beyond the near edge: the visible streak starts
-        # where the water starts and runs across the puddle toward the viewer
-        if top.y < prect.position.y and prect.position.y - top.y < h * 1.6 + 20.0:
-            top.y = prect.position.y + 2.0
-        var length = clamp(h * 1.1,18.0,30.0)
-        var col_rect = Rect2(top - Vector2(6,0),Vector2(12,length))
-        if not col_rect.intersects(prect):
+        var lx = src["pos"].x
+        # only lights standing over or just behind the water show in it
+        if lx < prect.position.x + 4.0 or lx > prect.end.x - 4.0:
             continue
-        var r = Sprite2D.new()
-        r.texture = _puddle_reflection_texture()
-        r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-        r.centered = false
-        # puddle children live in puddle space (scale 0.5): convert
-        var local = (top - puddle.global_position) / puddle.scale.x
-        r.position = (local - Vector2(6,0)).round()
-        r.scale = Vector2(1.0,length / 24.0)
-        var c = src["color"]
-        # additive and over-bright: the night CanvasModulate (~0.25) brings the
-        # reflection back to a glint, as bright as the lamp it mirrors
+        if src["ground"].y > prect.end.y or src["ground"].y < prect.position.y - h - 20.0:
+            continue
+        # the column hangs below the mirrored lamp: x of the lamp head, from the
+        # far edge of the water at that column down to the near one
+        var col = int(round((lx - prect.position.x) / puddle.scale.x))
+        var span = _puddle_water_span(region,col,puddle.flip_h)
+        if span.x < 0:
+            continue
+        var mirror_y = (src["ground"].y + h * 0.35 - prect.position.y) / puddle.scale.x
+        var top_y = max(float(span.x),mirror_y)
+        var length = float(span.y) - top_y + 2.0
+        if length < 6.0:
+            continue
         if _reflection_shader == null:
             _reflection_shader = Shader.new()
             _reflection_shader.code = PUDDLE_REFLECTION_SHADER
+        var r = Sprite2D.new()
+        r.texture = puddle.texture
+        r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        r.flip_h = puddle.flip_h
         var mat = ShaderMaterial.new()
         mat.shader = _reflection_shader
-        var region:Rect2 = puddle.texture.region
-        mat.set_shader_parameter("mask",puddle.texture.atlas)
-        mat.set_shader_parameter("mask_region",Vector4(region.position.x,region.position.y,region.size.x,region.size.y))
-        mat.set_shader_parameter("mask_size",puddle.texture.atlas.get_size())
-        mat.set_shader_parameter("origin",r.position + region.size * 0.5)
-        mat.set_shader_parameter("scl",r.scale)
-        mat.set_shader_parameter("flip",puddle.flip_h)
+        # UV space is not flipped by flip_h: mirror the axis into texture space
+        var ax = float(col) if not puddle.flip_h else region.size.x - 1.0 - float(col)
+        mat.set_shader_parameter("region",Vector4(region.position.x,region.position.y,region.size.x,region.size.y))
+        mat.set_shader_parameter("axis",Vector2(ax,top_y))
+        mat.set_shader_parameter("len",length)
+        mat.set_shader_parameter("half_w",clamp(region.size.x * 0.06,5.0,9.0))
+        var c = src["color"]
+        # the night CanvasModulate is cool: push the tint warm and saturated so
+        # the glint comes out the colour of the lamp, not beige
+        mat.set_shader_parameter("tint",Vector3(c.r,c.g * 0.8,c.b * 0.5) * 4.6)
+        mat.set_shader_parameter("rain",1.0 if weather_state == "rain" else 0.0)
         r.material = mat
-        mat.set_shader_parameter("tint",Vector3(c.r * 4.6,c.g * 4.0,c.b * 3.2))
         r.modulate = Color(1,1,1,0.0)
-        r.set_meta("light",src["light"])
-        r.set_meta("base_x",r.position.x)
         r.light_mask = 0
+        r.set_meta("light",src["light"])
         r.add_to_group("puddle_reflections")
         puddle.add_child(r)
 
+var _puddle_rain_state = -1.0
+
 func _update_puddle_reflections():
     var night = _time_night_factor()
-    var wet = 1.0 if weather_state == "rain" else 0.75
-    var t = Time.get_ticks_msec()
+    var raining = weather_state == "rain"
+    var wet = 1.0 if raining else 0.8
+    var rain_value = 1.0 if raining else 0.0
+    var rain_changed = rain_value != _puddle_rain_state
+    _puddle_rain_state = rain_value
+    if _lamp_post_mat != null:
+        _lamp_post_mat.set_shader_parameter("hide",clamp(night * 1.2,0.0,1.0))
     for r in get_tree().get_nodes_in_group("puddle_reflections"):
         if not is_instance_valid(r):
             continue
@@ -16018,12 +16047,10 @@ func _update_puddle_reflections():
         var k = 0.0
         if is_instance_valid(light) and light.visible:
             var base = float(light.get_meta("base_energy",light.get_meta("night_energy",light.energy)))
-            k = clamp(light.energy / max(0.01,base),0.0,1.4)
-        # rain ripples make the reflection flicker in steps
-        var ripple = 1.0
-        if weather_state == "rain":
-            ripple = [1.0,0.78,0.92,0.66][int(t / 120 + int(r.get_instance_id())) % 4]
-        r.modulate.a = clamp(night * wet * 0.85 * k * ripple,0.0,1.0)
+            k = clamp(light.energy / max(0.01,base),0.0,1.3)
+        r.modulate.a = clamp(night * wet * k,0.0,1.0)
+        if rain_changed and r.material != null:
+            r.material.set_shader_parameter("rain",rain_value)
 
 func _update_detail_lights(delta):
     # Slight practical-light instability keeps abandoned interiors from looking
@@ -24935,6 +24962,25 @@ func _place_street_lamps(chunk,coord,district_id:String):
         placed += 1
     chunk.set_meta("street_lamps",placed)
 
+# The HD lamp sprite carries a baked daylight shadow (flat alpha steps below
+# 0.95). At night the lamp itself is the light: the sun shadow fades out.
+const LAMP_POST_SHADER = """shader_type canvas_item;
+uniform float hide = 0.0;
+void fragment() {
+    vec4 c = COLOR;
+    if (c.a < 0.95) c.a *= 1.0 - hide;
+    COLOR = c;
+}"""
+var _lamp_post_mat = null
+
+func _lamp_post_material():
+    if _lamp_post_mat == null:
+        var sh = Shader.new()
+        sh.code = LAMP_POST_SHADER
+        _lamp_post_mat = ShaderMaterial.new()
+        _lamp_post_mat.shader = sh
+    return _lamp_post_mat
+
 func _create_lamp(chunk,pos):
     var lamp = Node2D.new()
     lamp.position = pos
@@ -24950,6 +24996,8 @@ func _create_lamp(chunk,pos):
     if pos.x > CHUNK_SIZE * 0.5 and post is Sprite2D:
         post.flip_h = not post.flip_h
         head.x = -head.x
+    if post is Sprite2D:
+        post.material = _lamp_post_material()
     _ellipse(head,1.5,1.2,Color(0.98,0.78,0.40,0.88),lamp)
 
     var light = PointLight2D.new()
