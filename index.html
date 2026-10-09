@@ -3536,6 +3536,10 @@ window.ED_BALANCE = Object.freeze({
       const id=p.productID,token=p.purchaseToken;
       const grants={crystals_80:{gems:80},crystals_250:{gems:250},supporter_pack:{gems:180,shards:500},no_interstitial:{noInterstitial:true}};
       const grant=grants[id];if(!grant)return;
+      if(!this._purchaseProcessing)this._purchaseProcessing=new Set();
+      if(this._purchaseProcessing.has(token))return;
+      this._purchaseProcessing.add(token);
+      try{
       if(!this.save.purchases||typeof this.save.purchases!=='object')this.save.purchases={};
       if(!this.save.purchases[token]){
         if(grant.gems)this.save.gems+=grant.gems;
@@ -3549,6 +3553,7 @@ window.ED_BALANCE = Object.freeze({
       // authoritative cloud save succeeds, including after a previous retry failed.
       const cloudSaved=await this.bridge.saveCloud(this.save,true);
       if(cloudSaved&&!grant.noInterstitial)await this.bridge.consume(token);
+      }finally{this._purchaseProcessing.delete(token);}
     }
 
     timeUntil(ts){const d=Math.max(0,ts-now()),h=Math.floor(d/3600000),m=Math.floor((d%3600000)/60000);return `${h}:${String(m).padStart(2,'0')}`;}
