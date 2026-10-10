@@ -8,6 +8,7 @@ on:
       - tools/build-vk-games.cjs
       - tools/vk-bridge-entry.js
       - tests/vk-games-platform.test.cjs
+      - tests/vk-games-browser-smoke.cjs
       - .github/workflows/vk-games-packages.yml
       - iphone/index.html
   pull_request:
@@ -30,11 +31,23 @@ jobs:
         with:
           node-version: '22'
       - name: Install pinned VK SDK and bundler
-        run: npm install --no-save --no-package-lock @vkontakte/vk-bridge@2.15.0 esbuild@0.25.12
+        run: npm install --no-save --no-package-lock @vkontakte/vk-bridge@2.15.0 esbuild@0.25.12 playwright@1.58.2
       - name: Build VK and OK packages
         run: node tools/build-vk-games.cjs
       - name: Verify both games and advertising safeguards
         run: node tests/vk-games-platform.test.cjs
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Serve VK and OK builds
+        run: |
+          nohup python3 -m http.server 4175 --bind 127.0.0.1 --directory dist/vk > /tmp/vk-http.log 2>&1 &
+          nohup python3 -m http.server 4176 --bind 127.0.0.1 --directory dist/ok > /tmp/ok-http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4175/ >/dev/null && curl -fsS http://127.0.0.1:4176/ >/dev/null && break
+            sleep 1
+          done
+      - name: Browser smoke for independent social versions
+        run: node tests/vk-games-browser-smoke.cjs
       - name: Package standalone games
         run: |
           (cd dist/vk && zip -q -r ../../vk-games-html5.zip index.html bridge.bundle.js)
