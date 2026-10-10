@@ -26,8 +26,10 @@ for(const [name,s] of [['vk',v],['ok',o]]){
   assert(bundle.length>1000,'Bundled SDK missing for '+name);
 }
 const gameScript=s=>script(s).map(x=>x[2]).find(x=>x.includes('  class Game {'));
-assert.equal(gameScript(v).replaceAll("window.ED_VK_PLATFORM='vk'",""),gameScript(o).replaceAll("window.ED_VK_PLATFORM='ok'",""),
-  'VK and OK gameplay code diverged');
+const normalized=s=>s.replaceAll('endless_defenders_vk_save_v1','endless_defenders_platform_save_v1')
+  .replaceAll('endless_defenders_ok_save_v1','endless_defenders_platform_save_v1');
+assert.equal(normalized(gameScript(v)),normalized(gameScript(o)),
+  'VK and OK gameplay code diverged beyond isolated save names');
 const start=v.indexOf('  class VKGamesBridge {'),end=v.indexOf('  /*\n    AUDIO ASSET SOURCES',start);
 assert(start>=0&&end>start);
 let clock=1000000000;
