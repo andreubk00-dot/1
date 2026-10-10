@@ -15,6 +15,12 @@ for(const [name,s] of [['vk',v],['ok',o]]){
   assert(s.includes('new VKGamesBridge(this)'));
   assert(s.includes('class VKGamesBridge {'));
   assert(s.includes('src="./bridge.bundle.js"'));
+  const media=[...new Set([...s.matchAll(/local\('([A-Za-z0-9_-]+\.ogg)'\)/g)].map(m=>m[1]))];
+  assert.equal(media.length,13,'Unexpected in-game audio manifest');
+  for(const filename of media){
+    const item=path.join(ROOT,'dist',name,'audio',filename);
+    assert(fs.statSync(item).size>0,'Game audio missing from '+name+': '+filename);
+  }
   assert(s.includes('endless_defenders_'+name+'_save_v1'));
   assert(!s.includes('endless_defenders_save_v1'));
   assert(!s.includes('YaGames.init'));
