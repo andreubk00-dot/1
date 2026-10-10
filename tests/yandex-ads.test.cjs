@@ -102,7 +102,11 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     assert.equal(f.g.save.shards,1000);
   });
   await test('Synced v1.8.24 UI and save version are present in the Yandex package',async()=>{
-    assert(src.includes('<title>Бесконечные защитники — Яндекс Игры v1.8.24</title>'));
+    assert(src.includes('<title>Guardborn — Яндекс Игры v1.8.24</title>'));
+    assert(src.includes("title:'Guardborn'"));
+    assert(!src.includes('Бесконечные защитники'));
+    assert(src.includes("format:'endless-defenders-save'"));
+    assert(src.includes('endless_defenders_save_v1'));
     assert(src.includes('window.ED_YANDEX_BUILD=true;'));
     assert(src.includes('<script src="/sdk.js"></script>'));
     assert(src.includes('out.version=21'),'Save migration to schema 21 missing');
