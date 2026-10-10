@@ -1,4 +1,4 @@
-name: Package Endless Defenders for Yandex Games
+name: Package Guardborn for Yandex Games
 on:
   workflow_dispatch:
   push:
@@ -28,6 +28,6 @@ jobs:
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: endless-defenders-yandex-v1.8.24
-          path: dist/endless-defenders-yandex-v1.8.24.zip
+          name: guardborn-yandex-v1.8.24
+          path: dist/guardborn-yandex-v1.8.24.zip
           if-no-files-found: error
