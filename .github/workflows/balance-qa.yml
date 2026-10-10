@@ -85,6 +85,8 @@ jobs:
         run: node tests/playtime-pause-analytics-v1824.test.cjs
       - name: Verify final run depth and end reason telemetry
         run: node tests/run-depth-telemetry-v1824.test.cjs
+      - name: Verify Riftoryn brand and legacy player saves
+        run: node tests/riftoryn-name-v1824.test.cjs
       - name: Test PC and mobile UX in Chromium and WebKit
         run: node tests/browser-smoke.cjs
       - name: Upload browser screenshots
