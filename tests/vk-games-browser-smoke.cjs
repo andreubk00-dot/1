@@ -19,6 +19,9 @@ async function check(p){
     await page.waitForFunction(()=>!!window.__ENDLESS_DEFENDERS__,null,{timeout:25000});
     await page.waitForSelector('#shell:not(.hidden)',{timeout:25000});
     assert(await page.locator('#playBtn').isVisible(),'Missing play button on '+p.platform);
+    const audioResponse=await page.request.get('http://127.0.0.1:'+p.port+'/audio/menu_theme.ogg');
+    assert.equal(audioResponse.status(),200,'Missing music file on '+p.platform);
+    assert((await audioResponse.body()).length>10000,'Broken audio payload on '+p.platform);
     assert(!(await page.locator('#vkInviteBtn').isVisible()),'Invite should be hidden outside VK client');
     assert(!(await page.locator('#authBtn').isVisible()),'Unsupported account login must be hidden');
     const baseline=await page.evaluate(async()=>{

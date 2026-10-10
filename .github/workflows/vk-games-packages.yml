@@ -50,8 +50,8 @@ jobs:
         run: node tests/vk-games-browser-smoke.cjs
       - name: Package standalone games
         run: |
-          (cd dist/vk && zip -q -r ../../guardborn-vk-games-html5.zip index.html bridge.bundle.js)
-          (cd dist/ok && zip -q -r ../../guardborn-odnoklassniki-html5.zip index.html bridge.bundle.js)
+          (cd dist/vk && zip -q -r ../../guardborn-vk-games-html5.zip index.html bridge.bundle.js audio/)
+          (cd dist/ok && zip -q -r ../../guardborn-odnoklassniki-html5.zip index.html bridge.bundle.js audio/)
           unzip -l guardborn-vk-games-html5.zip
           unzip -l guardborn-odnoklassniki-html5.zip
       - name: Upload VK Games HTML5 ZIP
