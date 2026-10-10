@@ -37,7 +37,7 @@ const window={ED_VK_PLATFORM:'vk'};
 const document={hidden:false};
 const apiCalls=[];
 let handler=async(method,p)=>({result:true});
-window.ED_VK_BRIDGE={send:async(method,p)=>{apiCalls.push({method,p});return handler(method,p);}};
+window.ED_VK_BRIDGE={isEmbedded:()=>true,send:async(method,p)=>{apiCalls.push({method,p});return handler(method,p);}};
 const VKGamesBridge=new Function('window','navigator','document','now','BALANCE','$',
   'return ('+v.slice(start,end).trim()+')')(
     window,{language:'ru'},document,()=>clock,{ads:{fullscreenCooldownMs:240000}},()=>null
@@ -52,6 +52,12 @@ const game={
 (async()=>{
   const bridge=new VKGamesBridge(game);
   assert.equal(await bridge.rewardAd(()=>{throw Error('free reward');}),false,'Missing SDK granted currency');
+  const sdk=window.ED_VK_BRIDGE;
+  window.ED_VK_BRIDGE={...sdk,isEmbedded:()=>false};
+  const outside=new VKGamesBridge(game);
+  await outside.init();
+  assert.equal(outside.ready,false,'VK SDK must not hang on direct browser previews');
+  window.ED_VK_BRIDGE=sdk;
   await bridge.init();
   assert.equal(bridge.ready,true);
   assert.equal(apiCalls[0].method,'VKWebAppInit');
