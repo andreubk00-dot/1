@@ -33,7 +33,7 @@ function build(platform){
   html=replaceOnce(html,'<link rel="apple-touch-icon" href="./icon-192.png" />','');
   // These packages are embedded social games, not standalone PWA installs.
   html=replaceOnce(html,'</head>',
-    '<style>.platform-crosslink{display:none!important}</style>\n</head>');
+    '<style>.platform-crosslink,#authBtn,#installAppBtn{display:none!important}</style>\n</head>');
   html=replaceOnce(html,
     '<button class="secondary-btn" id="dailyBtn">',
     '<button class="secondary-btn" id="vkInviteBtn" type="button" hidden>👥 Пригласить друзей</button>\n              <button class="secondary-btn" id="dailyBtn">');
