@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Бесконечные защитники",
-  "short_name": "Защитники",
+  "name": "Guardborn",
+  "short_name": "Guardborn",
   "description": "Tower-defense roguelite",
   "start_url": "./",
   "scope": "./",
