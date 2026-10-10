@@ -1,15 +1,15 @@
 {
   "id": "./",
-  "name": "Бесконечные защитники",
-  "short_name": "Защитники",
-  "description": "Tower-defense roguelite",
+  "name": "Riftoryn: Core Defense",
+  "short_name": "Riftoryn",
+  "description": "Defend the core through endless rift waves in a tower-defense roguelite.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0b1018",
   "theme_color": "#10151f",
-  "lang": "ru",
+  "lang": "en",
   "icons": [
     {
       "src": "./icon-192.png",
