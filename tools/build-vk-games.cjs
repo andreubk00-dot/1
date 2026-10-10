@@ -22,7 +22,7 @@ function build(platform){
   html=replaceOnce(html,'new YandexBridge(this)','new VKGamesBridge(this)');
   html=replaceOnce(html,'<head>','<head>\n  <script defer src="./bridge.bundle.js"></script>');
   html=html.replace(/<title>[^<]+<\/title>/,
-    '<title>Бесконечные защитники — '+name+' v1.8.24</title>');
+    '<title>Guardborn — '+name+' v1.8.24</title>');
   html=replaceOnce(html,'  <script>\nwindow.ED_BALANCE',
     "  <script>window.ED_VK_GAMES_BUILD=true;window.ED_VK_PLATFORM='"+platform+"';</script>\n  <script>\nwindow.ED_BALANCE");
   html=replaceOnce(html,'if(window.ED_YANDEX_BUILD)return;',

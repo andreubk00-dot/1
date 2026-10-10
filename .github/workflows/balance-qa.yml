@@ -1,4 +1,4 @@
-name: Endless Defenders v1.8.21 Balance QA
+name: Guardborn v1.8.24 Balance QA
 on:
   workflow_dispatch:
   push:
@@ -34,6 +34,8 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: Run balancing regression suite
         run: node tests/balance-v1821.test.cjs
+      - name: Verify Guardborn public branding and save boundaries
+        run: node tests/guardborn-brand.test.cjs
       - name: Verify economy and defender contracts
         run: node tests/economy-v1822.test.cjs
       - name: Verify long-term economy with rewarded ads

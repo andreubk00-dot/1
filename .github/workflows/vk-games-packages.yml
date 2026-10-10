@@ -1,4 +1,4 @@
-name: VK Games and OK HTML5 Packages
+name: Guardborn VK Games and OK HTML5 Packages
 on:
   workflow_dispatch:
   push:
@@ -50,17 +50,17 @@ jobs:
         run: node tests/vk-games-browser-smoke.cjs
       - name: Package standalone games
         run: |
-          (cd dist/vk && zip -q -r ../../vk-games-html5.zip index.html bridge.bundle.js)
-          (cd dist/ok && zip -q -r ../../odnoklassniki-html5.zip index.html bridge.bundle.js)
-          unzip -l vk-games-html5.zip
-          unzip -l odnoklassniki-html5.zip
+          (cd dist/vk && zip -q -r ../../guardborn-vk-games-html5.zip index.html bridge.bundle.js)
+          (cd dist/ok && zip -q -r ../../guardborn-odnoklassniki-html5.zip index.html bridge.bundle.js)
+          unzip -l guardborn-vk-games-html5.zip
+          unzip -l guardborn-odnoklassniki-html5.zip
       - name: Upload VK Games HTML5 ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: vk-games-html5
-          path: vk-games-html5.zip
+          name: guardborn-vk-games-html5
+          path: guardborn-vk-games-html5.zip
       - name: Upload Odnoklassniki HTML5 ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: odnoklassniki-html5
-          path: odnoklassniki-html5.zip
+          name: guardborn-odnoklassniki-html5
+          path: guardborn-odnoklassniki-html5.zip

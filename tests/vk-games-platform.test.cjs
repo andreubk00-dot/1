@@ -9,6 +9,9 @@ const o=fs.readFileSync(path.join(ROOT,'dist','ok','index.html'),'utf8');
 const script=s=>[...s.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
 for(const [name,s] of [['vk',v],['ok',o]]){
   assert(s.includes("window.ED_VK_PLATFORM='"+name+"'"));
+  assert(s.includes('<title>Guardborn —'),'Package must use new title');
+  assert(s.includes("title:'Guardborn'"),'Both languages must use Guardborn');
+  assert(!s.includes('Бесконечные защитники'),'Old public title must be removed');
   assert(s.includes('new VKGamesBridge(this)'));
   assert(s.includes('class VKGamesBridge {'));
   assert(s.includes('src="./bridge.bundle.js"'));

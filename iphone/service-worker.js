@@ -1,5 +1,5 @@
-/* Endless Defenders v1.8.24 offline PWA */
-const CACHE_NAME='ed-mobile-v1.8.24';
+/* Guardborn v1.8.24 offline PWA */
+const CACHE_NAME='ed-mobile-v1.8.24-guardborn';
 const PRECACHE=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png',
 './audio/laserSmall_000.ogg','./audio/laserSmall_001.ogg','./audio/laserSmall_002.ogg','./audio/laserSmall_004.ogg',
 './audio/laserLarge_000.ogg','./audio/laserLarge_001.ogg','./audio/laserLarge_002.ogg','./audio/forceField_000.ogg',

@@ -1,13 +1,13 @@
-# «Бесконечные защитники» — VK Games / Одноклассники
+# Guardborn — VK Games / Одноклассники
 
 ## Сборки
 
 Обе версии собираются из проверенного `iphone/index.html` без изменения игрового баланса и сохранений v21.
 
-- **vk-games-html5.zip** — запуск во ВКонтакте.
-- **odnoklassniki-html5.zip** — запуск в Одноклассниках.
+- **guardborn-vk-games-html5.zip** — запуск во ВКонтакте.
+- **guardborn-odnoklassniki-html5.zip** — запуск в Одноклассниках.
 
-В архиве каждой версии: `index.html` и локально упакованный официальный `VK Bridge 2.15.0` (`bridge.bundle.js`). Готовые ZIP доступны в артефактах workflow **VK Games and OK HTML5 Packages** на вкладке GitHub Actions. Для локальной пересборки выполнить:
+В архиве каждой версии: `index.html` и локально упакованный официальный `VK Bridge 2.15.0` (`bridge.bundle.js`). Готовые ZIP доступны в артефактах workflow **Guardborn VK Games and OK HTML5 Packages** на вкладке GitHub Actions. Для локальной пересборки выполнить:
 
 ```bash
 npm install --no-save --no-package-lock @vkontakte/vk-bridge@2.15.0 esbuild@0.25.12
