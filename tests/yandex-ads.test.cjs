@@ -350,6 +350,16 @@ async function test(label,fn){await fn();cases.push(label);console.log('PASS',la
     await g.leaveResult();
     assert.equal(g.save.analytics.events.run_finish,1);
   });
+  await test('Riftoryn rebrand preserves Yandex SDK and existing v21 saves',async()=>{
+    assert(src.includes('Riftoryn: Core Defense — Яндекс Игры v1.8.24'));
+    assert(src.includes("title:'Riftoryn: Core Defense'"));
+    assert(src.includes('content="Riftoryn: Core Defense"'));
+    assert(src.includes('endless_defenders_save_v1'));
+    assert(src.includes('class YandexBridge'));
+    assert(src.includes('ED_YANDEX_BUILD'));
+    assert(!src.includes('Бесконечные защитники'));
+    assert(!src.includes("title:'Endless Defenders'"));
+  });
   await test('Syntax of all inline scripts',async()=>{
     const chunks=[...src.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];assert(chunks.length>=5);for(const [,attr,body] of chunks)if(!/\bsrc\s*=/.test(attr)&&body.trim())new Function(body);
   });
