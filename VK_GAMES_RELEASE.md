@@ -7,7 +7,7 @@
 - **guardborn-vk-games-html5.zip** — запуск во ВКонтакте.
 - **guardborn-odnoklassniki-html5.zip** — запуск в Одноклассниках.
 
-В архиве каждой версии: `index.html` и локально упакованный официальный `VK Bridge 2.15.0` (`bridge.bundle.js`). Готовые ZIP доступны в артефактах workflow **Guardborn VK Games and OK HTML5 Packages** на вкладке GitHub Actions. Для локальной пересборки выполнить:
+В архиве каждой версии: `index.html`, локально упакованный официальный `VK Bridge 2.15.0` (`bridge.bundle.js`) и каталог `audio/` с 13 игровыми аудиофайлами. Все ресурсы доступны с того же HTTPS-домена. Готовые ZIP доступны в артефактах workflow **Guardborn VK Games and OK HTML5 Packages** на вкладке GitHub Actions. Для локальной пересборки выполнить:
 
 ```bash
 npm install --no-save --no-package-lock @vkontakte/vk-bridge@2.15.0 esbuild@0.25.12
