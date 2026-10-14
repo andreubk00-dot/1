@@ -1065,3 +1065,17 @@ Found by a scripted play session from a fresh start:
 - **Ending**: when the crisis season ends the screen fades and reads out the
   region's fate, each settlement's state and the survivor's tally; the world
   can go on or the player returns to the menu.
+
+## dev61 — the HUD steps aside, the woods close in
+
+- **Contextual HUD**: the corner panels covered the corners of the world -
+  in a wood that is exactly where the trees stand. While nothing on them
+  matters they fade to a ghost (26 %) and come back at once when it does:
+  a vital changes by a point and a half or runs low, the place / weather /
+  goal changes, the survivor sneaks or runs, a gun fires or reloads, the
+  weapon changes, an infected is within 340 units, the mouse goes over a
+  panel, the inventory opens. Settings → «Прятать панели HUD в покое».
+- **Forest edges**: woodland and dacha tracks get an uneven wall of trees
+  just beyond the ruts (with gaps; a dirt track has no pavement, so the
+  protected band there is the track itself). Its own seed - loot, cars and
+  infected stay where they were.

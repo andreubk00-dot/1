@@ -89,6 +89,8 @@ const ACTIVE_RADIUS = 1
 # Trees never spawn inside it, while buildings stay inside the four real land plots.
 const TREE_ROAD_MIN = 250.0
 const TREE_ROAD_MAX = 518.0
+const DIRT_TRACK_MIN = 292.0
+const DIRT_TRACK_MAX = 476.0
 const BUILDING_ROAD_MIN = 270.0
 const BUILDING_ROAD_MAX = 498.0
 const PLOT_EDGE_MARGIN = 14.0
@@ -4333,9 +4335,74 @@ func _process(delta):
             _refresh_region_map_ui()
 
     _update_hud()
+    _update_hud_focus(delta)
     _update_interaction_prompt()
     _update_hover_position()
 
+
+# dev61: a contextual HUD. The corner panels cover the corners of the world
+# (trees, doors, infected coming in); while nothing on them matters they fade
+# to a ghost and come back the moment they do - a vital changes or runs low,
+# the place / weather / goal changes, the survivor sneaks or runs, a gun is
+# used, an infected is close, the mouse goes over a panel, the inventory opens.
+const HUD_IDLE_ALPHA = 0.26
+var hud_focus = {}
+var hud_focus_last = {}
+
+func _hud_focus_wake(panel_name:String,seconds:float):
+    hud_focus[panel_name] = max(float(hud_focus.get(panel_name,0.0)),seconds)
+
+func _update_hud_focus(delta):
+    if hud_world_root == null:
+        return
+    var enabled = bool(get_meta("settings",{}).get("hud_autohide",true)) if has_meta("settings") else true
+    # vitals: a change of a point and a half or a value worth watching
+    var vit = [health,stamina,hunger,thirst,body_temperature * 10.0,wound_infection,fatigue]
+    var last = hud_focus_last.get("vitals",[])
+    if last.size() == vit.size():
+        for i in range(vit.size()):
+            if abs(float(vit[i]) - float(last[i])) >= 1.5:
+                _hud_focus_wake("VitalsPanel",4.0)
+                hud_focus_last["vitals"] = vit
+                break
+    else:
+        hud_focus_last["vitals"] = vit
+    if health < 75.0 or hunger < 40.0 or thirst < 40.0 or body_temperature < 36.0 or body_temperature > 37.9 or wound_infection > 0.5 or fatigue > 65.0 or bleeding or stamina < 30.0:
+        _hud_focus_wake("VitalsPanel",1.0)
+    # place, weather and goal: anything new is shown for a while
+    var env_key = "%s|%s|%s" % [hud_env_zone_label.text if hud_env_zone_label != null else "",hud_env_weather_label.text if hud_env_weather_label != null else "",hud_objective_label.text if hud_objective_label != null else ""]
+    if str(hud_focus_last.get("env","")) != env_key:
+        hud_focus_last["env"] = env_key
+        _hud_focus_wake("EnvironmentPanel",7.0)
+    # infected close by: everything a fight needs
+    var threat = false
+    for e in get_tree().get_nodes_in_group("infected"):
+        if is_instance_valid(e) and e.global_position.distance_squared_to(player.global_position) < 340.0 * 340.0:
+            threat = true
+            break
+    if threat:
+        _hud_focus_wake("StealthPanel",1.0)
+        _hud_focus_wake("WeaponPanel",1.0)
+        _hud_focus_wake("VitalsPanel",1.0)
+    if is_crouching or is_sprinting or last_player_noise_kind != "quiet":
+        _hud_focus_wake("StealthPanel",2.5)
+    if weapon_recoil_time > 0.0 or reload_time > 0.0 or melee_swing_time > 0.0:
+        _hud_focus_wake("WeaponPanel",4.0)
+    var weapon_key = "%s|%s" % [current_weapon_id,equipped_melee_id]
+    if str(hud_focus_last.get("weapon","")) != weapon_key:
+        hud_focus_last["weapon"] = weapon_key
+        _hud_focus_wake("WeaponPanel",4.0)
+        _hud_focus_wake("QuickShell",4.0)
+    var mouse = hud_world_root.get_viewport().get_mouse_position() if hud_world_root.get_viewport() != null else Vector2(-99,-99)
+    for panel_name in ["VitalsPanel","EnvironmentPanel","StealthPanel","WeaponPanel","QuickShell"]:
+        var panel = hud_world_root.get_node_or_null(panel_name)
+        if panel == null:
+            continue
+        hud_focus[panel_name] = max(0.0,float(hud_focus.get(panel_name,0.0)) - delta)
+        var full = not enabled or inventory_open or float(hud_focus[panel_name]) > 0.0 or panel.get_global_rect().grow(6.0).has_point(mouse)
+        var target = 1.0 if full else HUD_IDLE_ALPHA
+        # quick to appear, slow to leave
+        panel.modulate.a = move_toward(panel.modulate.a,target,delta * (5.0 if target > panel.modulate.a else 0.8))
 
 func _quick_slot_valid_item(id):
     if not item_defs.has(id):
@@ -21865,8 +21932,12 @@ func _fit_procedural_building_center(raw_center,size):
 
     return Vector2(round(center.x),round(center.y))
 
-func _point_on_road_or_sidewalk(pos):
-    return (pos.x >= TREE_ROAD_MIN and pos.x <= TREE_ROAD_MAX) or (pos.y >= TREE_ROAD_MIN and pos.y <= TREE_ROAD_MAX)
+func _point_on_road_or_sidewalk(pos,dirt_track = false):
+    # town streets have pavements and verges; a dirt track in the woods or the
+    # dachas is only its ruts wide, the trees stand right at its edge
+    var lo = DIRT_TRACK_MIN if dirt_track else TREE_ROAD_MIN
+    var hi = DIRT_TRACK_MAX if dirt_track else TREE_ROAD_MAX
+    return (pos.x >= lo and pos.x <= hi) or (pos.y >= lo and pos.y <= hi)
 
 func _tree_overlaps_building(chunk,pos):
     if chunk == null:
@@ -24872,6 +24943,8 @@ func _build_procedural_chunk(chunk,coord):
                 tree_pos,
                 rng.randf_range(0.75,1.18)
             )
+    if not authored_poi and world_event.is_empty():
+        _plant_forest_edges(chunk,coord,zone)
 
     if not authored_poi and world_event.is_empty():
         _decorate_zone_street_art(chunk,zone,coord)
@@ -26366,6 +26439,53 @@ func _tree_blocks_door_swing(chunk,pos):
         if global_candidate.distance_to(door.global_position) < 92.0:
             return true
 
+    return false
+
+# dev61: a wood is walls of trees along its tracks, not a clearing with the
+# trees out of sight in the middle of the blocks. Woodland and rural tracks get
+# an uneven edge just beyond the verge (outside the protected road band), with
+# gaps; its own seed, so loot and infected placement do not shift.
+func _plant_forest_edges(chunk,coord,zone):
+    var spacing = 0.0
+    var gap = 1.0
+    if zone == "woodland":
+        spacing = 38.0
+        gap = 0.22
+    elif zone == "rural":
+        spacing = 64.0
+        gap = 0.5
+    else:
+        return
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 83492791 + coord.y * 2971215073 + 991)) + 1
+    var planted = 0
+    for side in [DIRT_TRACK_MIN,DIRT_TRACK_MAX]:
+        var outward = -1.0 if side == DIRT_TRACK_MIN else 1.0
+        for vertical in [true,false]:
+            var t = rng.randf_range(10.0,spacing)
+            while t < CHUNK_SIZE - 12.0:
+                var depth = side + outward * rng.randf_range(6.0,26.0)
+                var p = Vector2(depth,t) if vertical else Vector2(t,depth)
+                p += Vector2(rng.randf_range(-3.0,3.0),rng.randf_range(-3.0,3.0)) * (Vector2(0,1) if vertical else Vector2(1,0))
+                var keep = rng.randf() >= gap
+                var scale_factor = rng.randf_range(0.78,1.12)
+                if keep and not _point_on_road_or_sidewalk(p,true) and not _tree_overlaps_building(chunk,p) and not _tree_blocks_door_swing(chunk,p) and not _forest_edge_blocked(chunk,p):
+                    if _create_tree(chunk,p,scale_factor,true) != null:
+                        planted += 1
+                t += spacing * rng.randf_range(0.75,1.3)
+    chunk.set_meta("forest_edge_trees",planted)
+
+func _forest_edge_blocked(chunk,p:Vector2) -> bool:
+    for child in chunk.get_children():
+        if not is_instance_valid(child):
+            continue
+        if bool(child.get_meta("world_event_root",false)) and _world_event_rect(child).grow(22.0).has_point(p):
+            return true
+        # never on a parked car or into the trunk of another tree
+        if bool(child.get_meta("world_car",false)) and Rect2(child.position - Vector2(44,28),Vector2(88,56)).has_point(p):
+            return true
+        if bool(child.get_meta("world_tree",false)) and child.position.distance_to(p) < 20.0:
+            return true
     return false
 
 func _safe_tree_position(chunk,rng):

@@ -95,7 +95,10 @@ func run()->void:
         for tree in trees:
             check(tree.position.x >= 0 and tree.position.x <= game.CHUNK_SIZE and tree.position.y >= 0 and tree.position.y <= game.CHUNK_SIZE,"tree outside chunk at "+str(coord))
             if not authored:
-                check(not game._point_on_road_or_sidewalk(tree.position),"tree on public road/sidewalk at "+str(coord))
+                # dev61: woodland and dacha dirt tracks have no pavement - their
+                # edge trees may stand at the ruts, never on them
+                var dirt_track = str(profile.get("zone","")) in ["woodland","rural"]
+                check(not game._point_on_road_or_sidewalk(tree.position,dirt_track),"tree on public road/sidewalk at "+str(coord))
             for br in building_rects:
                 # Procedural vegetation uses the full growth clearance. Authored settlements/High Risk
                 # use their own door/facade-aware placement helpers, so here only reject an actual clip.

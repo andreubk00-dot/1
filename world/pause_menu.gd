@@ -25,10 +25,11 @@ var _confirm_box = null
 var _sliders = {}
 var _fullscreen = null
 var _shake = null
+var _autohide = null
 
 
 static func load_settings() -> Dictionary:
-    var out = {"master": 0.85, "music": 0.7, "sfx": 0.9, "ambience": 0.8, "fullscreen": false, "camera_shake": true}
+    var out = {"master": 0.85, "music": 0.7, "sfx": 0.9, "ambience": 0.8, "fullscreen": false, "camera_shake": true, "hud_autohide": true}
     var cfg = ConfigFile.new()
     if cfg.load(SETTINGS_PATH) == OK:
         for k in out.keys():
@@ -303,6 +304,13 @@ func _build_settings() -> void:
     _style_check(_shake)
     _shake.toggled.connect(func(_on): _apply_from_ui())
     v.add_child(_shake)
+    _autohide = CheckBox.new()
+    _autohide.text = "Прятать панели HUD в покое"
+    _autohide.add_theme_font_size_override("font_size", 7)
+    _autohide.button_pressed = bool(s.get("hud_autohide", true))
+    _style_check(_autohide)
+    _autohide.toggled.connect(func(_on): _apply_from_ui())
+    v.add_child(_autohide)
     if game != null and game.get("field_hints") != null:
         var hints = CheckBox.new()
         hints.text = "Подсказки для новичка"
@@ -320,6 +328,7 @@ func _apply_from_ui() -> void:
         s[k] = _sliders[k].value / 100.0
     s["fullscreen"] = _fullscreen.button_pressed
     s["camera_shake"] = _shake.button_pressed
+    s["hud_autohide"] = _autohide.button_pressed
     save_settings(s)
     apply_settings(s)
     if game != null:
