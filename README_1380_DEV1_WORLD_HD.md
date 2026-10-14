@@ -968,3 +968,14 @@ The 18 long-standing failures were stale tests, not broken gameplay:
 `test_long_session_chunk_churn_131` stays timing-sensitive under the parallel
 runner; standalone it passes, and the pre-dev47 build is as slow on this
 machine (the host got slower, not the game).
+
+## dev56 — crisp infected with a heavier limp
+
+- Same fix as the survivor: `tools/infected3d.py` renders at density 1.24
+  and the game shows the sheets at `INFECTED_SPRITE_SCALE` = 0.5 (was 0.62
+  of 1x sheets = 1.24 screen px per texel). One texel = one screen pixel,
+  same world size, the feet still on the shadow; walk, attack, idle stances
+  and the corpses (built from the walk sheet) all follow.
+- The shamble reads stronger: the bad leg barely leaves the ground and trails
+  further behind, the good leg steps higher, and the body lurches down onto
+  the bad leg each time it has to carry it, leaning harder to that side.

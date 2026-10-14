@@ -12,6 +12,13 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from char3d import Scene, V, norm, CELL, save_png, darker
+import char3d
+
+# 1.38 dev56: drawn at 1.24 px per rig unit and shown at sprite scale 0.5, so a
+# texel is one screen pixel (the old 1x sheets at scale 0.62 showed 1.24 px per
+# texel, unevenly doubled); same world size, feet in the same place
+RENDER_K = 1.24
+char3d.set_density(RENDER_K)
 
 OUT = CELL
 DIRS = 8
@@ -96,15 +103,20 @@ def walk_pose(direction, variant, k):
     for side, off, sg in [('L', 0.0, -1), ('R', math.pi, 1)]:
         s = math.sin(ph + off)
         lift = max(0.0, math.sin(ph + off))
-        amp = base_amp * (0.58 if side == drag_side else 1.0)
-        zlift = (1.1 if side == drag_side else 2.8) * lift
+        # dev56: the bad leg barely leaves the ground - it is hauled forward,
+        # scuffing, while the good one steps high and takes the weight
+        amp = base_amp * (0.5 if side == drag_side else 1.05)
+        zlift = (0.6 if side == drag_side else 3.2) * lift
         # dragging foot trails slightly behind and turns inward visually
-        trail = -1.4 if side == drag_side else 0.0
+        trail = -1.8 if side == drag_side else 0.0
         P.feet[side] = (0.5 + s*amp + trail, 2.9*sg, 3.0 + zlift)
-    P.bob = -0.45*abs(math.sin(ph)) + 0.20*math.sin(ph*2.0)
-    P.shift_r = 0.85*math.sin(ph) * (1 if drag_side == 'L' else -1)
-    P.twist = 0.08*math.sin(ph + math.pi*0.35)
-    P.side_lean = 0.035*math.sin(ph) + (0.025 if drag_side == 'L' else -0.025)
+    # the body drops onto the bad leg when it has to carry it (a lurch), and
+    # rises again over the good one
+    drag_ph = ph + (0.0 if drag_side == 'L' else math.pi)
+    P.bob = -0.35*abs(math.sin(ph)) - 0.55*max(0.0, -math.sin(drag_ph)) + 0.15*math.sin(ph*2.0)
+    P.shift_r = 1.1*math.sin(ph) * (1 if drag_side == 'L' else -1)
+    P.twist = 0.10*math.sin(ph + math.pi*0.35)
+    P.side_lean = 0.05*math.sin(ph) + (0.04 if drag_side == 'L' else -0.04)
     P.head_tilt += 0.045*math.sin(ph*0.5 + variant)
     # arms mostly hang, with unequal swing and occasional clawing reach
     P.hands['L'] = (3.1 + 1.2*math.sin(ph+math.pi), -5.6, 5.7 + 0.5*math.cos(ph))

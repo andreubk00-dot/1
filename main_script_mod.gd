@@ -103,7 +103,9 @@ const SURVIVOR_CELL = 128
 const SURVIVOR_SPRITE_SCALE = 0.390625
 # 0.77: original 3D-rig infected use the same high-density cell approach as the survivor.
 const INFECTED_CELL = 128
-const INFECTED_SPRITE_SCALE = 0.62
+# 1.38 dev56: infected sheets drawn at 1.24x density (tools/infected3d.py RENDER_K):
+# at 0.5 a texel is one screen pixel, same world size as the old 0.62
+const INFECTED_SPRITE_SCALE = 0.5
 const INFECTED_WALK_FRAMES = 12
 const INFECTED_ATTACK_FRAMES = 8
 const ENEMY_BASE_SPEED = 60.0
