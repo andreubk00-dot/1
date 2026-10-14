@@ -3,9 +3,13 @@ extends Control
 signal sector_selected(coord)
 signal map_panned(offset)
 signal zoom_changed
-const ZOOMS = [18.0,25.0,34.0]
+const ZOOMS = [18.0,28.0,44.0,64.0]
 const INK = Color("34392f")
 const PAPER = Color("b5b19a")
+const FOG = Color("9c9884")
+const BUILDING = Color("6e6a58")
+const ROADS = {"city":Color("d9d3b9"),"rural":Color("c4b48e"),"woodland":Color("b7a780"),
+    "military":Color("cfcbb8"),"industrial":Color("cfcbb8")}
 const ZONES = {"central":Color("a3a08c"),"residential":Color("a7ab99"),
     "commercial":Color("b5ab88"),"industrial":Color("a39883"),
     "woodland":Color("869780"),"rural":Color("a6af8a"),"military":Color("aa9582")}
@@ -16,7 +20,7 @@ const SHORT_NAMES = {"old_center":"ЦЕНТР","panel_west":"ЖИЛМАССИВ"
     "military_northeast":"ВОЕННЫЙ ПЕРИМЕТР",
     "outer_residential":"ОКРАИНЫ","outer_industrial":"ПРОМ. ОКРАИНА",
     "outer_rural":"ПРИГОРОД","outer_woodland":"ЛЕСНАЯ ОКРАИНА"}
-var zoom_index = 0
+var zoom_index = 1
 var center = Vector2i.ZERO
 var data = {}
 var cells = {}
@@ -115,10 +119,14 @@ func _symbol(pos,kind,color):
         if kind == "note":
             draw_line(pos-Vector2(2,0),pos+Vector2(2,0),color,1)
 func _draw():
-    draw_rect(Rect2(Vector2.ZERO,size),PAPER)
+    draw_rect(Rect2(Vector2.ZERO,size),FOG)
     label_boxes.clear()
     var groups = {}
-    # Adjacent sectors share the same fill, with NO cell frames or buttons.
+    var s = step()
+    # unexplored land: faint diagonal hatching, never real geography
+    for i in range(-int(size.y),int(size.x),9):
+        draw_line(Vector2(i,size.y),Vector2(i+size.y,0),Color(INK,0.05),1.0)
+    # pass 1 - blocks: the land between the streets, by zone
     for coord in cells:
         if not _known(coord):
             continue
@@ -126,48 +134,82 @@ func _draw():
         var zone = str(cell.get("zone","residential"))
         var district = str(cell.get("district",""))
         var p = project(coord)
-        var rect = Rect2(p-Vector2.ONE*step()*0.5,Vector2.ONE*step())
+        var rect = Rect2(p-Vector2.ONE*s*0.5,Vector2.ONE*s)
         draw_rect(rect,ZONES.get(zone,PAPER))
         if not groups.has(district):
             groups[district] = []
         groups[district].append(coord)
-        # Sparse land-use hatching; these are map conventions, not building footprints.
         var seed_value = absi(coord.x*92821+coord.y*68917)
         if zone == "woodland":
-            for i in range(3):
-                var t = p + Vector2(float((seed_value+i*7)%11)-5,float((seed_value+i*3)%9)-4)*step()/18.0
-                draw_polyline(PackedVector2Array([t+Vector2(-2,2),t+Vector2(0,-2),t+Vector2(2,2)]),Color("687860"),0.7)
-        elif zone == "industrial" or zone == "military":
-            draw_line(rect.position+Vector2(3,step()-3),rect.position+Vector2(step()-3,3),Color(INK,0.13),0.6)
-        # District boundaries only, not a sector grid.
+            for i in range(int(3 + s / 10.0)):
+                var t = p + Vector2(float((seed_value+i*37)%97)/97.0-0.5,float((seed_value+i*53)%89)/89.0-0.5)*s*0.9
+                draw_polyline(PackedVector2Array([t+Vector2(-2,2),t+Vector2(0,-2),t+Vector2(2,2)]),Color("687860"),0.8)
+    # pass 2 - streets: every sector is built on one crossroads (the ground art)
+    for coord in cells:
+        if not _known(coord):
+            continue
+        var p = project(coord)
+        var ground = str(cells[coord].get("ground","city"))
+        var road_w = max(2.0,s * (0.25 if ground == "city" else 0.18))
+        var col = ROADS.get(ground,ROADS["city"])
+        for dir in [Vector2.RIGHT,Vector2.DOWN]:
+            var half = Vector2(dir.x,dir.y) * s * 0.5
+            var across = Vector2(dir.y,dir.x) * road_w * 0.5
+            draw_colored_polygon(PackedVector2Array([p-half-across,p+half-across,p+half+across,p-half+across]),col)
+    # curbs only where a street meets a block (drawn after every street fill)
+    for coord in cells:
+        if not _known(coord) or s < 24.0:
+            continue
+        var p = project(coord)
+        var ground = str(cells[coord].get("ground","city"))
+        var road_w = max(2.0,s * (0.25 if ground == "city" else 0.18))
+        var edge = Color(INK,0.38)
+        for sign_value in [-1.0,1.0]:
+            var o = road_w * 0.5 * sign_value
+            draw_line(p+Vector2(-s*0.5,o),p+Vector2(-road_w*0.5,o),edge,0.7)
+            draw_line(p+Vector2(road_w*0.5,o),p+Vector2(s*0.5,o),edge,0.7)
+            draw_line(p+Vector2(o,-s*0.5),p+Vector2(o,-road_w*0.5),edge,0.7)
+            draw_line(p+Vector2(o,road_w*0.5),p+Vector2(o,s*0.5),edge,0.7)
+    # pass 3 - buildings that were actually seen
+    for coord in cells:
+        if not _known(coord):
+            continue
+        var blocks = cells[coord].get("blocks",[])
+        if blocks.is_empty():
+            continue
+        var origin = project(coord) - Vector2.ONE * s * 0.5
+        var k = s / 96.0
+        for r in blocks:
+            var rr = Rect2(origin + Vector2(r[0],r[1]) * k,Vector2(r[2],r[3]) * k)
+            if rr.size.x < 1.0 or rr.size.y < 1.0:
+                continue
+            draw_rect(rr,BUILDING)
+            if s >= 24.0:
+                draw_rect(rr,Color(INK,0.75),false,0.8)
+        # district boundaries only, not a sector grid
+    for coord in cells:
+        if not _known(coord):
+            continue
+        var p = project(coord)
+        var district = str(cells[coord].get("district",""))
         for direction in [Vector2i.RIGHT,Vector2i.DOWN]:
             var other = cells.get(coord+direction,{})
             if bool(other.get("known",false)) and str(other.get("district","")) != district:
-                var start = p+Vector2(step()*0.5,-step()*0.5) if direction == Vector2i.RIGHT else p+Vector2(-step()*0.5,step()*0.5)
-                var end = start+Vector2(0,step()) if direction == Vector2i.RIGHT else start+Vector2(step(),0)
+                var start = p+Vector2(s*0.5,-s*0.5) if direction == Vector2i.RIGHT else p+Vector2(-s*0.5,s*0.5)
+                var end = start+Vector2(0,s) if direction == Vector2i.RIGHT else start+Vector2(s,0)
                 draw_dashed_line(start,end,Color(INK,0.42),0.7,2.0)
-        # The world has a road cross in each chunk. Generalize minor streets at
-        # overview scale, then show them when zoomed in; never reveal unseen roads.
-        if coord.y == 0 or zoom_index > 0:
-            draw_line(p-Vector2(step()*0.5,0),p+Vector2(step()*0.5,0),Color("c9c4ab"),2.7 if coord.y == 0 else 1.0)
-            if coord.y == 0:
-                draw_line(p-Vector2(step()*0.5,0),p+Vector2(step()*0.5,0),Color(INK,0.40),0.6)
-        if coord.x == 0 or zoom_index > 0:
-            draw_line(p-Vector2(0,step()*0.5),p+Vector2(0,step()*0.5),Color("c9c4ab"),2.7 if coord.x == 0 else 1.0)
-        if district == "rail_corridor":
-            draw_line(p-Vector2(step()*0.5,3),p+Vector2(step()*0.5,3),INK,1)
-            for x in range(-int(step()*0.5),int(step()*0.5),4):
-                draw_line(p+Vector2(x,1),p+Vector2(x,5),INK,0.8)
-    # Paper grain and fold lines are stable while panning; no flickering randomness.
-    for i in range(170):
-        var p = Vector2((i*97+13)%int(max(1,size.x)),(i*43+19)%int(max(1,size.y)))
-        draw_line(p,p+Vector2(1,0),Color(INK,0.10),0.5)
-    for f in [0.33,0.67]:
-        draw_line(Vector2(size.x*f,0),Vector2(size.x*f,size.y),Color(INK,0.08),1)
-        draw_line(Vector2(size.x*f+1,0),Vector2(size.x*f+1,size.y),Color(1,1,0.8,0.10),1)
-    # Persistent logistics links are map memory, not navigation paths. They are
-    # deliberately thinner/more muted than the active expedition route and have
-    # no arrowheads or intermediate waypoints.
+    # edge of the explored land
+    for coord in cells:
+        if not _known(coord):
+            continue
+        var p = project(coord)
+        for d in [Vector2i.LEFT,Vector2i.RIGHT,Vector2i.UP,Vector2i.DOWN]:
+            if _known(coord + d):
+                continue
+            var a = p + (Vector2(d) * 0.5 + Vector2(d.y,d.x) * 0.5) * s
+            var b = p + (Vector2(d) * 0.5 - Vector2(d.y,d.x) * 0.5) * s
+            draw_line(a,b,Color(INK,0.55),1.0)
+    # persistent logistics links: muted, no arrowheads
     for link in data.get("established_routes",[]):
         if typeof(link) != TYPE_DICTIONARY:
             continue
@@ -175,8 +217,6 @@ func _draw():
         var to_coord = link.get("to",Vector2i(999999,999999))
         if from_coord.x >= 900000 or to_coord.x >= 900000:
             continue
-        # Do not let an off-screen straight segment masquerade as surveyed road
-        # geometry through unknown territory. A link is drawn only near an endpoint.
         if not contains_sector(from_coord) and not contains_sector(to_coord):
             continue
         var a = project(from_coord)
@@ -184,10 +224,14 @@ func _draw():
         draw_dashed_line(a,b,Color("6f6b4f"),0.9,5.0)
         draw_circle(a,2.0,Color("6f6b4f"))
         draw_circle(b,2.0,Color("6f6b4f"))
+    # the current objective: a pencil line from the player to the system mark
+    if data.has("player"):
+        for mark in data.get("markers",[]):
+            if bool(mark.get("system",false)):
+                draw_dashed_line(project(data["player"]),project(mark["coord"]),Color("385b66",0.8),1.2,4.0)
     var route = data.get("route",[])
     for i in range(1,route.size()):
-        draw_dashed_line(project(route[i-1]),project(route[i]),Color("854d36"),1.3,3.0)
-    # POI labels reserve space before district labels. Only discovered anchors arrive here.
+        draw_dashed_line(project(route[i-1]),project(route[i]),Color("854d36"),1.6,3.0)
     for poi in data.get("pois",[]):
         var p = project(poi["coord"])
         if not Rect2(Vector2.ZERO,size).has_point(p):
@@ -213,11 +257,11 @@ func _draw():
         _symbol(project(data["target"]),"target",Color("854d36"))
     if data.has("selected"):
         var p = project(data["selected"])
-        draw_arc(p,7.0,0,TAU,24,Color("854d36"),1.1)
+        draw_rect(Rect2(p-Vector2.ONE*s*0.5,Vector2.ONE*s),Color("854d36"),false,1.2)
     if data.has("player"):
-        var p = project(data["player"])
-        draw_circle(p,3.0,Color("283f48"))
-        draw_circle(p,5.0,PAPER,false,1)
+        var p = project(data["player"]) + Vector2(data.get("player_offset",Vector2.ZERO)) * s
+        draw_circle(p,4.0,PAPER)
+        draw_circle(p,3.0,Color("b0412e"))
     for district in groups:
         if not SHORT_NAMES.has(district) or groups[district].size() < 2:
             continue
@@ -236,16 +280,10 @@ func _draw():
         for offset in [Vector2(-width*0.5,6),Vector2(-width*0.5,16),Vector2(-width*0.5,-12)]:
             if _label(anchor+offset,title,Color("484c3d")):
                 break
-    # Cartographic furniture.
+    # north arrow and scale only
     _text(Vector2(9,14),"С",8)
     draw_line(Vector2(12,19),Vector2(12,32),INK,1)
     draw_colored_polygon(PackedVector2Array([Vector2(12,17),Vector2(9,23),Vector2(15,23)]),INK)
-    draw_line(Vector2(10,size.y-13),Vector2(10+step()*2,size.y-13),INK,1.5)
-    _text(Vector2(10,size.y-3),"2 СЕКТОРА",6)
-    _text(Vector2(size.x-114,size.y-5),"СХЕМА / ПРОХОД НЕ ПРОВЕРЕН",6,Color("656652"))
-    if not _known(unproject(Vector2(26,55))):
-        _text(Vector2(10,49),"НЕТ ПОЛЕВЫХ",6,Color("777963"))
-        _text(Vector2(10,58),"ОТМЕТОК",6,Color("777963"))
-    for inset in range(4):
-        draw_rect(Rect2(Vector2.ONE*inset,size-Vector2.ONE*inset*2),Color(INK,0.08),false,1)
+    draw_line(Vector2(10,size.y-9),Vector2(10+s,size.y-9),INK,1.5)
+    _text(Vector2(14+s,size.y-6),"1 сектор",6)
     draw_rect(Rect2(Vector2.ONE,size-Vector2.ONE*2),Color("777963"),false,1)

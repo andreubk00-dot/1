@@ -31,9 +31,9 @@ func run() -> void:
     game._refresh_region_map_ui()
     var known_text = str(game.region_map_detail_label.text)
     check(known_text.find("Район: СТАРЫЙ ЦЕНТР") >= 0,"runtime district identity missing")
-    check(known_text.find("Характер: Старая торгово-жилая") >= 0,"runtime authored district character missing")
-    check(known_text.find("Обследовано секторов района: 3") >= 0,"runtime district survey progress missing")
-    check(known_text.find("Известные ориентиры: ПОЛИКЛИНИКА") >= 0,"runtime known landmark summary missing")
+    # dev58: the field map keeps only distance, district, danger and the landmark
+    check(known_text.find("Опасность:") >= 0,"runtime district danger missing")
+    check(known_text.find("Характер:") < 0 and known_text.find("Обследовано") < 0,"field map card still carries survey clutter")
     check(known_text.find("loot") < 0 and known_text.find("фарм") < 0 and known_text.find("refresh") < 0,"runtime survey text leaked hidden economy/farm metadata")
 
     game.region_map_selected_chunk = Vector2i(2,2)
@@ -50,7 +50,6 @@ func run() -> void:
     game.region_map_selected_chunk = Vector2i(-3,3)
     game._refresh_region_map_ui()
     var route_text = str(game.region_map_detail_label.text)
-    check(route_text.find("Налаженных связей района: 1") >= 0,"district context did not count established geographic link")
     check(route_text.find("Налаженный маршрут: ПЕРРОН ↔ СНТ «ЗАРЯ»") >= 0,"dev17 established route detail regressed")
     var snap = game._region_map_snapshot()
     check(not snap.has("target") and not snap.has("route"),"district survey context activated expedition navigation")

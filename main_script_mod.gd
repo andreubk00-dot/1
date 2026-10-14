@@ -683,6 +683,9 @@ var high_risk_floor_anchor_chunk = Vector2i(999999,999999)
 var pending_high_risk_floor_restore = {}
 
 var discovered_chunks = {}
+# building footprints of every loaded sector, for the field map: key -> [[x,y,w,h]]
+# in 1/96 of a sector (8 world px); only discovered sectors are drawn and saved
+var map_footprints = {}
 var discovered_pois = {}
 
 # 0.86 region map + expedition foundation. The map is informational: terrain
@@ -11729,31 +11732,31 @@ func _create_region_map_ui():
     region_map_panel.add_theme_stylebox_override("panel",_visual_panel_style())
     region_map_canvas.add_child(region_map_panel)
     _hud_add_panel_detail(region_map_panel,region_map_panel.size,Color(0.56,0.49,0.31))
-    region_map_title_label = _hud_make_label(region_map_panel,Vector2(14,8),Vector2(360,20),"ОСТАТОК / ПОЛЕВАЯ КАРТА",12,Color("d6d0ae"))
+    region_map_title_label = _hud_make_label(region_map_panel,Vector2(14,8),Vector2(360,20),"ПОЛЕВАЯ КАРТА",12,Color("d6d0ae"))
     region_map_coord_label = _hud_make_label(region_map_panel,Vector2(390,10),Vector2(214,15),"",7,Color("8d9588"),HORIZONTAL_ALIGNMENT_RIGHT)
     region_map_grid = RegionMapView.new()
-    region_map_grid.position = Vector2(14,39)
-    region_map_grid.size = Vector2(384,250)
+    region_map_grid.position = Vector2(14,32)
+    region_map_grid.size = Vector2(410,256)
     region_map_panel.add_child(region_map_grid)
     region_map_grid.sector_selected.connect(_region_map_select_chunk)
     region_map_grid.map_panned.connect(_pan_region_map)
     region_map_grid.zoom_changed.connect(_refresh_region_map_ui)
-    _hud_make_label(region_map_panel,Vector2(14,290),Vector2(384,14),"● ВЫ  ⌂ ДОМ  ⊕ ЦЕЛЬ  ··· МАРШРУТ  + МЕД.",7,Color("b8ba9c"))
+    _hud_make_label(region_map_panel,Vector2(14,290),Vector2(410,14),"● ВЫ   ⌂ ДОМ   ⊕ ЦЕЛЬ   ··· МАРШРУТ   + МЕД.   ПКМ — двигать, колесо — масштаб",6,Color("b8ba9c"))
     var scroll = ScrollContainer.new()
-    scroll.position = Vector2(412,39)
+    scroll.position = Vector2(432,32)
     # 1.28-dev1: keep long survey/marker/plan information scrollable, but reserve
     # a fixed action strip below it so primary expedition actions never start clipped.
-    scroll.size = Vector2(194,216)
+    scroll.size = Vector2(174,226)
     scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     region_map_panel.add_child(scroll)
     var column = VBoxContainer.new()
-    column.custom_minimum_size = Vector2(178,0)
+    column.custom_minimum_size = Vector2(162,0)
     column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     column.add_theme_constant_override("separation",5)
     scroll.add_child(column)
     region_map_location_label = _map_info_label(column,"",9,Color("d7cda5"))
     region_map_detail_label = _map_info_label(column,"",7,Color("afb7a8"))
-    _map_info_label(column,"МОЯ МЕТКА",7,Color("c5a65b"))
+    _map_info_label(column,"МЕТКА",7,Color("c5a65b"))
     map_marker_kind = OptionButton.new()
     for title in ["ОПАСНОСТЬ","ТАЙНИК","ВОДА","ЗАМЕТКА"]:
         map_marker_kind.add_item(title)
@@ -11769,25 +11772,22 @@ func _create_region_map_ui():
     _map_column_button(mark_actions,"ЗАПИСАТЬ",_save_selected_map_marker)
     _map_column_button(mark_actions,"УБРАТЬ",_remove_selected_map_marker)
     region_map_readiness_label = _map_info_label(column,"",7,Color("afb7a8"))
-    _map_info_label(column,"ПЛАН ВЫЛАЗКИ",7,Color("c5a65b"))
     region_map_active_label = _map_info_label(column,"",7,Color("afb7a8"))
     var map_plan_actions = HBoxContainer.new()
-    map_plan_actions.position = Vector2(412,263)
-    map_plan_actions.size = Vector2(194,24)
+    map_plan_actions.position = Vector2(432,263)
+    map_plan_actions.size = Vector2(174,24)
     map_plan_actions.add_theme_constant_override("separation",5)
     region_map_panel.add_child(map_plan_actions)
     region_map_plan_button = _map_column_button(map_plan_actions,"НАЗНАЧИТЬ ЦЕЛЬ",_plan_selected_expedition)
     region_map_cancel_button = _map_column_button(map_plan_actions,"СБРОСИТЬ ПЛАН",_cancel_expedition)
-    region_map_plan_button.custom_minimum_size.x = 92
-    region_map_cancel_button.custom_minimum_size.x = 92
+    region_map_plan_button.custom_minimum_size.x = 84
+    region_map_cancel_button.custom_minimum_size.x = 84
     _make_button(region_map_panel,Vector2(14,309),Vector2(98,24),"ДОМ / ЖУРНАЛ",_open_home_journal)
     world_chronicle_button = _make_button(region_map_panel,Vector2(118,309),Vector2(64,24),"ЭФИР",_open_world_chronicle)
     _make_button(region_map_panel,Vector2(188,309),Vector2(64,24),"К ДОМУ",_navigate_home)
-    _make_button(region_map_panel,Vector2(258,309),Vector2(54,24),"К СЕБЕ",_center_map_on_player)
-    _make_button(region_map_panel,Vector2(318,309),Vector2(24,24),"−",_zoom_region_map.bind(-1))
-    _make_button(region_map_panel,Vector2(346,309),Vector2(24,24),"+",_zoom_region_map.bind(1))
-    _hud_make_label(region_map_panel,Vector2(378,308),Vector2(126,27),"ЛКМ — выбор
-Колесо — масштаб",6,Color("8d9588"))
+    _make_button(region_map_panel,Vector2(258,309),Vector2(64,24),"К СЕБЕ",_center_map_on_player)
+    _make_button(region_map_panel,Vector2(328,309),Vector2(28,24),"−",_zoom_region_map.bind(-1))
+    _make_button(region_map_panel,Vector2(360,309),Vector2(28,24),"+",_zoom_region_map.bind(1))
     _make_button(region_map_panel,Vector2(510,309),Vector2(96,24),"ЗАКРЫТЬ / M",_close_region_map)
     region_map_canvas.visible = false
 
@@ -11894,7 +11894,7 @@ func _map_info_label(parent,text,font_size,color):
     label.add_theme_font_size_override("font_size",font_size)
     label.add_theme_color_override("font_color",color)
     label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    label.custom_minimum_size.x = 172
+    label.custom_minimum_size.x = 158
     label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     parent.add_child(label)
     return label
@@ -11976,6 +11976,8 @@ func _region_map_snapshot():
                 var visible_district = RegionCatalog.district_profile(visible_district_id)
                 record["zone"] = str(visible_district.get("zone",profile.get("zone","residential")))
                 record["district"] = visible_district_id
+                record["ground"] = str(DISTRICT_GROUND.get(RegionCatalog.district_id_for_chunk(coord),"city"))
+                record["blocks"] = map_footprints.get(_zone_chunk_key(coord),[])
             cells[coord] = record
             var poi = RegionCatalog.poi_for_chunk(coord)
             if not poi.is_empty() and bool(poi.get("is_anchor",false)) and discovered_pois.has(str(poi.get("id",""))):
@@ -12002,6 +12004,9 @@ func _region_map_snapshot():
             marks.append({"coord":slice_poi.get("coord",current_chunk),"kind":str(slice_target.get("kind","note")),"label":str(slice_target.get("label","ПОЛЕВОЙ МАРШРУТ")),"system":true})
     var established_routes = SandboxRouteMap.links(faction_state,discovered_pois)
     var snapshot = {"center":region_map_center,"cells":cells,"pois":pois,"markers":marks,"player":current_chunk}
+    if player != null:
+        # where in the sector the player stands, so the dot sits on the right street
+        snapshot["player_offset"] = (player.global_position - Vector2(current_chunk) * CHUNK_SIZE) / CHUNK_SIZE - Vector2(0.5,0.5)
     if not established_routes.is_empty():
         snapshot["established_routes"] = established_routes
     if region_map_selected_chunk.x < 900000:
@@ -12097,7 +12102,9 @@ func _refresh_region_map_ui():
     region_map_location_label.text = _expedition_name_for_chunk(selected)
     var dist = _expedition_sector_distance(current_chunk,selected)
     var eta = _expedition_time_text(_expedition_estimated_minutes(current_chunk,selected))
-    var detail_lines = ["Сектор %d:%d  •  %d сект.  •  путь %s" % [selected.x,selected.y,dist,eta]]
+    # only what a survivor would pencil on a field map: how far, whose ground,
+    # how dangerous, what stands there
+    var detail_lines = ["Вы здесь" if dist == 0 else "%d сект. • путь %s" % [dist,eta]]
     if SupplyEventSystem.active_coord(faction_state,world_day) == selected:
         detail_lines.append("РАДИОСИГНАЛ: " + SupplyEventSystem.marker_label(faction_state,world_day))
         detail_lines.append(SupplyEventSystem.detail_text(faction_state,world_day))
@@ -12108,25 +12115,12 @@ func _refresh_region_map_ui():
         detail_lines.append("Район: %s" % visible_district_name)
         var map_risk = int(poi.get("risk",profile.get("risk",2))) if poi_known else int(profile.get("risk",2))
         detail_lines.append("Опасность: %d/5" % map_risk)
-        if not survey_context.is_empty():
-            var district_description = str(survey_context.get("description",""))
-            if district_description != "":
-                detail_lines.append("Характер: %s" % district_description)
-            detail_lines.append("Обследовано секторов района: %d" % int(survey_context.get("known_sectors",0)))
-            var known_landmarks = RegionSurveyContext.landmark_text(survey_context)
-            if known_landmarks != "":
-                detail_lines.append("Известные ориентиры: %s" % known_landmarks)
-            var established_link_count = int(survey_context.get("established_links",0))
-            if established_link_count > 0:
-                detail_lines.append("Налаженных связей района: %d" % established_link_count)
         if poi_known:
             detail_lines.append(str(poi.get("description","Обнаруженный ориентир.")))
-        var route_labels = SandboxRouteMap.labels_at_coord(route_links,selected)
-        for route_label in route_labels:
+        for route_label in SandboxRouteMap.labels_at_coord(route_links,selected):
             detail_lines.append("Налаженный маршрут: %s" % str(route_label))
     else:
-        detail_lines.append("Статус: НЕ ИССЛЕДОВАН  •  опасность неизвестна")
-        detail_lines.append("Можно назначить как разведывательную цель.")
+        detail_lines.append("НЕ ИССЛЕДОВАН • опасность неизвестна")
     region_map_detail_label.text = "\n".join(detail_lines)
 
     # Exploration knowledge belongs to the player: the map does not grade loadouts.
@@ -20946,6 +20940,7 @@ func _load_chunk(coord):
         _decorate_street_furniture(chunk,coord)
     _dress_ground_seams(chunk,coord)
     _place_puddles(chunk,coord)
+    _record_map_footprint(chunk,coord)
 
     _spawn_saved_drops_for_chunk(chunk,coord)
     # Static bodies become queryable after the physics server synchronizes.
@@ -20953,6 +20948,38 @@ func _load_chunk(coord):
         if child.has_meta("is_enemy"):
             child.set_meta("spawn_pending",true)
     _schedule_chunk_enemy_spawns.call_deferred(chunk)
+
+func _record_map_footprint(chunk,coord):
+    var blocks = []
+    for b in chunk.get_children():
+        if not b.has_meta("world_building"):
+            continue
+        var size:Vector2 = b.get_meta("building_size",Vector2.ZERO)
+        if size.x < 16.0 or size.y < 16.0:
+            continue
+        var r = Rect2(b.position - size * 0.5,size)
+        blocks.append([int(round(r.position.x / 8.0)),int(round(r.position.y / 8.0)),max(1,int(round(r.size.x / 8.0))),max(1,int(round(r.size.y / 8.0)))])
+        if blocks.size() >= 24:
+            break
+    map_footprints[_zone_chunk_key(coord)] = blocks
+
+func _sanitize_map_footprints(raw) -> Dictionary:
+    var clean = {}
+    if typeof(raw) != TYPE_DICTIONARY:
+        return clean
+    for key in raw:
+        if not discovered_chunks.has(str(key)) or typeof(raw[key]) != TYPE_ARRAY:
+            continue
+        var blocks = []
+        for r in raw[key]:
+            if typeof(r) == TYPE_ARRAY and r.size() == 4:
+                blocks.append([clampi(int(r[0]),-8,104),clampi(int(r[1]),-8,104),clampi(int(r[2]),1,96),clampi(int(r[3]),1,96)])
+            if blocks.size() >= 24:
+                break
+        clean[str(key)] = blocks
+        if clean.size() >= 4096:
+            break
+    return clean
 
 func _schedule_chunk_enemy_spawns(chunk):
     pending_spawn_chunks.append(chunk)
@@ -33317,6 +33344,7 @@ func _save_state():
         "base_objects":base_objects,
         "next_base_id":next_base_id,
         "discovered_chunks":discovered_chunks,
+        "map_footprints":_sanitize_map_footprints(map_footprints),
         "discovered_pois":discovered_pois,
         "faction_state":faction_state,
         "expedition_journal":expedition_journal,
@@ -33549,6 +33577,7 @@ func _load_state():
     base_objects = parsed.get("base_objects",[])
     next_base_id = int(parsed.get("next_base_id",1))
     discovered_chunks = parsed.get("discovered_chunks",{})
+    map_footprints = _sanitize_map_footprints(parsed.get("map_footprints",{}))
     discovered_pois = parsed.get("discovered_pois",{})
     var raw_faction_state = parsed.get("faction_state",{})
     var had_supply_event_state = typeof(raw_faction_state) == TYPE_DICTIONARY and raw_faction_state.has("supply_events")
