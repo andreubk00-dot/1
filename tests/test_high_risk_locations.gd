@@ -210,7 +210,9 @@ func run():
     game._spawn_chunk_enemies(normal_chunk,Vector2i(21,20),12,112025,"standard")
     var special_in_standard = false
     for n in normal_chunk.get_children():
-        if n.has_meta("infected_kind") and str(n.get_meta("infected_kind","normal")) != "normal":
+        # dev59: runners and heavies may walk the streets; the qualitative
+        # specials and the armored stay in high-risk sites
+        if n.has_meta("infected_kind") and str(n.get_meta("infected_kind","normal")) not in ["normal","runner","brute"]:
             special_in_standard = true
     check(not special_in_standard, "dangerous infected leaked into standard encounter profile")
     normal_chunk.queue_free()

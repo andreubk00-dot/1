@@ -303,6 +303,14 @@ func _build_settings() -> void:
     _style_check(_shake)
     _shake.toggled.connect(func(_on): _apply_from_ui())
     v.add_child(_shake)
+    if game != null and game.get("field_hints") != null:
+        var hints = CheckBox.new()
+        hints.text = "Подсказки для новичка"
+        hints.add_theme_font_size_override("font_size", 7)
+        hints.button_pressed = bool(game.field_hints.enabled)
+        _style_check(hints)
+        hints.toggled.connect(func(on): game.field_hints.enabled = on)
+        v.add_child(hints)
     v.add_child(_button("НАЗАД", func(): _show(_main_box)))
 
 

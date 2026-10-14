@@ -103,6 +103,11 @@ const SURVIVOR_CELL = 128
 const SURVIVOR_SPRITE_SCALE = 0.390625
 # 0.77: original 3D-rig infected use the same high-density cell approach as the survivor.
 const INFECTED_CELL = 128
+# variants 0-3 share the base sheets; each body from 4 up has its own pair
+const INFECTED_EXTRA_SHEETS = ["runner","brute","screamer","spitter","carrier","soldier","patient","hazmat"]
+const INFECTED_VARIANT_SOLDIER = 9
+const INFECTED_VARIANT_PATIENT = 10
+const INFECTED_VARIANT_HAZMAT = 11
 # 1.38 dev56: infected sheets drawn at 1.24x density (tools/infected3d.py RENDER_K):
 # at 0.5 a texel is one screen pixel, same world size as the old 0.62
 const INFECTED_SPRITE_SCALE = 0.5
@@ -121,11 +126,14 @@ const ENEMY_SPEED = ENEMY_BASE_SPEED
 # before the finishing blow is the counterplay; it must not become another HP check.
 const INFECTED_ARCHETYPES = {
     "normal":{"label":"ОБЫЧНЫЙ","hp_mult":1.0,"speed_mult":1.0,"damage":8.0,"attack_interval":0.90,"detection_mult":1.0,"hearing_mult":1.0,"stagger_mult":1.0,"knockback_mult":1.0,"visual_variant":-1},
-    "runner":{"label":"РЫВКОВЫЙ","hp_mult":0.88,"speed_mult":1.18,"damage":7.0,"attack_interval":0.74,"detection_mult":1.12,"hearing_mult":1.08,"stagger_mult":1.0,"knockback_mult":1.0,"visual_variant":1},
-    "brute":{"label":"ТЯЖЁЛЫЙ","hp_mult":1.34,"speed_mult":0.82,"damage":12.0,"attack_interval":1.10,"detection_mult":0.92,"hearing_mult":1.12,"stagger_mult":0.66,"knockback_mult":0.72,"visual_variant":3},
-    "screamer":{"label":"КРИКУН","hp_mult":0.76,"speed_mult":0.92,"damage":5.0,"attack_interval":1.10,"detection_mult":1.14,"hearing_mult":1.24,"stagger_mult":1.12,"knockback_mult":1.08,"visual_variant":2,"special_role":"caller","call_radius":400.0,"call_trigger_range":240.0,"call_windup":0.82,"call_cooldown":14.0,"call_interrupt_cooldown":5.8},
-    "spitter":{"label":"ПЛЕВУН","hp_mult":0.82,"speed_mult":0.87,"damage":4.0,"attack_interval":1.18,"detection_mult":1.10,"hearing_mult":1.02,"stagger_mult":1.08,"knockback_mult":1.05,"visual_variant":0,"special_role":"spitter","spit_min_range":96.0,"spit_max_range":285.0,"spit_windup":0.76,"spit_cooldown":8.0,"spit_interrupt_cooldown":3.7,"spit_impact_radius":24.0,"spit_damage":5.5,"spit_slow_time":2.2,"spit_slow_mult":0.80},
-    "carrier":{"label":"НОСИТЕЛЬ","hp_mult":0.86,"speed_mult":0.84,"damage":6.0,"attack_interval":1.08,"detection_mult":0.98,"hearing_mult":1.06,"stagger_mult":1.16,"knockback_mult":1.20,"visual_variant":3,"special_role":"carrier","cloud_delay":0.40,"cloud_radius":58.0,"cloud_duration":3.2,"cloud_damage_per_sec":1.7,"cloud_stamina_per_sec":5.5,"cloud_contamination_per_sec":3.6}
+    "runner":{"label":"РЫВКОВЫЙ","hp_mult":0.88,"speed_mult":1.18,"damage":7.0,"attack_interval":0.74,"detection_mult":1.12,"hearing_mult":1.08,"stagger_mult":1.0,"knockback_mult":1.0,"visual_variant":4},
+    "brute":{"label":"ТЯЖЁЛЫЙ","hp_mult":1.34,"speed_mult":0.82,"damage":12.0,"attack_interval":1.10,"detection_mult":0.92,"hearing_mult":1.12,"stagger_mult":0.66,"knockback_mult":0.72,"visual_variant":5},
+    # dev59: high-risk only - a soldier who died in his plate carrier; bullets
+    # into the plates lose most of their force, blades and the shove do not care
+    "armored":{"label":"БРОНИРОВАННЫЙ","hp_mult":1.05,"speed_mult":0.86,"damage":10.0,"attack_interval":1.0,"detection_mult":0.96,"hearing_mult":1.0,"stagger_mult":0.8,"knockback_mult":0.85,"visual_variant":9,"bullet_armor":0.5},
+    "screamer":{"label":"КРИКУН","hp_mult":0.76,"speed_mult":0.92,"damage":5.0,"attack_interval":1.10,"detection_mult":1.14,"hearing_mult":1.24,"stagger_mult":1.12,"knockback_mult":1.08,"visual_variant":6,"special_role":"caller","call_radius":400.0,"call_trigger_range":240.0,"call_windup":0.82,"call_cooldown":14.0,"call_interrupt_cooldown":5.8},
+    "spitter":{"label":"ПЛЕВУН","hp_mult":0.82,"speed_mult":0.87,"damage":4.0,"attack_interval":1.18,"detection_mult":1.10,"hearing_mult":1.02,"stagger_mult":1.08,"knockback_mult":1.05,"visual_variant":7,"special_role":"spitter","spit_min_range":96.0,"spit_max_range":285.0,"spit_windup":0.76,"spit_cooldown":8.0,"spit_interrupt_cooldown":3.7,"spit_impact_radius":24.0,"spit_damage":5.5,"spit_slow_time":2.2,"spit_slow_mult":0.80},
+    "carrier":{"label":"НОСИТЕЛЬ","hp_mult":0.86,"speed_mult":0.84,"damage":6.0,"attack_interval":1.08,"detection_mult":0.98,"hearing_mult":1.06,"stagger_mult":1.16,"knockback_mult":1.20,"visual_variant":8,"special_role":"carrier","cloud_delay":0.40,"cloud_radius":58.0,"cloud_duration":3.2,"cloud_damage_per_sec":1.7,"cloud_stamina_per_sec":5.5,"cloud_contamination_per_sec":3.6}
 }
 const SPRINT_SPEED_MULT = 1.32
 const PLAYER_WALK_ACCEL = 310.0
@@ -2805,6 +2813,9 @@ func _show_import_not_ready_screen() -> void:
 const PIXEL_UI_FONT = "res://fonts/DejaVuSans-Bold.ttf"
 const PauseMenu = preload("res://world/pause_menu.gd")
 var pause_menu = null
+const FieldHints = preload("res://world/field_hints.gd")
+var field_hints = null
+var field_hints_saved = {}
 var pixel_ui_font = null
 
 func _open_menu(menu_mode:String):
@@ -2916,16 +2927,22 @@ func _ready():
         _grid_add(inventory_entries, "cap", 1, INV_W, INV_H)
         _grid_add(inventory_entries, "combat_knife", 1, INV_W, INV_H)
         if Engine.has_meta("ostatok_new_game"):
-            # a run started from the menu begins dressed: pack on the back,
-            # torch at hand (the first night falls within the hour), cap on
+            # a run started from the menu begins dressed (pack, torch, cap),
+            # in the morning - a whole day to learn the streets - with hints
             Engine.remove_meta("ostatok_new_game")
             for gear in ["field_backpack","flashlight","cap"]:
                 _equip_item(gear)
+            world_minutes = 7.5 * 60.0
+            field_hints_saved = {"enabled":true,"seen":{}}
 
     _ensure_runtime_item_instance_ids()
     _ensure_weapon_runtime_state(not has_meta("loaded_save") and weapon_instance_states.is_empty())
 
     _create_player()
+    field_hints = FieldHints.new()
+    field_hints.game = self
+    field_hints.load_state(field_hints_saved)
+    add_child(field_hints)
     _ensure_shelter_threat_indicator()
     _create_weather_visuals()
     _create_day_night()
@@ -4085,6 +4102,8 @@ func _process(delta):
         _update_player_death(delta)
         return
     _update_death_fade_in(delta)
+    if field_hints != null:
+        field_hints.update(delta)
 
     fire_cooldown = max(0.0, fire_cooldown - delta)
     infected_spit_slow_time = max(0.0,infected_spit_slow_time - delta)
@@ -7646,7 +7665,7 @@ func _fire_weapon():
                     impact_hits[enemy_iid] = {"enemy":collider,"hits":0,"dir":shot_dir}
                 impact_hits[enemy_iid]["hits"] = int(impact_hits[enemy_iid].get("hits",0)) + 1
                 impact_hits[enemy_iid]["dir"] = shot_dir
-                _damage_enemy(collider, damage, shot_dir)
+                _damage_enemy(collider, damage * _enemy_bullet_armor_factor(collider,shot_dir), shot_dir)
         if i == int(shot_dirs.size() / 2):
             first_end = end
         if shot_dirs.size() > 1:
@@ -7899,6 +7918,16 @@ func _cached_world_audio(kind):
     world_audio_cache[key] = stream
     return stream
 
+# voice of the body making the sound: a heavy growls lower, a runner higher
+var sfx_pitch_base = 1.0
+const INFECTED_VOICE_PITCH = {"brute":0.82,"armored":0.9,"carrier":0.88,"runner":1.12,"screamer":1.18,"spitter":1.06}
+
+func _play_infected_voice(enemy,kind,volume_db,max_distance,pitch_variation):
+    sfx_pitch_base = float(INFECTED_VOICE_PITCH.get(str(enemy.get_meta("infected_kind","normal")),1.0))
+    var played = _play_distance_sfx(kind,enemy.global_position,volume_db,max_distance,pitch_variation)
+    sfx_pitch_base = 1.0
+    return played
+
 func _play_world_sfx(kind, volume_db = -12.0, pitch_variation = 0.018):
     if world_audio_players.is_empty():
         _create_world_audio_layer()
@@ -7912,7 +7941,7 @@ func _play_world_sfx(kind, volume_db = -12.0, pitch_variation = 0.018):
     voice.stream = stream
     voice.volume_db = float(volume_db)
     var spread = max(0.0,float(pitch_variation))
-    voice.pitch_scale = randf_range(1.0 - spread,1.0 + spread) if spread > 0.0001 else 1.0
+    voice.pitch_scale = sfx_pitch_base * (randf_range(1.0 - spread,1.0 + spread) if spread > 0.0001 else 1.0)
     voice.play()
     return true
 
@@ -8255,6 +8284,19 @@ func _spawn_temp_tracer(origin,end,lifetime):
     timer.timeout.connect(line.queue_free)
 
 
+func _enemy_bullet_armor_factor(enemy,shot_dir:Vector2) -> float:
+    var armor = float(enemy.get_meta("bullet_armor",0.0))
+    if armor <= 0.0:
+        return 1.0
+    # the plates cover the chest: a shot into the back goes through
+    var a = float(int(enemy.get_meta("infected_visual_dir",0))) * PI / 4.0
+    var facing = Vector2(cos(a),sin(a))
+    if facing.dot(shot_dir.normalized()) > 0.35:
+        return 1.0
+    if randf() < 0.35:
+        _play_distance_sfx("melee_hit",enemy.global_position,-14.0,420.0,0.02)
+    return 1.0 - armor
+
 func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
     if not is_instance_valid(enemy):
         return
@@ -8267,7 +8309,7 @@ func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
         # the body snaps back from the hit (visual only, see _update_enemies)
         enemy.set_meta("hit_recoil",0.18)
         enemy.set_meta("hit_recoil_dir",hit_dir)
-        _play_distance_sfx("infected_hurt",enemy.global_position,-11.5,520.0,0.028)
+        _play_infected_voice(enemy,"infected_hurt",-11.5,520.0,0.028)
         _infected_interrupt_special(enemy)
         enemy.set_meta("last_known_position",player.global_position)
         enemy.set_meta("suspicion",100.0)
@@ -8275,7 +8317,7 @@ func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
         _enemy_set_state(enemy,"chase",4.5)
 
     if hp <= 0.0:
-        _play_distance_sfx("infected_death",enemy.global_position,-8.5,650.0,0.022)
+        _play_infected_voice(enemy,"infected_death",-8.5,650.0,0.022)
         if str(enemy.get_meta("special_role","")) == "carrier" and not bool(enemy.get_meta("carrier_cloud_spawned",false)):
             enemy.set_meta("carrier_cloud_spawned",true)
             _spawn_carrier_death_cloud(enemy.global_position,enemy)
@@ -13440,7 +13482,6 @@ func _create_hud():
     hud_feedback_panel.clip_contents = true
     hud_feedback_panel.visible = false
     hud_world_root.add_child(hud_feedback_panel)
-    _hud_add_panel_detail(hud_feedback_panel,hud_feedback_panel.size,accent)
     hud_feedback_label = _hud_make_label(
         hud_feedback_panel,Vector2(10,5),Vector2(400,30),"",5,Color(0.94,0.92,0.84),HORIZONTAL_ALIGNMENT_CENTER
     )
@@ -13471,8 +13512,18 @@ func _update_hud():
     if hud_feedback_panel != null and hud_feedback_label != null:
         var feedback_visible = survival_feedback_time > 0.0 and survival_feedback != ""
         hud_feedback_panel.visible = feedback_visible
-        if feedback_visible:
+        if feedback_visible and hud_feedback_label.text != survival_feedback:
             hud_feedback_label.text = survival_feedback
+            # a compact card sized to its message, high above the player
+            var font = hud_feedback_label.get_theme_font("font")
+            var w = font.get_string_size(survival_feedback,HORIZONTAL_ALIGNMENT_LEFT,-1,6).x if font != null else 200.0
+            var width = clamp(w + 24.0,120.0,300.0)
+            var lines = 1 if w + 24.0 <= 300.0 else 2
+            hud_feedback_panel.size = Vector2(width,16.0 if lines == 1 else 24.0)
+            hud_feedback_panel.position = Vector2(round(320.0 - width * 0.5),66)
+            hud_feedback_label.position = Vector2(8,1)
+            hud_feedback_label.size = hud_feedback_panel.size - Vector2(16,2)
+            _hud_set_label_font_size(hud_feedback_label,6)
 
     if hud_rig_quick_panel != null and hud_rig_quick_label != null:
         var pocket_count = _rig_pocket_count()
@@ -13502,6 +13553,13 @@ func _update_hud():
     _hud_set_bar_value(hud_vital_bars["temperature"],temp_pct)
     _hud_set_bar_value(hud_vital_bars["infection"],infection_pct)
     _hud_set_bar_value(hud_vital_bars["fatigue"],fatigue_pct)
+    # a vital about to kill the player pulses red
+    var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * 7.0)
+    for pair in [["health",health_pct],["hunger",hunger_pct],["thirst",thirst_pct]]:
+        var bar = hud_vital_bars[pair[0]]
+        if bar == null:
+            continue
+        bar.modulate = Color(1.0,0.55 + 0.45 * pulse,0.55 + 0.45 * pulse) if float(pair[1]) < 20.0 else Color.WHITE
 
     hud_vital_values["health"].text = "%d/100" % int(health)
     hud_vital_values["stamina"].text = "%d/100" % int(stamina_pct)
@@ -18636,7 +18694,7 @@ func _spawn_high_risk_local_incident(chunk,coord:Vector2i,poi_id:String,cell_off
         var kind = _infected_kind_for_encounter(profile,rng)
         if bool(defeated.get(key,false)):
             continue
-        var enemy = _spawn_enemy(chunk,coord,spawn_id,pos,kind)
+        var enemy = _spawn_enemy(chunk,coord,spawn_id,pos,kind,profile)
         if is_instance_valid(enemy):
             enemy.set_meta("high_risk_incident",true)
             enemy.set_meta("high_risk_poi_id",poi_id)
@@ -20379,7 +20437,7 @@ func _build_high_risk_floor(root,poi_id:String,floor_index:int,data:Dictionary) 
         var key = "%d:%d:%d" % [anchor.x,anchor.y,spawn_id]
         var kind = _infected_kind_for_encounter(profile,rng)
         if not bool(defeated.get(key,false)):
-            _spawn_enemy(root,anchor,spawn_id,enemy_positions[i],kind)
+            _spawn_enemy(root,anchor,spawn_id,enemy_positions[i],kind,profile)
     _spawn_high_risk_floor_drops(root,poi_id,floor_index,anchor)
 
 func _hr_visual_override(specs:Array,index:int,pos:Vector2,size:Vector2,sign_text = "",archetype_text = "") -> void:
@@ -26855,7 +26913,16 @@ func _infected_kind_for_encounter(encounter_profile:String,rng) -> String:
     # Special roles replace baseline bodies instead of inflating headcount, and no single
     # profile stacks enough specials to turn every room into unavoidable chain pressure.
     match str(encounter_profile):
+        "standard":
+            # dev59: the streets are not all the same shamblers - now and then a
+            # runner or a heavy; the qualitative specials stay in high-risk sites
+            if roll < 0.05:
+                return "brute"
+            if roll < 0.13:
+                return "runner"
         "high_perimeter":
+            if roll < 0.06:
+                return "armored"
             if roll < 0.14:
                 return "brute"
             if roll < 0.34:
@@ -26867,6 +26934,8 @@ func _infected_kind_for_encounter(encounter_profile:String,rng) -> String:
                 return "spitter"
             if roll < 0.13:
                 return "carrier"
+            if roll < 0.19:
+                return "armored"
             if roll < 0.29:
                 return "brute"
             if roll < 0.54:
@@ -26878,6 +26947,8 @@ func _infected_kind_for_encounter(encounter_profile:String,rng) -> String:
                 return "spitter"
             if roll < 0.17:
                 return "carrier"
+            if roll < 0.25:
+                return "armored"
             if roll < 0.38:
                 return "brute"
             if roll < 0.67:
@@ -26932,6 +27003,8 @@ func _infected_kind_for_encounter(encounter_profile:String,rng) -> String:
                 return "spitter"
             if roll < 0.14:
                 return "carrier"
+            if roll < 0.22:
+                return "armored"
             if roll < 0.49:
                 return "brute"
             if roll < 0.68:
@@ -26973,10 +27046,29 @@ func _spawn_chunk_enemies(chunk,coord,count,seed_value,encounter_profile = "stan
         # the same infected is set down further off, inside the same chunk
         if player != null:
             p = _spawn_clear_of_player(chunk,p)
-        _spawn_enemy(chunk,coord,i,p,enemy_kind)
+        _spawn_enemy(chunk,coord,i,p,enemy_kind,str(encounter_profile))
 
 
-func _spawn_enemy(chunk,coord,spawn_id,local_pos,enemy_kind = "normal"):
+func _infected_sheet(variant:int,kind:String) -> String:
+    if variant < 4:
+        return "res://infected_%s_v12.png" % kind
+    return "res://art/infected/%s_%s.png" % [INFECTED_EXTRA_SHEETS[clampi(variant - 4,0,INFECTED_EXTRA_SHEETS.size() - 1)],kind]
+
+func _infected_row(variant:int) -> int:
+    return variant if variant < 4 else 0
+
+func _infected_site_variant(profile:String,spawn_id:int,zone:String) -> int:
+    # who an ordinary infected was before: the people of the place it haunts
+    var h = absi(spawn_id * 2654435761) % 100
+    if profile.begins_with("clinical_"):
+        return INFECTED_VARIANT_PATIENT if h < 60 else 1
+    if profile.begins_with("vector_"):
+        return INFECTED_VARIANT_HAZMAT if h < 55 else (INFECTED_VARIANT_SOLDIER if h < 75 else 3)
+    if profile.begins_with("high_") or zone == "military":
+        return INFECTED_VARIANT_SOLDIER if h < 55 else 3
+    return -1
+
+func _spawn_enemy(chunk,coord,spawn_id,local_pos,enemy_kind = "normal",encounter_profile = ""):
     var enemy = CharacterBody2D.new()
     enemy.name = "Infected_%d" % spawn_id
     enemy.position = local_pos
@@ -27015,6 +27107,7 @@ func _spawn_enemy(chunk,coord,spawn_id,local_pos,enemy_kind = "normal"):
     enemy.set_meta("attack_interval",float(combat_profile.get("attack_interval",0.90)))
     enemy.set_meta("stagger_mult",float(combat_profile.get("stagger_mult",1.0)))
     enemy.set_meta("knockback_mult",float(combat_profile.get("knockback_mult",1.0)))
+    enemy.set_meta("bullet_armor",float(combat_profile.get("bullet_armor",0.0)))
     enemy.set_meta("special_role",str(combat_profile.get("special_role","")))
     enemy.set_meta("call_radius",float(combat_profile.get("call_radius",0.0)))
     enemy.set_meta("call_trigger_range",float(combat_profile.get("call_trigger_range",0.0)))
@@ -27081,16 +27174,18 @@ func _spawn_enemy(chunk,coord,spawn_id,local_pos,enemy_kind = "normal"):
     enemy.set_meta("infected_shadow",shadow)
 
     var sprite = Sprite2D.new()
-    sprite.texture = load("res://infected_walk_v12.png")
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.region_enabled = true
     sprite.region_filter_clip_enabled = true
     var requested_variant = int(combat_profile.get("visual_variant",-1))
-    var infected_variant = abs(spawn_id) % 4 if requested_variant < 0 else clamp(requested_variant,0,3)
+    if requested_variant < 0:
+        requested_variant = _infected_site_variant(str(encounter_profile),int(spawn_id),zone)
+    var infected_variant = abs(spawn_id) % 4 if requested_variant < 0 else clampi(requested_variant,0,3 + INFECTED_EXTRA_SHEETS.size())
     enemy.set_meta("infected_variant",infected_variant)
     enemy.set_meta("infected_visual_dir",0)
     enemy.set_meta("attack_anim",0.0)
-    sprite.region_rect = Rect2(0,infected_variant * 8 * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
+    sprite.texture = load(_infected_sheet(infected_variant,"walk"))
+    sprite.region_rect = Rect2(0,_infected_row(infected_variant) * 8 * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
     sprite.position = Vector2(0,-7)
     sprite.scale = Vector2(INFECTED_SPRITE_SCALE,INFECTED_SPRITE_SCALE)
     sprite.z_index = 1
@@ -27841,26 +27936,28 @@ func _update_enemies(delta):
                 else:
                     infected_sprite.modulate = Color.WHITE
                 var infected_variant = int(enemy.get_meta("infected_variant",0))
-                var row8 = infected_variant * 8 + visual_dir
+                var row8 = _infected_row(infected_variant) * 8 + visual_dir
+                var attack_sheet = _infected_sheet(infected_variant,"attack")
+                var walk_sheet = _infected_sheet(infected_variant,"walk")
                 var frame = 0
                 var qa_attack_frame = int(enemy.get_meta("qa_attack_frame",-1))
                 if qa_attack_frame >= 0:
-                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != "res://infected_attack_v12.png":
-                        infected_sprite.texture = load("res://infected_attack_v12.png")
+                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != attack_sheet:
+                        infected_sprite.texture = load(attack_sheet)
                     frame = clamp(qa_attack_frame,0,INFECTED_ATTACK_FRAMES - 1)
                 elif attack_anim > 0.0:
-                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != "res://infected_attack_v12.png":
-                        infected_sprite.texture = load("res://infected_attack_v12.png")
+                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != attack_sheet:
+                        infected_sprite.texture = load(attack_sheet)
                     var attack_progress = clamp(1.0 - attack_anim / 0.26,0.0,1.0)
                     frame = min(INFECTED_ATTACK_FRAMES - 1,int(floor(attack_progress * INFECTED_ATTACK_FRAMES)))
                 elif not moving_visual and _infected_idle_pose(enemy,twitching) >= 0:
                     # hunched stances borrowed from the strike sheet
-                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != "res://infected_attack_v12.png":
-                        infected_sprite.texture = load("res://infected_attack_v12.png")
+                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != attack_sheet:
+                        infected_sprite.texture = load(attack_sheet)
                     frame = _infected_idle_pose(enemy,twitching)
                 else:
-                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != "res://infected_walk_v12.png":
-                        infected_sprite.texture = load("res://infected_walk_v12.png")
+                    if infected_sprite.texture == null or infected_sprite.texture.resource_path != walk_sheet:
+                        infected_sprite.texture = load(walk_sheet)
                     if moving_visual:
                         frame = int(floor(_infected_limp_phase(enemy,walk) * float(INFECTED_WALK_FRAMES))) % INFECTED_WALK_FRAMES
                 infected_sprite.region_rect = Rect2(frame * INFECTED_CELL,row8 * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
@@ -27882,7 +27979,7 @@ func _update_enemies(delta):
         ):
             attack_cd = max(0.58,float(enemy.get_meta("attack_interval",0.9)))
             attack_anim = 0.26
-            _play_distance_sfx("infected_attack",enemy.global_position,-9.0,360.0,0.025)
+            _play_infected_voice(enemy,"infected_attack",-9.0,360.0,0.025)
             _apply_enemy_hit(float(enemy.get_meta("attack_damage",8.0)))
 
         enemy.set_meta("ai_state",state)
@@ -29457,13 +29554,13 @@ func _corpse_texture(variant:int,dir:int,cw:bool):
     var key = "%d:%d:%s" % [variant,dir,cw]
     if _corpse_tex.has(key):
         return _corpse_tex[key]
-    var sheet = load("res://infected_walk_v12.png")
+    var sheet = load(_infected_sheet(variant,"walk"))
     var img = sheet.get_image() if sheet != null else null
     if img == null:
         return null
     if img.is_compressed():
         img.decompress()
-    var cell = img.get_region(Rect2i(0,(variant * 8 + dir) * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL))
+    var cell = img.get_region(Rect2i(0,(_infected_row(variant) * 8 + dir) * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL))
     cell = cell.get_region(cell.get_used_rect())
     cell.rotate_90(CLOCKWISE if cw else COUNTERCLOCKWISE)
     # dead flesh and cloth: a touch darker and greyer than the living
@@ -29493,8 +29590,8 @@ func _spawn_infected_corpse(enemy,hit_dir:Vector2):
     stand.atlas = sprite.texture
     stand.region = sprite.region_rect
     var kneel = AtlasTexture.new()
-    kneel.atlas = load("res://infected_attack_v12.png")
-    kneel.region = Rect2(4 * INFECTED_CELL,(variant * 8 + dir) * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
+    kneel.atlas = load(_infected_sheet(variant,"attack"))
+    kneel.region = Rect2(4 * INFECTED_CELL,(_infected_row(variant) * 8 + dir) * INFECTED_CELL,INFECTED_CELL,INFECTED_CELL)
     var body = Sprite2D.new()
     body.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     body.texture = stand
@@ -33345,6 +33442,7 @@ func _save_state():
         "next_base_id":next_base_id,
         "discovered_chunks":discovered_chunks,
         "map_footprints":_sanitize_map_footprints(map_footprints),
+        "field_hints":field_hints.state() if field_hints != null else field_hints_saved,
         "discovered_pois":discovered_pois,
         "faction_state":faction_state,
         "expedition_journal":expedition_journal,
@@ -33578,6 +33676,9 @@ func _load_state():
     next_base_id = int(parsed.get("next_base_id",1))
     discovered_chunks = parsed.get("discovered_chunks",{})
     map_footprints = _sanitize_map_footprints(parsed.get("map_footprints",{}))
+    field_hints_saved = parsed.get("field_hints",{}) if typeof(parsed.get("field_hints",{})) == TYPE_DICTIONARY else {}
+    if field_hints != null:
+        field_hints.load_state(field_hints_saved)
     discovered_pois = parsed.get("discovered_pois",{})
     var raw_faction_state = parsed.get("faction_state",{})
     var had_supply_event_state = typeof(raw_faction_state) == TYPE_DICTIONARY and raw_faction_state.has("supply_events")

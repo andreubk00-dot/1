@@ -44,7 +44,9 @@ func run():
 
     # New role is authored-risk content, not a global replacement for common infected.
     var standard = _sample_mix(game,"standard",121001,800)
-    check(int(standard.get("normal",0)) == 800, "Screamer leaked into standard encounters")
+    # dev59: the street mix adds runners and heavies, never the specials
+    check(int(standard.get("normal",0)) + int(standard.get("runner",0)) + int(standard.get("brute",0)) == 800, "Screamer leaked into standard encounters")
+    check(int(standard.get("normal",0)) >= 640, "standard streets lost their ordinary infected")
     check(int(standard.get("screamer",0)) == 0, "standard profile rolled Screamer")
     var high_perimeter = _sample_mix(game,"high_perimeter",121002,800)
     check(int(high_perimeter.get("screamer",0)) == 0, "Screamer should not spawn on high-risk perimeter in dev1")
