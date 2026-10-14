@@ -45,6 +45,15 @@
 - melee_swing, item_drop — «RPG Audio» https://kenney.nl/assets/rpg-audio
 - melee_hit, workbench, player_hit, spit_hit — «Impact Sounds» https://kenney.nl/assets/impact-sounds
 
+## Использование предметов и контейнеры — `audio/world/`
+- drink — https://opengameart.org/content/liquid-bottle-drink-set (qubodup)
+- eat — https://opengameart.org/content/7-eating-crunches (Tito)
+- bandage, bag_rummage, container_open, container_close — Kenney «RPG Audio» https://kenney.nl/assets/rpg-audio
+
+## Шаги по снегу — `audio/world/steps/snow_*.wav`
+- snow_1-5 — Kenney «Impact Sounds» https://kenney.nl/assets/impact-sounds
+- snow_6-9 — https://opengameart.org/content/42-snow-and-gravel-footsteps (Corsica_S)
+
 ## Двери — `audio/world/door_*.wav`
 - https://opengameart.org/content/door-open-door-close-set (qubodup)
 

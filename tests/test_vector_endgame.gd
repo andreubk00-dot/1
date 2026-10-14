@@ -174,7 +174,7 @@ func run():
         for child in chunk.get_children():
             if child.has_meta("infected_kind"):
                 infected += 1
-                check(["normal","runner","brute","screamer","spitter","carrier"].has(str(child.get_meta("infected_kind",""))), "Vector spawned unknown infected archetype")
+                check(["normal","runner","brute","screamer","spitter","carrier","armored"].has(str(child.get_meta("infected_kind",""))), "Vector spawned unknown infected archetype")
         check(infected == int(PoiCatalog.cell(id,off).get("enemy_count",0)), "production Vector enemy count mismatch " + str(coord))
         chunk.queue_free()
 

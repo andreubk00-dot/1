@@ -54,8 +54,17 @@ func run()->void:
 
     game.is_sheltered = false
     game.weather_state = "rain"
+    # dev60: below freezing the rain falls as snow (no rain bed) - check rain
+    # in the warm afternoon, snow in the frost before dawn
+    var night_minutes = game.world_minutes
+    game.world_minutes = 14.0 * 60.0
     state = game._ambience_selection()
     check(bool(state.get("rain",false)),"outdoor rain must enable rain layer")
+    game.world_minutes = 5.0 * 60.0
+    check(game._is_snowing(),"freezing precipitation must fall as snow")
+    check(not bool(game._ambience_selection().get("rain",false)),"snowfall must not play the rain bed")
+    game.world_minutes = night_minutes
+    state = game._ambience_selection()
 
     game.is_sheltered = true
     state = game._ambience_selection()

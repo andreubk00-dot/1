@@ -1002,3 +1002,66 @@ Found by a scripted play session from a fresh start:
   autohinter, which merged strokes at the smallest sizes («мм» read as «ии»,
   word spaces vanished). Wrapping labels now use their second line before
   they shrink the text, so the objective hint stays at the normal size.
+
+## dev58 — a field map you can read
+
+- Explored sectors are drawn as the place really is: the crossroads every
+  sector is built on (asphalt in town, dirt in the dachas and woods, concrete
+  in the industrial and military belts), the blocks between them coloured by
+  district, and the footprints of the buildings seen there. Footprints are
+  recorded when a sector loads and saved with the discovered sectors.
+- The player dot stands where the player stands inside the sector; a pencil
+  line runs to the current objective mark.
+- The sector card keeps distance and travel time, district, danger, the
+  landmark and established routes. Survey statistics, "character" blurbs,
+  landmark lists, fold lines and stamp texts are gone; the map is larger and
+  has four zoom steps (it opens one step closer).
+
+## dev59 — hints, a morning start and infected you can tell apart
+
+- **Field hints** (`world/field_hints.gd`): a game started from the menu shows
+  one-time tips at the top centre as things first happen - movement, the
+  goal and the map, E, the inventory, the first infected and every special
+  type (how to fight it), wounds, the dark, thirst, food, cold, rest. Saved
+  with the game; Settings → «Подсказки для новичка».
+- **Life-threat warnings** always: dehydration, exhaustion, critical health,
+  bleeding, hypothermia - a red card every 40 s while it lasts; the dying
+  vital's bar pulses red.
+- A new game from the menu starts at 07:30.
+- **Bodies**: `tools/infected3d.py` renders eight more bodies, each in its own
+  sheet pair under `art/infected/`: the runner (lean, in a tracksuit, a
+  stumbling sprint), the brute (half again as broad, heavy wide gait), the
+  screamer (gaunt, head thrown back, mouth open), the spitter (swollen throat
+  sac), the carrier (bloated, pustules, orange overalls), and the dead of the
+  high-risk sites: soldiers in plate carriers, patients in gowns, hazmat
+  crews. A big body is drawn with more pixels, never bigger ones.
+- **Armored** infected (high-risk only): bullets into the plates lose half
+  their force; a shot into the back, a blade or the shove do not care.
+- Runners and heavies now also appear in ordinary streets (about 1 in 8);
+  the qualitative specials stay in high-risk sites. Infected voices are
+  pitched by body.
+- The survival feedback is a compact card above the scene, sized to its text.
+
+## dev60 — a body with weight, snow, sounds of use, an ending
+
+- **Secondary motion baked into every survivor sheet** (`tools/survivor3d.py`):
+  the backpack and bedroll hang on the straps and trail the torso by a beat,
+  bouncing and swinging (lower parts further than the lid); the head turns
+  against the shoulder swing to keep the gaze steady and settles a moment
+  after the body; at rest the pack breathes with the chest and the eyes
+  wander (Idle2 looks around).
+- **Body spring at runtime**: the torso rides the legs on a damped spring -
+  it lags a start, sways past a hard stop and settles with one soft rebound,
+  rocks back with each shot (heavier guns further) and is shoved by a blow.
+  Whole-pixel offsets only; steady walking stays still. The camera leads the
+  way the survivor is heading.
+- **Snow**: when it rains below freezing it snows - flakes drift instead of
+  streaks, the ground gathers drifts over a couple of minutes and keeps them
+  while it stays cold, the HUD says СНЕГ, footsteps crunch (Kenney and
+  Corsica_S snow takes), the rain bed goes quiet.
+- **New CC0 sounds**: drinking (qubodup «Liquid Bottle Drink Set»), eating
+  (Tito «7 eating crunches»), bandaging, opening and closing containers,
+  rummaging in the pack (Kenney RPG Audio). Credits in `audio/CREDITS_CC0.md`.
+- **Ending**: when the crisis season ends the screen fades and reads out the
+  region's fate, each settlement's state and the survivor's tally; the world
+  can go on or the player returns to the menu.

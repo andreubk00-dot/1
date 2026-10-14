@@ -384,6 +384,15 @@ var movement_anim_blend = 0.0
 var visual_move_direction = Vector2.ZERO
 var visual_move_speed = 0.0
 var visual_motion_impulse = Vector2.ZERO
+# dev60: the body is a damped spring on the legs - it lags a start, sways
+# past a hard stop and settles, takes a shot's recoil and a blow's shove.
+# Offsets are in player-visual units, snapped to whole screen pixels later.
+var body_spring_pos = Vector2.ZERO
+var body_spring_vel = Vector2.ZERO
+const BODY_SPRING_K = 190.0
+const BODY_SPRING_C = 13.0
+const BODY_SPRING_MASS = 0.0021
+const BODY_SPRING_MAX = 1.5
 var visual_facing_left = false
 var visual_move_cardinal = 2
 var visual_aim_dir8 = 0
@@ -4186,6 +4195,7 @@ func _process(delta):
         impulse_target.limit_length(0.42),
         min(1.0,delta * (10.0 if velocity_delta.length() > 1.0 else 6.0))
     )
+    _step_body_spring(velocity_delta / max(delta,0.001),delta)
 
     var actual_displacement = player.global_position - frame_start_position
     var instant_visual_speed = actual_displacement.length() / max(delta,0.001)
@@ -6809,6 +6819,8 @@ func _update_player_visuals(delta):
     var impact_drop = Vector2(0,foot_contact * 0.012 * blend * locomotion_strength)
     var pose_offset = Vector2(idle_weight + idle_micro,idle_breath - 1.0)
     pose_offset += planted_shift + forward_mass + impact_drop + visual_motion_impulse * 0.72 + Vector2(0,body_bob)
+    # the spring: top-down, a sway along the ground reads half as tall
+    pose_offset += Vector2(body_spring_pos.x,body_spring_pos.y * 0.6)
     pose_offset += _body_state_offset(phase,blend)
     if interact_anim > 0.0 and interact_kind == "reach":
         # a push or a reach: the body leans a pixel or two toward the target
@@ -6885,6 +6897,8 @@ func _update_player_visuals(delta):
             0,
             -11 + body_bob * 0.12
         )
+        # the frame leads where the survivor is heading, a little more at a run
+        desired += player.velocity * (0.22 if is_sprinting else 0.14)
         camera.position = camera.position.lerp(
             desired,
             min(1.0,delta * 6.0 + 0.2)
@@ -7241,6 +7255,25 @@ func _hurt_rect_node():
         layer.add_child(_hurt_rect)
     return _hurt_rect
 
+func _step_body_spring(accel:Vector2,delta:float):
+    # semi-implicit Euler in small steps; the legs accelerate, the torso and
+    # the pack are dragged along a moment later
+    if inventory_open or trader_open or contract_open or region_map_open or developer_panel_open:
+        accel = Vector2.ZERO
+    accel = accel.limit_length(1400.0)
+    var steps = clampi(int(ceil(delta / 0.008)),1,6)
+    var h = delta / float(steps)
+    for i in range(steps):
+        var force = -body_spring_pos * BODY_SPRING_K - body_spring_vel * BODY_SPRING_C - accel * BODY_SPRING_MASS * BODY_SPRING_K
+        body_spring_vel += force * h
+        body_spring_pos += body_spring_vel * h
+    if body_spring_pos.length() > BODY_SPRING_MAX:
+        body_spring_pos = body_spring_pos.limit_length(BODY_SPRING_MAX)
+        body_spring_vel *= 0.5
+
+func _body_spring_kick(dir:Vector2,strength:float):
+    body_spring_vel += dir.normalized() * strength
+
 func _hurt_feedback(amount:float):
     hurt_flash = clamp(hurt_flash + 0.45 + amount / 30.0,0.0,1.0)
     var away = Vector2.ZERO
@@ -7255,6 +7288,8 @@ func _hurt_feedback(amount:float):
         away = Vector2.RIGHT.rotated(randf() * TAU)
     var shake_on = bool(get_meta("settings",{}).get("camera_shake",true)) if has_meta("settings") else true
     camera_kick = away * clamp(2.5 + amount * 0.25,2.5,6.0) * (1.0 if shake_on else 0.0)
+    # the blow shoves the body, the legs catch it
+    _body_spring_kick(away,clamp(12.0 + amount * 0.8,12.0,26.0))
 
 func _update_hurt_vignette(delta):
     hurt_flash = max(0.0,hurt_flash - delta * 1.8)
@@ -7637,6 +7672,8 @@ func _fire_weapon():
     fire_cooldown = float(weapon.get("interval",0.25))
     weapon_recoil_duration = float(weapon.get("recoil",0.10))
     weapon_recoil_time = weapon_recoil_duration
+    # the shot rocks the shoulders back: heavier guns further
+    _body_spring_kick(-aim_direction,clamp(float(weapon.get("damage",30.0)) / 30.0,0.6,2.2) * 9.0)
     _damage_weapon_condition(current_weapon_id,weapon,iid)
     _schedule_weapon_cycle(current_weapon_id,weapon)
 
@@ -7819,7 +7856,7 @@ func _create_world_audio_layer():
 # machine-guns one sample: stone (asphalt, pavement, concrete and tiled
 # floors), grass (yards, verges, fields), gravel (dirt roads, military and
 # industrial grounds), wood (homes, shops, sheds).
-const STEP_TAKES = {"stone":11,"grass":11,"gravel":6,"wood":8}
+const STEP_TAKES = {"stone":11,"grass":11,"gravel":6,"wood":8,"snow":9}
 const WOOD_FLOOR_LOOT = ["residential","grocery","rural","forest_cache"]
 var _last_step_take = ""
 var _infected_step_gate = 0
@@ -7842,6 +7879,8 @@ func _footstep_surface_at(p:Vector2) -> String:
             if Rect2(b.global_position - size * 0.5,size).has_point(p):
                 var arche = BuildingCatalog.ARCHETYPES.get(str(b.get_meta("world_archetype","")),{})
                 return "wood" if str(arche.get("loot","residential")) in WOOD_FLOOR_LOOT else "stone"
+    if snow_cover > 0.35:
+        return "snow"
     var local = p - Vector2(coord) * CHUNK_SIZE
     var family = _ground_family(coord)
     var on_way = (local.x >= 274.0 and local.x < 494.0) or (local.y >= 274.0 and local.y < 494.0)
@@ -7904,6 +7943,12 @@ func _world_sfx_path(kind):
         "infected_spit": return "res://audio/infected/infected_spit.wav"
         "player_hit": return "res://audio/infected/player_hit.wav"
         "spit_hit": return "res://audio/infected/spit_hit.wav"
+        "drink": return "res://audio/world/drink.wav"
+        "eat": return "res://audio/world/eat.wav"
+        "bandage": return "res://audio/world/bandage.wav"
+        "bag_rummage": return "res://audio/world/bag_rummage.wav"
+        "container_open": return "res://audio/world/container_open.wav"
+        "container_close": return "res://audio/world/container_close.wav"
     return ""
 
 func _cached_world_audio(kind):
@@ -8023,7 +8068,7 @@ func _ambience_selection():
     var base = "interior" if is_sheltered else ("night" if _time_night_factor() >= 0.50 else "day")
     return {
         "base":base,
-        "rain":weather_state == "rain" and not is_sheltered
+        "rain":weather_state == "rain" and not is_sheltered and not _is_snowing()
     }
 
 func _ambience_target_volume(kind,selection = {}):
@@ -9212,6 +9257,7 @@ func _quick_bandage():
             _stabilize_worst_injury(2.5)
             stamina = min(_survival_stamina_cap(),stamina + 3.0)
             _set_survival_feedback("Бинт: кровотечение остановлено")
+            _play_world_sfx("bandage",-10.0,0.03)
             _refresh_inventory_ui()
         return
 
@@ -9219,6 +9265,7 @@ func _quick_bandage():
         return
 
     if _use_sterile_bandage() and _consume_inventory_item("sterile_bandage",1):
+        _play_world_sfx("bandage",-10.0,0.03)
         _refresh_inventory_ui()
 
 func _item_uses_instance_id(item_id):
@@ -13509,6 +13556,16 @@ func _update_hud():
     # inventory/workbench overlays, matching the diegetic multi-panel target.
     hud_world_root.visible = true
 
+    # the inventory covers the bottom left of the screen: the stance card
+    # would draw over its buttons (the quick bar stays - keys 1-6 bind there)
+    for covered in ["StealthPanel","RigQuickPockets"]:
+        var panel = hud_world_root.get_node_or_null(covered)
+        if panel != null:
+            if inventory_open:
+                panel.visible = false
+            elif covered != "RigQuickPockets":
+                panel.visible = true
+
     if hud_feedback_panel != null and hud_feedback_label != null:
         var feedback_visible = survival_feedback_time > 0.0 and survival_feedback != ""
         hud_feedback_panel.visible = feedback_visible
@@ -13527,7 +13584,7 @@ func _update_hud():
 
     if hud_rig_quick_panel != null and hud_rig_quick_label != null:
         var pocket_count = _rig_pocket_count()
-        hud_rig_quick_panel.visible = pocket_count > 0
+        hud_rig_quick_panel.visible = pocket_count > 0 and not inventory_open
         if pocket_count > 0:
             rig_quick_ids = _sanitize_rig_quick_ids(rig_quick_ids)
             var pocket_text = []
@@ -17028,6 +17085,8 @@ func _close_inventory():
 
     if inventory_open:
         _play_ui_sfx("close")
+        if active_container_key != "":
+            _play_world_sfx("container_close",-14.0,0.04)
     inventory_open = false
     active_container_key = ""
     selected_inventory_index = -1
@@ -17052,6 +17111,7 @@ func _open_container(key):
     active_container_key = key
     inventory_open = true
     _play_ui_sfx("open")
+    _play_world_sfx("container_open",-13.0,0.04)
     selected_inventory_index = -1
     selected_container_index = -1
     _refresh_inventory_ui()
@@ -18068,8 +18128,21 @@ func _use_selected_inventory():
     elif use_type == "weapon_mod":
         _install_selected_weapon_mod()
 
+    _play_use_sfx(use_type)
     selected_inventory_index = -1
     call_deferred("_refresh_inventory_ui")
+
+const USE_SFX = {
+    "water":"drink","water_container":"drink","dirty_water":"drink","herbal_tea":"drink",
+    "food":"eat","hot_meal":"eat","emergency_ration":"eat",
+    "bandage":"bandage","sterile_bandage":"bandage","trauma_kit":"bandage","antiseptic":"bandage",
+    "antibiotics":"bag_rummage","painkillers":"bag_rummage","gear":"bag_rummage","bedroll":"bag_rummage",
+}
+
+func _play_use_sfx(use_type):
+    var kind = str(USE_SFX.get(str(use_type),""))
+    if kind != "":
+        _play_world_sfx(kind,-10.0,0.03)
 
 func _consume_entry_at(index, amount):
     if index < 0 or index >= inventory_entries.size():
@@ -28940,7 +29013,7 @@ func _weather_display_name():
     if fog_density > 0.35 and weather_state != "rain":
         return "ТУМАН"
     if weather_state == "rain":
-        return "ДОЖДЬ"
+        return "СНЕГ" if _is_snowing() else "ДОЖДЬ"
     if weather_state == "cloudy":
         return "ПАСМУРНО"
     return "ЯСНО"
@@ -29353,6 +29426,32 @@ void fragment() {
     COLOR = vec4(0.78, 0.83, 0.88, a);
 }"""
 var rain_splash_layer = null
+# dev60: below freezing the rain comes down as snow and settles on the ground
+const SNOW_GROUND_SHADER = """shader_type canvas_item;
+uniform float cover = 0.0;
+varying vec2 wpos;
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
+void fragment() {
+    vec2 tp = floor(wpos * 2.0);
+    float n = vn(tp / 46.0) * 0.65 + vn(tp / 13.0) * 0.35;
+    float edge = 0.78 - cover * 0.5;
+    float a = smoothstep(edge, edge + 0.06, n) * 0.78;
+    // a dusting between the drifts, sparse grains at the edges
+    a = max(a, step(0.93 - cover * 0.25, h2(tp)) * 0.55 * cover);
+    a = max(a, cover * 0.16);
+    COLOR = vec4(0.86, 0.88, 0.92, a * min(1.0, cover * 1.6));
+}"""
+var snow_ground_layer = null
+var snow_cover = 0.0
+var snow_flakes = []
+
+func _is_snowing() -> bool:
+    return weather_state == "rain" and _ambient_temperature_for_time() <= 0.5
 
 # Wet ground: as rain sets in the ground darkens and cools; hard surfaces
 # (asphalt, paving, concrete: dark, unsaturated texels) darken more and catch
@@ -30313,6 +30412,17 @@ func _create_weather_visuals():
     rain_splash_layer.material = splash_mat
     rain_splash_layer.visible = false
     add_child(rain_splash_layer)
+    snow_ground_layer = Polygon2D.new()
+    snow_ground_layer.name = "SnowCover"
+    snow_ground_layer.z_as_relative = false
+    snow_ground_layer.z_index = -66
+    var snow_shader = Shader.new()
+    snow_shader.code = SNOW_GROUND_SHADER
+    var snow_mat = ShaderMaterial.new()
+    snow_mat.shader = snow_shader
+    snow_ground_layer.material = snow_mat
+    snow_ground_layer.visible = false
+    add_child(snow_ground_layer)
     fog_layer = Polygon2D.new()
     fog_layer.name = "FogBanks"
     fog_layer.z_as_relative = false
@@ -30366,6 +30476,20 @@ func _create_weather_visuals():
         weather_visual_root.add_child(fog)
         fog_bands.append(fog)
 
+    snow_flakes.clear()
+    for i in range(70):
+        var flake = ColorRect.new()
+        var big = i % 5 == 0
+        flake.size = Vector2(1,1) if not big else Vector2(1.5,1.5)
+        flake.color = Color(0.92,0.94,0.97,0.85 if big else 0.65)
+        flake.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        flake.position = Vector2(-175.0 + float((i * 47) % 350),-115.0 + float((i * 71) % 230))
+        flake.set_meta("fall",22.0 + float((i * 13) % 19) + (8.0 if big else 0.0))
+        flake.set_meta("phase",float(i) * 0.83)
+        flake.visible = false
+        weather_visual_root.add_child(flake)
+        snow_flakes.append(flake)
+
     rain_splashes.clear()
     for i in range(12):
         var splash = Line2D.new()
@@ -30379,6 +30503,45 @@ func _create_weather_visuals():
         splash.set_meta("phase",float(i) * 0.61)
         weather_visual_root.add_child(splash)
         rain_splashes.append(splash)
+
+func _update_snow(delta,snowing,indoors):
+    # the cover builds over a couple of minutes of snowfall and lasts while it
+    # stays below freezing; a thaw takes it away slowly
+    var temp = _ambient_temperature_for_time()
+    if snowing:
+        snow_cover = min(1.0,snow_cover + delta / 150.0)
+    elif temp > 1.0:
+        snow_cover = max(0.0,snow_cover - delta / 260.0)
+    if is_instance_valid(snow_ground_layer):
+        var show = snow_cover > 0.01 and not indoors
+        snow_ground_layer.visible = show
+        if show:
+            var cam = get_viewport().get_camera_2d()
+            var center = cam.get_screen_center_position() if cam != null else player.global_position
+            var half = get_viewport().get_visible_rect().size * 0.5 / (cam.zoom if cam != null else Vector2.ONE) + Vector2(24,24)
+            snow_ground_layer.global_position = center.round()
+            snow_ground_layer.polygon = PackedVector2Array([Vector2(-half.x,-half.y),Vector2(half.x,-half.y),Vector2(half.x,half.y),Vector2(-half.x,half.y)])
+            snow_ground_layer.material.set_shader_parameter("cover",snow_cover)
+    var falling = snowing and not indoors
+    var dry_rects = _rain_dry_rects() if falling else []
+    var t = Time.get_ticks_msec() * 0.001
+    for flake in snow_flakes:
+        if not is_instance_valid(flake):
+            continue
+        flake.visible = falling
+        if not falling:
+            continue
+        var ph = float(flake.get_meta("phase",0.0))
+        flake.position += Vector2(sin(t * 1.3 + ph) * 9.0 - 4.0,float(flake.get_meta("fall",28.0))) * delta
+        if flake.position.y > 118.0:
+            flake.position.y = -118.0
+            flake.position.x = -175.0 + fposmod(flake.position.x * 7.0 + ph * 53.0,350.0)
+        if flake.position.x < -185.0:
+            flake.position.x = 180.0
+        elif flake.position.x > 185.0:
+            flake.position.x = -180.0
+        if not dry_rects.is_empty():
+            flake.visible = not _point_in_rects(flake.global_position,dry_rects)
 
 func _lamp_flicker_gate(t:float,phase:float) -> float:
     # a dying street lamp: steady most of the time with a mains hum, then a few
@@ -30396,7 +30559,9 @@ func _lamp_flicker_gate(t:float,phase:float) -> float:
 
 func _update_weather_visuals(delta):
     var indoors = _high_risk_floor_active()
-    var raining = weather_state == "rain" and not indoors
+    var snowing = weather_state == "rain" and _is_snowing()
+    var raining = weather_state == "rain" and not indoors and not snowing
+    _update_snow(delta,snowing,indoors)
 
     _update_fog(delta)
     _prefetch_high_risk_art(delta)
@@ -30405,7 +30570,7 @@ func _update_weather_visuals(delta):
     _update_leaves(delta)
     _update_combat_traces(delta)
 
-    var wet_goal = 1.0 if weather_state == "rain" else 0.0
+    var wet_goal = (0.25 if snowing else 1.0) if weather_state == "rain" else 0.0
     var prev_wet = _ground_wet
     _ground_wet = wet_goal if delta <= 0.0 else move_toward(_ground_wet,wet_goal,delta * (1.0 / 20.0 if wet_goal > _ground_wet else 1.0 / 90.0))
     if _wet_ground_mat != null and (abs(_ground_wet - prev_wet) > 0.0001 or delta <= 0.0):
@@ -32133,6 +32298,21 @@ func _apply_contract_day_results(events:Array,event_day:int) -> void:
         elif status == "cancelled":
             _record_world_news("npc",faction_id,"Поручение «%s» снято: %s сейчас недоступен." % [title,owner_name],event_day,0,false)
 
+const EndingScreen = preload("res://world/ending_screen.gd")
+
+func _show_ending_screen(outcome,definition,day):
+    # the season's verdict, read out over a darkened world (not in tests and
+    # QA captures, which drive the endgame headless)
+    if DisplayServer.get_name() == "headless" or not OS.get_cmdline_user_args().is_empty():
+        return
+    if get_node_or_null("EndingScreen") != null:
+        return
+    var screen = EndingScreen.new()
+    screen.game = self
+    add_child(screen)
+    screen.show_outcome(outcome if typeof(outcome) == TYPE_DICTIONARY else {},definition if typeof(definition) == TYPE_DICTIONARY else {},
+        {"day":int(day),"sectors":discovered_chunks.size(),"kills":defeated.size()})
+
 func _record_regional_endgame_outcome(outcome:Dictionary,event_day:int) -> void:
     if typeof(outcome) != TYPE_DICTIONARY or outcome.is_empty():
         return
@@ -32175,6 +32355,7 @@ func _process_world_day_rollovers(previous_day:int,new_day:int) -> void:
         if bool(regional_result.get("completed",false)):
             var ending = RegionalEndgame.outcome_definition(faction_state)
             _set_survival_feedback("ИТОГ РЕГИОНА • %s" % str(ending.get("title","СЕЗОН ЗАВЕРШЁН")),5.0)
+            call_deferred("_show_ending_screen",regional_result.get("outcome",{}),ending,tick_day)
     TradingMarket.restock_all(faction_state,new_day)
 
 func _create_day_night():

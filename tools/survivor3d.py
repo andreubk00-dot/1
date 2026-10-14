@@ -183,6 +183,11 @@ class Pose:
         self.foot_pitch = {'L': 0.0, 'R': 0.0}
         self.hip_f = {'L': 0.0, 'R': 0.0}   # pelvis rotation: hip moved forward/back
         self.shift_r = 0.0                   # weight shift over the stance leg
+        # dev60 secondary motion: the pack and bedroll trail the torso on a
+        # spring, the head steadies the gaze against the shoulder swing
+        self.pack = (0.0, 0.0, 0.0)          # (f, r, z) lag of the backpack
+        self.head_yaw = 0.0
+        self.head_dz = 0.0
 
     def L(self, f, r, z):
         return self.f * f + self.r * r + self.z * z
@@ -320,46 +325,55 @@ def build(pose):
     # collar + neck gaiter
     s.box(U(0.3, 0, 14.5), fU, rU, zU, 2.8, 3.4, 0.95, JACKET_D, edge=False)
     # backpack: body, lid, side pockets, front pocket, bedroll with straps
-    s.box(U(-6.1, 0, 8.6), fU, rU, zU, 2.7, 4.9, 5.9, PACK)
-    s.box(U(-6.3, 0, 13.6), fU, rU, zU, 2.9, 5.0, 1.3, darker(PACK, 1.1))
+    pf, pr, pzl = P.pack
+
+    def PK(f, r, z, k=1.0):
+        # the load hangs on the straps: lower parts swing further than the lid
+        return U(f + pf * k, r + pr * k, z + pzl * k)
+    s.box(PK(-6.1, 0, 8.6), fU, rU, zU, 2.7, 4.9, 5.9, PACK)
+    s.box(PK(-6.3, 0, 13.6, 0.7), fU, rU, zU, 2.9, 5.0, 1.3, darker(PACK, 1.1))
     for sg in (-1, 1):
-        s.box(U(-6.0, 5.5 * sg, 6.4), fU, rU, zU, 1.8, 0.8, 2.8, PACK_D)
-    s.box(U(-8.95, 0, 6.8), fU, rU, zU, 0.5, 3.3, 2.9, PACK_D, edge=False)
-    s.box(U(-9.25, 0, 8.6), fU, rU, zU, 0.25, 3.4, 0.5, darker(PACK_D, 0.8), edge=False)
-    s.pixel(U(-9.5, 0, 7.4), BRASS, bias=0.3)
-    s.capsule(U(-6.0, -5.8, 15.6), U(-6.0, 5.8, 15.6), 1.8, 1.8, ROLL)
+        s.box(PK(-6.0, 5.5 * sg, 6.4, 1.2), fU, rU, zU, 1.8, 0.8, 2.8, PACK_D)
+    s.box(PK(-8.95, 0, 6.8, 1.2), fU, rU, zU, 0.5, 3.3, 2.9, PACK_D, edge=False)
+    s.box(PK(-9.25, 0, 8.6, 1.2), fU, rU, zU, 0.25, 3.4, 0.5, darker(PACK_D, 0.8), edge=False)
+    s.pixel(PK(-9.5, 0, 7.4, 1.2), BRASS, bias=0.3)
+    s.capsule(PK(-6.0, -5.8, 15.6, 1.4), PK(-6.0, 5.8, 15.6, 1.4), 1.8, 1.8, ROLL)
     for sg in (-1, 1):
-        s.box(U(-6.0, 3.6 * sg, 15.6), fU, rU, zU, 1.9, 0.35, 1.9, BELT, edge=False)
+        s.box(PK(-6.0, 3.6 * sg, 15.6, 1.4), fU, rU, zU, 1.9, 0.35, 1.9, BELT, edge=False)
+    # head frame: it turns against the shoulders to keep the gaze steady
+    fH = norm(rot_about(fU, V(0, 0, 0), zU, P.head_yaw)) if P.head_yaw else fU
+    rH = norm(rot_about(rU, V(0, 0, 0), zU, P.head_yaw)) if P.head_yaw else rU
+    head = head + zU * P.head_dz
     # neck + gaiter
     s.capsule(neck, head - zU * 3.2, 1.7, 1.6, SKIN, edge=False)
     s.capsule(neck + zU * 0.2, neck + zU * 1.5, 2.3, 2.1, GAITER, bias=0.1)
     # head: ears, face, nose, brows, beard, moustache
     s.ball(head, 4.4, SKIN)
     for sg in (-1, 1):
-        ear = head + rU * (4.2 * sg) + zU * -0.6 - fU * 0.3
-        s.ball(ear, 1.0, darker(SKIN, 0.9), bias=-0.2 if np.dot(rU * sg, V(0, 1, 0.55)) < 0 else 0.3)
-    face_vis = np.dot(fU, V(0, 1, 0.55)) + 0.35
+        ear = head + rH * (4.2 * sg) + zU * -0.6 - fH * 0.3
+        s.ball(ear, 1.0, darker(SKIN, 0.9), bias=-0.2 if np.dot(rH * sg, V(0, 1, 0.55)) < 0 else 0.3)
+    face_vis = np.dot(fH, V(0, 1, 0.55)) + 0.35
     if face_vis > 0:
-        s.ball(head + fU * 2.7 + zU * -2.9, 2.3, BEARD, bias=0.8)
+        s.ball(head + fH * 2.7 + zU * -2.9, 2.3, BEARD, bias=0.8)
         for sg in (-1, 1):
-            s.ball(head + fU * 2.2 + rU * 2.6 * sg + zU * -1.6, 1.3, BEARD, bias=0.7)   # jaw beard
-        s.box(head + fU * 3.9 + zU * -1.0, fU, rU, zU, 0.3, 1.3, 0.4, (104, 76, 54), edge=False)
-        s.box(head + fU * 4.2 + zU * 0.0, fU, rU, zU, 0.35, 0.45, 0.7, NOSE, edge=False)
+            s.ball(head + fH * 2.2 + rH * 2.6 * sg + zU * -1.6, 1.3, BEARD, bias=0.7)   # jaw beard
+        s.box(head + fH * 3.9 + zU * -1.0, fH, rH, zU, 0.3, 1.3, 0.4, (104, 76, 54), edge=False)
+        s.box(head + fH * 4.2 + zU * 0.0, fH, rH, zU, 0.35, 0.45, 0.7, NOSE, edge=False)
         for sg in (-1, 1):
-            n = norm(fU * 0.9 + rU * 0.45 * sg)
+            n = norm(fH * 0.9 + rH * 0.45 * sg)
             if np.dot(n, V(0, 1, 0.55)) > 0.05:
-                s.pixel(head + fU * 4.1 + rU * (1.6 * sg) + zU * 0.6, EYE, bias=1.2)
-                s.box(head + fU * 4.05 + rU * (1.7 * sg) + zU * 1.45, fU, rU, zU, 0.2, 0.8, 0.22, (70, 52, 38), edge=False)
+                s.pixel(head + fH * 4.1 + rH * (1.6 * sg) + zU * 0.6, EYE, bias=1.2)
+                s.box(head + fH * 4.05 + rH * (1.7 * sg) + zU * 1.45, fH, rH, zU, 0.2, 0.8, 0.22, (70, 52, 38), edge=False)
     # helmet: dome, band, brim, goggles, chin strap
-    hc = head + zU * 1.9 - fU * 0.4
-    s.box(hc + zU * 0.6, fU, rU, zU, 4.6, 4.6, 1.9, HELMET)
+    hc = head + zU * 1.9 - fH * 0.4
+    s.box(hc + zU * 0.6, fH, rH, zU, 4.6, 4.6, 1.9, HELMET)
     s.ball(hc + zU * 1.9, 4.2, HELMET, bias=1.0)
-    s.box(hc + zU * -1.0 + fU * 0.4, fU, rU, zU, 5.0, 5.0, 0.45, (60, 66, 48), edge=False)
-    s.box(hc + zU * 0.1, fU, rU, zU, 4.75, 4.75, 0.35, darker(HELMET, 0.8), edge=False)  # cover band
-    s.box(hc + fU * 4.3 + zU * 1.0, fU, rU, zU, 0.5, 2.6, 0.75, GOGGLE, edge=False)
+    s.box(hc + zU * -1.0 + fH * 0.4, fH, rH, zU, 5.0, 5.0, 0.45, (60, 66, 48), edge=False)
+    s.box(hc + zU * 0.1, fH, rH, zU, 4.75, 4.75, 0.35, darker(HELMET, 0.8), edge=False)  # cover band
+    s.box(hc + fH * 4.3 + zU * 1.0, fH, rH, zU, 0.5, 2.6, 0.75, GOGGLE, edge=False)
     for sg in (-1, 1):
-        s.pixel(hc + fU * 4.9 + rU * 1.2 * sg + zU * 1.1, LENS, bias=0.4)
-        s.capsule(hc + rU * 4.3 * sg + zU * -1.2, head + rU * 3.2 * sg + fU * 1.2 + zU * -3.6, 0.35, 0.35,
+        s.pixel(hc + fH * 4.9 + rH * 1.2 * sg + zU * 1.1, LENS, bias=0.4)
+        s.capsule(hc + rH * 4.3 * sg + zU * -1.2, head + rH * 3.2 * sg + fH * 1.2 + zU * -3.6, 0.35, 0.35,
                   (52, 46, 36), bias=0.5, edge=False)
 
     # arms: rounded sleeves, elbow patch, cuff, fingerless gloves
@@ -491,6 +505,27 @@ def gait(P, t, move, style='walk', amp_scale=1.0, pitch_scale=1.0):
     else:
         P.bob = g['bob'] * math.cos(4 * math.pi * (t - stance_mid)) - g['bob']
     P.lean = g['lean'] * (1 if mf >= 0 else -0.3)
+
+    # secondary motion: what the torso did a moment ago is what the pack and
+    # the head do now - a damped follow-through instead of rigid parts
+    def bob_at(tt):
+        if style == 'run':
+            return -g['bob'] * math.cos(4 * math.pi * (tt - stance_mid))
+        return g['bob'] * math.cos(4 * math.pi * (tt - stance_mid)) - g['bob']
+
+    def shift_at(tt):
+        return -g['shift'] * math.cos(2 * math.pi * (tt - stance_mid))
+
+    def twist_at(tt):
+        return -g['twist'] * math.cos(2 * math.pi * tt) * mf
+    lag = 0.085 if style == 'run' else 0.11
+    swing = 1.35 if style == 'run' else 1.0
+    pz = (bob_at(t - lag) - P.bob) * 0.95 * swing
+    pr = (shift_at(t - lag) - P.shift_r) * 0.9 * swing + (twist_at(t - lag) - P.twist) * 5.5
+    pf = -abs(pz) * 0.25 - (0.35 if style == 'run' else 0.0)
+    P.pack = (pf, pr, pz)
+    P.head_yaw = -0.6 * P.twist
+    P.head_dz = (bob_at(t - 0.05) - P.bob) * 0.35
     return P
 
 
@@ -525,6 +560,9 @@ def make_pose(clip, w, d, k):
         P.bob = -amp * (0.5 + 0.5 * math.sin(t * 2 * math.pi))
         if clip == 'Idle3':
             P.twist = 0.08 * math.sin(t * 2 * math.pi)
+        # breathing lifts the straps a beat after the chest; idle eyes wander
+        P.pack = (0.0, 0.0, -0.35 * amp * math.sin(t * 2 * math.pi - 0.9))
+        P.head_yaw = {'Idle': 0.0, 'Idle2': 0.32, 'Idle3': -0.18}[clip] * math.sin(t * 2 * math.pi)
         if unarmed:
             P.hands = {'L': (0.6, -6.9, -0.4 + P.bob), 'R': (0.6, 6.9, -0.4 + P.bob)}
     elif clip in ('Walk', 'Run', 'RunAttack'):

@@ -295,3 +295,32 @@ night = norm(crickets[:n], 1.0) * 0.55 + norm(lowpass(wind[:n], 900), 1.0) * 0.4
 save(at_db(loop4(night, 3.0, 0.16), -36.5), os.path.join(ROOT, 'audio/ambience/outdoor_night.wav'))
 # indoors: the same wind through walls - low, muffled, close to silence
 save(at_db(loop4(wind, 12.0, 0.07, lp=320), -38.5), os.path.join(ROOT, 'audio/ambience/interior_roomtone.wav'))
+
+# --- dev60: using things, containers, snow ----------------------------------
+# qubodup «Liquid Bottle Drink Set» (CC0), Tito «7 eating crunches» (CC0),
+# Kenney RPG Audio / Impact Sounds (CC0). Use sounds are longer than the
+# 0.5 s world budget on purpose: a swallow or a bandage takes its time.
+QB = os.path.join(OGA, 'liquid-bottle-drink-set/x/qubodup-bottle-and-drink-sounds')
+CR = os.path.join(OGA, '7-eating-crunches/x')
+gap = lambda s: np.zeros(int(s * SR))
+x = np.concatenate([clip(os.path.join(QB, 'bottle-open-02.flac'), 0.30, 0.45), gap(0.06),
+                    clip(os.path.join(QB, 'swallow-01.flac'), 0.36, 0.55), gap(0.05),
+                    clip(os.path.join(QB, 'swallow-03.flac'), 0.36, 0.5)])
+save(x, os.path.join(ROOT, 'audio/world/drink.wav'))
+x = np.concatenate([clip(os.path.join(CR, 'crunch.1.ogg'), 0.24, 0.5), gap(0.12),
+                    clip(os.path.join(CR, 'crunch.4.ogg'), 0.24, 0.45), gap(0.14),
+                    clip(os.path.join(CR, 'crunch.6.ogg'), 0.22, 0.4)])
+save(x, os.path.join(ROOT, 'audio/world/eat.wav'))
+x = np.concatenate([clip(os.path.join(KR, 'cloth1.ogg'), 0.30, 0.5), gap(0.05),
+                    clip(os.path.join(KR, 'cloth3.ogg'), 0.30, 0.45), gap(0.04),
+                    clip(os.path.join(KR, 'clothBelt.ogg'), 0.24, 0.4)])
+save(x, os.path.join(ROOT, 'audio/world/bandage.wav'))
+save(clip(os.path.join(KR, 'creak2.ogg'), 0.42, 0.42, 0.2), os.path.join(ROOT, 'audio/world/container_open.wav'))
+save(clip(os.path.join(KR, 'metalLatch.ogg'), 0.26, 0.45, 0.18), os.path.join(ROOT, 'audio/world/container_close.wav'))
+save(clip(os.path.join(KR, 'handleSmallLeather.ogg'), 0.30, 0.42, 0.18), os.path.join(ROOT, 'audio/world/bag_rummage.wav'))
+# snow underfoot: Kenney's five takes, then Corsica_S on snow
+for i in range(5):
+    save(step(load(os.path.join(KP, 'footstep_snow_%03d.ogg' % i)), length=0.28, peak=0.5), os.path.join(STEPS, 'snow_%d.wav' % (i + 1)))
+snow = sorted(glob.glob(os.path.join(OGA, '42-snow-and-gravel-footsteps/x/Corsica_S-Walking_in_Snow/*snow_covered_gravel_1*.flac')))[:4]
+for i, f in enumerate(snow):
+    save(step(load(f), length=0.32, peak=0.5), os.path.join(STEPS, 'snow_%d.wav' % (i + 6)))
