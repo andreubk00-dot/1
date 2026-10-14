@@ -19,7 +19,7 @@ func _ready_state()->Dictionary:
         state["world_routes"][route_id]={"id":route_id,"state":"open"}
     SettlementProjects.ensure_state(state); FactionEndgame.ensure_state(state)
     for faction_id in FactionCatalog.ids():
-        var fid=str(faction_id); var rec=SettlementProjects.default_record(); rec["completed"]=true; rec["strategic_installed"]=true; state["settlement_projects"]["records"][fid]=rec
+        var fid=str(faction_id); var rec=SettlementProjects.default_record(); rec["completed"]=true; rec["strategic_installed"]=true; rec["resources"]=SettlementProjects.project(str(faction_id)).get("resource_targets",{}).duplicate(true); state["settlement_projects"]["records"][fid]=rec
         var spec=FactionEndgame.chain(fid); var templates=spec.get("templates",[]); state["faction_endgame"]["chains"][fid]={"progress":templates.size(),"completed":templates.duplicate(),"finalized":true,"final_day":20}; state["faction_endgame"]["effects"][str(spec.get("effect",""))]=true
         for resource_id in FactionEconomy.RESOURCE_KEYS:
             state["factions"][fid]["resources"][str(resource_id)]=60.0

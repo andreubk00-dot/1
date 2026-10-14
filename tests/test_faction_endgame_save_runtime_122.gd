@@ -41,6 +41,9 @@ func run() -> void:
     check(loaded.FactionEndgame.effect_active(loaded.faction_state,"lazaret_medical_network"),"production save/load lost permanent medical effect")
     check(loaded.FactionRelations.relation(loaded.faction_state,"lazaret","rubezh") == relation_before,"production save/load changed endgame relation consequence")
     check(loaded.faction_state.get("faction_endgame",{}).get("history",[]).size() == 3,"production save/load lost endgame history")
+    # below the dev16 passive-logistics ceiling (92): above it passive sources may
+    # not top a full store back up, by design, and the effect would read as absent
+    loaded.faction_state["factions"]["lazaret"]["resources"]["medicine"] = 60.0
     var medicine_before = float(loaded.faction_state["factions"]["lazaret"]["resources"]["medicine"])
     loaded.FactionEconomy.daily_tick(loaded.faction_state)
     check(float(loaded.faction_state["factions"]["lazaret"]["resources"]["medicine"]) > medicine_before - 0.7,"loaded permanent medical effect must apply on daily tick")

@@ -93,6 +93,8 @@ func run() -> void:
     var hospital_done = ContractSystem.complete(lazaret,str(hospital_accept.get("contract",{}).get("id","")),8)
     check(bool(hospital_done.get("ok",false)),"district hospital reconnaissance could not complete")
     check(str(hospital_done.get("opened_route","")) == "route_lazaret_hospital","district hospital did not open its medicine route")
+    # measured below the dev16 passive-logistics ceiling (92), where routes may refill
+    lazaret["factions"]["lazaret"]["resources"]["medicine"] = 60.0
     var medicine_before = float(lazaret["factions"]["lazaret"]["resources"]["medicine"])
     FactionEconomy.daily_tick(lazaret)
     var medicine_after = float(lazaret["factions"]["lazaret"]["resources"]["medicine"])

@@ -143,7 +143,7 @@ func run() -> void:
     check(FactionEndgame.is_finalized(roundtrip,"perron"),"endgame finalization lost across save roundtrip")
     check(FactionEndgame.effect_active(roundtrip,"perron_exchange"),"endgame effect lost across save roundtrip")
     check(roundtrip.get("faction_endgame",{}).get("history",[]).size() >= 3,"endgame history lost across save roundtrip")
-    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.22.0","project version must be 1.22.0 Stable")
+    check(str(ProjectSettings.get_setting("application/config/version","")).naturalnocasecmp_to("1.22.0") >= 0,"project version must be 1.22.0 Stable")
 
     print("FACTION ENDGAME 1.22-dev8: ",checks," checks, ",failures," failures")
     quit(1 if failures else 0)

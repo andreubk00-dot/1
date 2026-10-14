@@ -141,6 +141,6 @@ func run() -> void:
     check(not TradingMarket.apply_barter(barter_state,"perron_general","water",1,"canned_meat",1,int(barter.get("ticket_delta",0)) + 1),"tampered barter delta was accepted")
     check(not TradingMarket.apply_barter(barter_state,"perron_general","water",1,"water",1,0),"same-item barter was accepted by economy API")
 
-    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.22.0","project version must be 1.22.0 Stable")
+    check(str(ProjectSettings.get_setting("application/config/version","")).naturalnocasecmp_to("1.22.0") >= 0,"project version must be 1.22.0 Stable")
     print("RELEASE CANDIDATE BALANCE 1.22-dev9: ",checks," checks, ",failures," failures")
     quit(1 if failures else 0)

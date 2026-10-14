@@ -28,7 +28,7 @@ func run():
     await process_frame
 
     var original_version = ProjectSettings.get_setting("application/config/version","")
-    check(str(original_version) == "1.22.0", "1.22.0 Stable project version mismatch")
+    check(str(original_version).naturalnocasecmp_to("1.22.0") >= 0, "1.22.0 Stable project version mismatch")
     check(not game._developer_tools_available(), "developer tools must default to disabled in stable")
     check(not InputMap.has_action("developer_panel"), "stable build must not create the F10 developer action")
     check(game._developer_pois().size() == RegionCatalog.POIS.size(), "developer POI list must cover all active main POIs")

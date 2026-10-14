@@ -14,6 +14,6 @@ func run()->void:
     check(RegionalEndgame.DURATION_DAYS==21,"crisis season duration drifted")
     for key in ["escape","exit_route","outside_region","credits","game_over"]:
         check(not state.has(key),"regional endgame introduced forbidden global-exit state: "+key)
-    check(int(ProjectSettings.get_setting("application/config/version","0").split("-dev")[-1])==5,"dev5 version gate mismatch")
+    check(str(ProjectSettings.get_setting("application/config/version","0")).naturalnocasecmp_to("1.26.0") >= 0,"dev5 version gate mismatch")
     print("REGIONAL ENDGAME CLOSURE 1.26-dev5: ",checks," checks, ",failures," failures")
     quit(1 if failures else 0)

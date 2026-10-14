@@ -945,3 +945,26 @@ authors and pages are listed in `audio/CREDITS_CC0.md`, and
   start) so each slider drives its own group.
 - Tests and capture scripts never see the title: it only opens for the real
   main scene, with no command-line arguments, outside headless runs.
+
+## dev55 — all 184 tests green, version 1.38.0
+
+The 18 long-standing failures were stale tests, not broken gameplay:
+- **Settlement-project fixtures (7 tests).** Projects are only counted as
+  completed when their resources were really committed (a later sanitizer
+  rule); the fixtures marked them done with nothing committed, so regional
+  readiness never reached 100 % and the crisis season could not start in the
+  test. In play a project completes only with its targets met. The fixtures
+  now commit the targets - the endgame chain (stability -> crisis season ->
+  closure) passes end to end.
+- **Passive-logistics ceiling (2 tests).** Since dev16 routes and endgame
+  effects may not top a store back up above 92; both tests measured at 96-100.
+  They now measure at 60, where the hospital route and the medical network
+  visibly offset decay.
+- **Version gates (9 tests)** compared the project version with a fixed old
+  one ("1.22.0"); they now require "at least" the version that introduced the
+  feature. The project version is now **1.38.0** (release: developer tools
+  off).
+
+`test_long_session_chunk_churn_131` stays timing-sensitive under the parallel
+runner; standalone it passes, and the pre-dev47 build is as slow on this
+machine (the host got slower, not the game).

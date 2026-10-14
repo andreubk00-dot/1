@@ -20,7 +20,7 @@ func _open_routes(state:Dictionary)->void:
 func _complete_projects(state:Dictionary)->void:
     SettlementProjects.ensure_state(state)
     for faction_id in FactionCatalog.ids():
-        var rec=SettlementProjects.default_record(); rec["completed"]=true; rec["completed_day"]=18; rec["strategic_installed"]=true
+        var rec=SettlementProjects.default_record(); rec["completed"]=true; rec["completed_day"]=18; rec["strategic_installed"]=true; rec["resources"]=SettlementProjects.project(str(faction_id)).get("resource_targets",{}).duplicate(true)
         state["settlement_projects"]["records"][str(faction_id)]=rec
 func _complete_networks(state:Dictionary)->void:
     FactionEndgame.ensure_state(state)

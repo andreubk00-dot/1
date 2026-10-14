@@ -17,7 +17,7 @@ func run()->void:
     for route_id in RegionalStability.STARTER_ROUTE_IDS: old["world_routes"][route_id]={"id":route_id,"state":"open","opened_day":10}
     SettlementProjects.ensure_state(old); FactionEndgame.ensure_state(old)
     for faction_id in FactionCatalog.ids():
-        var fid=str(faction_id); var rec=SettlementProjects.default_record(); rec["completed"]=true; rec["strategic_installed"]=true; old["settlement_projects"]["records"][fid]=rec
+        var fid=str(faction_id); var rec=SettlementProjects.default_record(); rec["completed"]=true; rec["strategic_installed"]=true; rec["resources"]=SettlementProjects.project(str(faction_id)).get("resource_targets",{}).duplicate(true); old["settlement_projects"]["records"][fid]=rec
         var spec=FactionEndgame.chain(fid); var templates=spec.get("templates",[]); old["faction_endgame"]["chains"][fid]={"progress":templates.size(),"completed":templates.duplicate(),"finalized":true,"final_day":25}; old["faction_endgame"]["effects"][str(spec.get("effect",""))]=true
         for resource_id in FactionEconomy.RESOURCE_KEYS: old["factions"][fid]["resources"][str(resource_id)]=61.0
     old["supply_events"]["active"]={}

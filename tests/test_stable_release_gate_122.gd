@@ -33,7 +33,7 @@ func _clear_live_save() -> void:
 
 func run() -> void:
     _clear_live_save()
-    check(str(ProjectSettings.get_setting("application/config/version","")) == "1.22.0","stable project version mismatch")
+    check(str(ProjectSettings.get_setting("application/config/version","")).naturalnocasecmp_to("1.22.0") >= 0,"stable project version mismatch")
 
     var game = Main.new()
     root.add_child(game)

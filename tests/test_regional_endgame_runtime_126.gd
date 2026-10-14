@@ -23,6 +23,7 @@ func _prime(game)->void:
         var rec=SettlementProjects.default_record()
         rec["completed"]=true
         rec["strategic_installed"]=true
+        rec["resources"]=SettlementProjects.project(str(faction_id)).get("resource_targets",{}).duplicate(true)
         game.faction_state["settlement_projects"]["records"][fid]=rec
         var spec=FactionEndgame.chain(fid)
         var templates=spec.get("templates",[])
