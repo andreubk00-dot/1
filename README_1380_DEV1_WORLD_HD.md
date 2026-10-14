@@ -928,3 +928,20 @@ authors and pages are listed in `audio/CREDITS_CC0.md`, and
     to whole screen pixels.
 - Same conditions after the fix: 1 pixel range; normal walking and standing
   move the figure by at most one pixel (breathing).
+
+## dev54 — title screen, pause menu, settings
+
+- `world/pause_menu.gd` (a CanvasLayer that keeps running while the tree is
+  paused), styled in the game's pixel look:
+  - **title** when the game is launched as the main scene: Continue (if a save
+    exists), New game (asks before deleting the save; also removes the
+    older-version saves the loader would otherwise fall back to, then reloads
+    the scene without the title), Settings, Quit;
+  - **pause** on Esc when no window is open: Resume, Settings, Save,
+    Save and quit; Esc steps back / resumes;
+  - **settings**, kept in `user://settings.cfg` and applied at start: master,
+    music, effects and ambience volume, full screen, camera shake on hits.
+- Audio now runs through `Music`, `SFX` and `Ambience` buses (created at
+  start) so each slider drives its own group.
+- Tests and capture scripts never see the title: it only opens for the real
+  main scene, with no command-line arguments, outside headless runs.

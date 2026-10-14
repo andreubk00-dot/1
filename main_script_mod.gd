@@ -2798,7 +2798,36 @@ func _show_import_not_ready_screen() -> void:
 # the same 2-texels-per-unit grid as the HD world art. The light autohinter
 # keeps small capitals intact (normal hinting broke Н into П at 8 px).
 const PIXEL_UI_FONT = "res://fonts/DejaVuSans-Bold.ttf"
+const PauseMenu = preload("res://world/pause_menu.gd")
+var pause_menu = null
 var pixel_ui_font = null
+
+func _open_menu(menu_mode:String):
+    if pause_menu == null or not is_instance_valid(pause_menu):
+        pause_menu = PauseMenu.new()
+        pause_menu.game = self
+        add_child(pause_menu)
+    pause_menu.open(menu_mode)
+
+func _menu_has_save() -> bool:
+    return FileAccess.file_exists(SAVE_PATH) or FileAccess.file_exists(SAVE_PATH + ".bak")
+
+func _menu_new_game():
+    # a fresh run: the current save and the older-version saves it would
+    # otherwise fall back to are removed, then the scene reloads without the
+    # title screen
+    var paths = [SAVE_PATH,SAVE_PATH + ".bak"]
+    var consts = get_script().get_script_constant_map()
+    for k in consts.keys():
+        if str(k).begins_with("LEGACY_SAVE_PATH"):
+            paths.append(str(consts[k]))
+            paths.append(str(consts[k]) + ".bak")
+    for path in paths:
+        if FileAccess.file_exists(path):
+            DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+    Engine.set_meta("ostatok_skip_title",true)
+    get_tree().paused = false
+    get_tree().reload_current_scene()
 
 func _apply_pixel_ui_font():
     if pixel_ui_font != null or not ResourceLoader.exists(PIXEL_UI_FONT):
@@ -2828,6 +2857,9 @@ func _ready():
         set_physics_process(false)
         return
     _apply_pixel_ui_font()
+    # audio buses (Music / SFX / Ambience) and the saved player settings
+    set_meta("settings",PauseMenu.load_settings())
+    PauseMenu.apply_settings(get_meta("settings"))
     _load_data()
     _create_weapon_audio_layer()
     _create_world_audio_layer()
@@ -3027,6 +3059,12 @@ func _ready():
         call_deferred("_qa_exit_after_selftest")
     elif qa_capture_path != "":
         call_deferred("_qa_capture_screenshot",qa_capture_path,qa_capture_delay)
+    elif qa_args.is_empty() and get_tree().current_scene == self and DisplayServer.get_name() != "headless":
+        # launched as the game (not by a test or a capture script): title screen
+        if Engine.has_meta("ostatok_skip_title"):
+            Engine.remove_meta("ostatok_skip_title")
+        else:
+            call_deferred("_open_menu","title")
 
 
 func _qa_exit_after_selftest():
@@ -4577,6 +4615,8 @@ func _unhandled_input(event):
                         _close_base_build()
                     elif inventory_open:
                         _close_inventory()
+                    else:
+                        _open_menu("pause")
                 KEY_B:
                     if base_build_open:
                         _close_base_build()
@@ -7177,7 +7217,8 @@ func _hurt_feedback(amount:float):
                 away = (player.global_position - e.global_position).normalized()
     if best > 80.0:
         away = Vector2.RIGHT.rotated(randf() * TAU)
-    camera_kick = away * clamp(2.5 + amount * 0.25,2.5,6.0)
+    var shake_on = bool(get_meta("settings",{}).get("camera_shake",true)) if has_meta("settings") else true
+    camera_kick = away * clamp(2.5 + amount * 0.25,2.5,6.0) * (1.0 if shake_on else 0.0)
 
 func _update_hurt_vignette(delta):
     hurt_flash = max(0.0,hurt_flash - delta * 1.8)
@@ -7621,13 +7662,16 @@ func _create_weapon_audio_layer():
     for _i in range(6):
         var player_node = AudioStreamPlayer.new()
         player_node.volume_db = -8.0
+        player_node.bus = "SFX"
         add_child(player_node)
         weapon_audio_players.append(player_node)
     reload_audio_player = AudioStreamPlayer.new()
     reload_audio_player.volume_db = -11.0
+    reload_audio_player.bus = "SFX"
     add_child(reload_audio_player)
     cycle_audio_player = AudioStreamPlayer.new()
     cycle_audio_player.volume_db = -12.0
+    cycle_audio_player.bus = "SFX"
     add_child(cycle_audio_player)
 
 func _weapon_shot_audio_path(weapon_id,instance_id = ""):
@@ -7730,6 +7774,7 @@ func _create_world_audio_layer():
     for _i in range(6):
         var player_node = AudioStreamPlayer.new()
         player_node.volume_db = -12.0
+        player_node.bus = "SFX"
         add_child(player_node)
         world_audio_players.append(player_node)
 
@@ -7905,6 +7950,7 @@ func _create_ambience_audio_layer():
         var player_node = AudioStreamPlayer.new()
         player_node.name = "Ambience_%s" % kind.capitalize()
         player_node.volume_db = -60.0
+        player_node.bus = "Ambience"
         var stream = _cached_ambience_audio(kind)
         if stream != null:
             player_node.stream = stream
@@ -7990,6 +8036,7 @@ func _update_music(delta):
     if music_player == null:
         music_player = AudioStreamPlayer.new()
         music_player.name = "Music"
+        music_player.bus = "Music"
         music_player.volume_db = -80.0
         add_child(music_player)
     var mood = _music_mood()
