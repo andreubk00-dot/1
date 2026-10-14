@@ -245,10 +245,12 @@ func _rebuild_main() -> void:
             v.add_child(_button("ПРОДОЛЖИТЬ", close))
         v.add_child(_button("НОВАЯ ИГРА", _ask_new_game if has_save else _start_new_game))
         v.add_child(_button("НАСТРОЙКИ", _open_settings))
+        v.add_child(_button("УПРАВЛЕНИЕ", _open_controls))
         v.add_child(_button("ВЫХОД", _quit))
     else:
         v.add_child(_button("ПРОДОЛЖИТЬ", close))
         v.add_child(_button("НАСТРОЙКИ", _open_settings))
+        v.add_child(_button("УПРАВЛЕНИЕ", _open_controls))
         v.add_child(_button("СОХРАНИТЬ", _save))
         v.add_child(_button("СОХРАНИТЬ И ВЫЙТИ", _save_and_quit))
     v.add_child(_label("Esc — назад" if mode == "pause" else "", 5, DIM))
@@ -319,6 +321,43 @@ func _apply_from_ui() -> void:
 # --- actions --------------------------------------------------------------
 func _open_settings() -> void:
     _show(_settings_box)
+
+
+const CONTROLS = [
+    ["W A S D", "движение"], ["Shift", "бег"], ["C", "присесть / красться"],
+    ["ЛКМ", "выстрел / удар"], ["R", "перезарядка"], ["V", "оттолкнуть"],
+    ["E", "взаимодействие"], ["H", "быстрая перевязка"], ["F", "фонарь"],
+    ["1 – 6", "быстрые слоты"], ["7, 8", "карманы разгрузки"],
+    ["Tab / I", "инвентарь"], ["ПКМ", "использовать предмет"], ["Q", "выбросить предмет"],
+    ["M", "карта региона"], ["B", "строительство (X — разобрать)"],
+    ["F5", "быстрое сохранение"], ["Esc", "пауза / назад"],
+]
+
+
+func _open_controls() -> void:
+    var v = _clear(_confirm_box)
+    v.add_child(_label("УПРАВЛЕНИЕ", 11, INK))
+    var grid = GridContainer.new()
+    grid.columns = 4
+    grid.add_theme_constant_override("h_separation", 8)
+    grid.add_theme_constant_override("v_separation", 1)
+    for pair in CONTROLS:
+        var k = Label.new()
+        k.text = pair[0]
+        k.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        k.custom_minimum_size = Vector2(40, 0)
+        k.add_theme_font_size_override("font_size", 6)
+        k.add_theme_color_override("font_color", ACCENT)
+        grid.add_child(k)
+        var a = Label.new()
+        a.text = pair[1]
+        a.custom_minimum_size = Vector2(104, 0)
+        a.add_theme_font_size_override("font_size", 6)
+        a.add_theme_color_override("font_color", INK)
+        grid.add_child(a)
+    v.add_child(grid)
+    v.add_child(_button("НАЗАД", func(): _show(_main_box)))
+    _show(_confirm_box)
 
 
 func _ask_new_game() -> void:

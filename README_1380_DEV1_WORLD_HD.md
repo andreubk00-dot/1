@@ -979,3 +979,26 @@ machine (the host got slower, not the game).
 - The shamble reads stronger: the bad leg barely leaves the ground and trails
   further behind, the good leg steps higher, and the body lurches down onto
   the bad leg each time it has to carry it, leaning harder to that side.
+
+## dev57 — playtest fixes
+
+Found by a scripted play session from a fresh start:
+
+- **No ambush at spawn.** A chunk could put an infected right next to the
+  start point, hitting the player from the first frame. Chunk infected that
+  would spawn within 220 px of the player are moved straight away from them
+  (or sideways, if a wall is in the way); the counts stay the same.
+- **Starter gear worn.** «НОВАЯ ИГРА» now starts with the field backpack, the
+  flashlight and the cap equipped instead of only in the inventory.
+- **Every container can be opened.** An audit of all 464 containers within
+  six sectors found ones set down on a partition or on the outer wall of an
+  overlapping neighbouring building. `_container_clear_of_partitions` slides
+  such a container to the nearest clear floor in the room; 0 unreachable now.
+- **Controls screen.** The title and pause menus have «УПРАВЛЕНИЕ» — every
+  key on one page (there was no way to learn them in game).
+- **T no longer skips time** in release builds (it was a leftover debug
+  key); it still works in `-dev` builds.
+- **Small HUD text.** The UI font uses its own hinting instead of the forced
+  autohinter, which merged strokes at the smallest sizes («мм» read as «ии»,
+  word spaces vanished). Wrapping labels now use their second line before
+  they shrink the text, so the objective hint stays at the normal size.

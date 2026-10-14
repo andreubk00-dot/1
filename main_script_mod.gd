@@ -2828,6 +2828,7 @@ func _menu_new_game():
         if FileAccess.file_exists(path):
             DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
     Engine.set_meta("ostatok_skip_title",true)
+    Engine.set_meta("ostatok_new_game",true)
     get_tree().paused = false
     get_tree().reload_current_scene()
 
@@ -2838,8 +2839,10 @@ func _apply_pixel_ui_font():
     if not (f is FontFile):
         return
     f.antialiasing = TextServer.FONT_ANTIALIASING_NONE
-    f.hinting = TextServer.HINTING_LIGHT
-    f.force_autohinter = true
+    # the font's own hinting: the forced autohinter merged the strokes of
+    # small lowercase letters (мм read as ии, word spaces collapsed)
+    f.hinting = TextServer.HINTING_NORMAL
+    f.force_autohinter = false
     f.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
     # carrying rounding remainders opened one-pixel gaps inside words at the
     # small HUD sizes (ГРЯ ЗЬ); whole-pixel advances keep the letters even
@@ -2909,6 +2912,12 @@ func _ready():
         _grid_add(inventory_entries, "flashlight", 1, INV_W, INV_H)
         _grid_add(inventory_entries, "cap", 1, INV_W, INV_H)
         _grid_add(inventory_entries, "combat_knife", 1, INV_W, INV_H)
+        if Engine.has_meta("ostatok_new_game"):
+            # a run started from the menu begins dressed: pack on the back,
+            # torch at hand (the first night falls within the hour), cap on
+            Engine.remove_meta("ostatok_new_game")
+            for gear in ["field_backpack","flashlight","cap"]:
+                _equip_item(gear)
 
     _ensure_runtime_item_instance_ids()
     _ensure_weapon_runtime_state(not has_meta("loaded_save") and weapon_instance_states.is_empty())
@@ -4632,6 +4641,9 @@ func _unhandled_input(event):
                 KEY_F:
                     _toggle_flashlight()
                 KEY_T:
+                    # debug time skip: only in -dev builds
+                    if not _developer_tools_available():
+                        return
                     var debug_previous_day = world_day
                     var debug_advanced_minutes = world_minutes + 60.0
                     if debug_advanced_minutes >= 1440.0:
@@ -10775,7 +10787,13 @@ func _hud_set_fitted_text(label,text,base_size,min_size,_compact_threshold = 999
     label.text = text
     var size = base_size
     var allowed_width = max(1.0,label.size.x - 2.0)
-    while size > min_size and _hud_text_width(label,text,size) > allowed_width:
+    # a wrapping label may spend its spare lines before the text shrinks
+    var lines = 1
+    if label.autowrap_mode != TextServer.AUTOWRAP_OFF:
+        var font = label.get_theme_font("font")
+        var line_h = font.get_height(base_size) if font != null else base_size * 1.2
+        lines = max(1,int(floor(label.size.y / max(1.0,line_h))))
+    while size > min_size and _hud_text_width(label,text,size) > allowed_width * lines - (base_size * 3.0 if lines > 1 else 0.0):
         size -= 1
     _hud_set_label_font_size(label,size)
 
@@ -18877,7 +18895,55 @@ func _ensure_high_risk_strategic_cache_item(poi_id:String,container_id:String,ke
     HighRiskMechanics.mark_strategic_spawned(high_risk_state,poi_id)
     return true
 
+func _container_clear_of_partitions(chunk,pos:Vector2) -> Vector2:
+    # loose caches and site containers are placed per chunk, the partitions
+    # per building: one set down on (or inside) a partition could not be
+    # reached from any side - slide it to the nearest clear floor in the room
+    for b in chunk.get_children():
+        if not b.has_meta("world_building") or not b.has_meta("partitions"):
+            continue
+        var size:Vector2 = b.get_meta("building_size",Vector2.ZERO)
+        var local = pos - b.position
+        if not Rect2(-size * 0.5,size).has_point(local):
+            continue
+        var blocked = []
+        for w in b.get_meta("partitions",[]):
+            blocked.append(w.grow(14.0))
+        # a neighbouring building can overlap this one: its outer walls
+        # then run through our rooms just like a partition
+        for o in chunk.get_children():
+            if o == b or not o.has_meta("world_building"):
+                continue
+            var osize:Vector2 = o.get_meta("building_size",Vector2.ZERO)
+            var orect = Rect2(o.position - osize * 0.5 - b.position,osize)
+            for strip in [Rect2(orect.position.x - 6.0,orect.position.y,12.0,osize.y),Rect2(orect.end.x - 6.0,orect.position.y,12.0,osize.y),Rect2(orect.position.x,orect.position.y - 6.0,osize.x,12.0),Rect2(orect.position.x,orect.end.y - 6.0,osize.x,12.0)]:
+                blocked.append(strip.grow(14.0))
+        var hit = false
+        for z in blocked:
+            if z.has_point(local):
+                hit = true
+                break
+        if not hit:
+            return pos
+        var inner = Rect2(-size * 0.5 + Vector2(20,22),size - Vector2(40,34))
+        for step in range(1,24):
+            for d in [Vector2(1,0),Vector2(-1,0),Vector2(0,1),Vector2(0,-1),Vector2(1,1),Vector2(-1,1),Vector2(1,-1),Vector2(-1,-1)]:
+                var c = local + d * float(step) * 4.0
+                if not inner.has_point(c):
+                    continue
+                var clear = true
+                for z in blocked:
+                    if z.has_point(c):
+                        clear = false
+                        break
+                if clear:
+                    return b.position + c
+        return pos
+    return pos
+
 func _create_container(chunk, coord, local_pos, container_id, loot_table, display_name, grid_w=CONTAINER_W, grid_h=CONTAINER_H):
+    if chunk is Node2D and not (chunk == self):
+        local_pos = _container_clear_of_partitions(chunk,local_pos)
     var key = "%d:%d:container:%s" % [coord.x,coord.y,container_id]
     var target_w = clamp(int(grid_w),CONTAINER_W,QA_ALL_ITEMS_CONTAINER_W)
     var target_h = clamp(int(grid_h),CONTAINER_H,QA_ALL_ITEMS_CONTAINER_H)
@@ -26845,6 +26911,24 @@ func _infected_kind_for_encounter(encounter_profile:String,rng) -> String:
                 return "runner"
     return "normal"
 
+const ENEMY_SPAWN_CLEARANCE = 220.0
+
+func _spawn_clear_of_player(chunk,p:Vector2) -> Vector2:
+    var local_player = player.global_position - chunk.global_position
+    var away = p - local_player
+    if away.length() >= ENEMY_SPAWN_CLEARANCE:
+        return p
+    if away.length() < 1.0:
+        away = Vector2.RIGHT.rotated(float(int(p.x * 7.0 + p.y * 3.0) % 360) * PI / 180.0)
+    # straight away from the player first, then the other ways round if the
+    # chunk edge is in the way
+    for turn in [0.0,PI * 0.5,-PI * 0.5,PI,PI * 0.25,-PI * 0.25]:
+        var q = local_player + away.normalized().rotated(turn) * ENEMY_SPAWN_CLEARANCE
+        q = Vector2(clamp(q.x,35.0,733.0),clamp(q.y,35.0,733.0))
+        if q.distance_to(local_player) >= ENEMY_SPAWN_CLEARANCE * 0.9:
+            return q
+    return p
+
 func _spawn_chunk_enemies(chunk,coord,count,seed_value,encounter_profile = "standard"):
     var rng = RandomNumberGenerator.new()
     rng.seed = seed_value
@@ -26857,6 +26941,11 @@ func _spawn_chunk_enemies(chunk,coord,count,seed_value,encounter_profile = "stan
         var enemy_kind = _infected_kind_for_encounter(str(encounter_profile),rng)
         if bool(defeated.get(key,false)):
             continue
+        # never out of thin air beside the player (a fresh start, a load or a
+        # respawn landed the survivor among them, struck from the first frame):
+        # the same infected is set down further off, inside the same chunk
+        if player != null:
+            p = _spawn_clear_of_player(chunk,p)
         _spawn_enemy(chunk,coord,i,p,enemy_kind)
 
 
