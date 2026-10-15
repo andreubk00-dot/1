@@ -58,6 +58,13 @@ async function run(profile){
    for(const [id,button] of [['labScreen','#labBtn'],['collectionScreen','#collectionBtn']]){
      await page.locator(button).click();
      await checkPanel(page,profile.name,id,'#'+id+' .modal-card',['#'+id+' .close-btn']);
+     // First-time contextual coaching is intentionally modal and must be
+     // acknowledged through its real Continue control before closing the parent.
+     if(await page.locator('#coachScreen').isVisible()){
+       assert(await page.locator('#coachContinueBtn').isVisible(),'Coach missing acknowledgment');
+       await page.locator('#coachContinueBtn').click();
+       assert(!(await page.locator('#coachScreen').isVisible()),'Coach did not close');
+     }
      await page.locator('#'+id+' .close-btn').click();
      assert(!(await page.locator('#'+id).isVisible()),'Cannot close '+id);
    }
