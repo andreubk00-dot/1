@@ -1180,6 +1180,28 @@ canvas { touch-action:none; }
 @media(max-width:760px){.hero-actions #playBtn{min-height:62px}.next-step{flex-wrap:wrap}.next-step-copy{flex-basis:calc(100% - 40px)}.next-step button{margin-left:34px;min-height:40px}}
 @media(max-width:390px){.next-steps{padding:11px}.next-step-copy b{font-size:12px}.next-step-copy small{font-size:10px}.resource-help-card{padding:16px}.resource-help-head h2{font-size:21px}.collection-resource-guide button{font-size:11px}}
 
+
+/* Guardborn HUD QA v1.8.24: no overlapping boss, mission or rift panels. */
+@media (min-width:761px){
+  .boss-hud:not(.hidden) ~ .field-order-hud{display:none}
+  .rift-hud:not(.hidden) ~ .field-order-hud:not(.hidden){top:212px}
+}
+@media (max-width:760px), (max-width:900px) and (max-height:540px){
+  /* The desktop rift entrance keyframes animate a -50% X offset, which
+     displaced the left-anchored mobile HUD entirely offscreen. */
+  .rift-hud{animation:none}
+}
+@media (max-width:360px){
+  .topbar{padding-left:5px;padding-right:5px}
+  .topbar .brand{flex:0 0 0;width:0;min-width:0;overflow:hidden;gap:0}
+  .topbar .resources{min-width:0;flex:1;justify-content:flex-end;gap:3px}
+  .topbar .resource-chip{min-width:0;height:40px;padding:0 5px;gap:3px}
+  .topbar .resource-chip .resource-icon{width:16px;height:16px;margin:0;font-size:15px}
+  .topbar .resource-chip .resource-meta small{display:none}
+  .topbar .resource-chip .resource-meta b{font-size:12px}
+  .topbar .icon-btn{min-width:32px;width:32px;height:38px;min-height:38px;padding:0 3px}
+}
+
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
