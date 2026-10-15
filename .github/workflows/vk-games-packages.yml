@@ -18,6 +18,7 @@ on:
       - tools/build-vk-games.cjs
       - tools/vk-bridge-entry.js
       - tests/vk-games-platform.test.cjs
+      - tests/vk-games-browser-smoke.cjs
       - .github/workflows/vk-games-packages.yml
 permissions:
   contents: read
@@ -48,6 +49,13 @@ jobs:
           done
       - name: Browser smoke for independent social versions
         run: node tests/vk-games-browser-smoke.cjs
+      - name: Upload cross-device gameplay screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardborn-social-device-qa
+          path: screenshots/social-qa/
+          if-no-files-found: ignore
       - name: Package standalone games
         run: |
           (cd dist/vk && zip -q -r ../../guardborn-vk-games-html5.zip index.html bridge.bundle.js audio/)
