@@ -6,12 +6,18 @@ const scenarios=[
   {platform:'vk',port:4175,engine:chromium,width:390,height:844},
   {platform:'ok',port:4176,engine:chromium,width:390,height:844},
   {platform:'vk',port:4175,engine:webkit,width:390,height:844},
-  {platform:'ok',port:4176,engine:webkit,width:390,height:844}
+  {platform:'ok',port:4176,engine:webkit,width:390,height:844},
+  {platform:'vk',port:4175,engine:chromium,width:844,height:390},
+  {platform:'ok',port:4176,engine:chromium,width:844,height:390},
+  {platform:'vk',port:4175,engine:webkit,width:844,height:390},
+  {platform:'ok',port:4176,engine:webkit,width:844,height:390},
+  {platform:'vk',port:4175,engine:chromium,width:1366,height:768},
+  {platform:'ok',port:4176,engine:chromium,width:1366,height:768}
 ];
 async function check(p){
   const browser=await p.engine.launch({headless:true});
   const context=await browser.newContext({viewport:{width:p.width,height:p.height},
-    hasTouch:true,serviceWorkers:'block',locale:'ru-RU',reducedMotion:'reduce'});
+    hasTouch:p.width<1000,serviceWorkers:'block',locale:'ru-RU',reducedMotion:'reduce'});
   const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(String(e)));
   try{
@@ -46,6 +52,19 @@ async function check(p){
       return {started,canvas:!!g.canvas,saveKey:window.ED_VK_PLATFORM};
     });
     assert(gameplay.started&&gameplay.canvas,'Combat start failed for '+p.platform);
+    const layout=await page.evaluate(()=>{
+      const get=id=>{const el=document.getElementById(id),r=el?.getBoundingClientRect();return r?{x:r.x,right:r.right,y:r.y,bottom:r.bottom,width:r.width,height:r.height}:null};
+      return {width:innerWidth,height:innerHeight,pageWidth:document.documentElement.scrollWidth,
+        skill:get('skillBtn'),cards:get('unitCards'),canvas:get('gameCanvas')};
+    });
+    const pName=p.platform+'-'+(p.engine===webkit?'webkit':'chromium')+'-'+p.width+'x'+p.height;
+    assert(layout.pageWidth<=layout.width+6,'Horizontal scroll in social game '+pName+': '+JSON.stringify(layout));
+    for(const [key,box] of Object.entries({skill:layout.skill,cards:layout.cards,canvas:layout.canvas})){
+      assert(box&&box.width>12&&box.height>12,key+' missing in '+pName);
+      assert(box.x>=-5&&box.right<=layout.width+5,key+' clipped in '+pName+': '+JSON.stringify(box));
+    }
+    require('node:fs').mkdirSync('screenshots/social-qa',{recursive:true});
+    await page.screenshot({path:'screenshots/social-qa/'+pName+'.png'});
     await page.waitForTimeout(150);
     await page.reload({waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>!!window.__ENDLESS_DEFENDERS__,null,{timeout:25000});
