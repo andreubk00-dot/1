@@ -18598,6 +18598,12 @@ func _update_interaction_prompt():
         interaction_label.text = "ОБЕЗОПАСИТЬ ГРУЗ  •  %s" % name.to_upper()
     elif type == "faction_npc":
         interaction_label.text = "ГОВОРИТЬ  •  %s" % name.to_upper()
+    elif type == "marauder_talk":
+        # a stranger stays a stranger until he tells his name (dev66)
+        var who = target.nick if target.has_meta("spared") else "БРОДЯГА"
+        interaction_label.text = "ГОВОРИТЬ  •  %s" % str(who).to_upper()
+    elif type == "marauder_captive":
+        interaction_label.text = "ОБЫСКАТЬ  •  СДАЛСЯ"
     elif type == "story_clue":
         var story_id = str(target.get_meta("story_id",""))
         var story_action = "ПЕРЕЧИТАТЬ" if WorldChronicle.story_seen(faction_state,story_id) else "ЧИТАТЬ"

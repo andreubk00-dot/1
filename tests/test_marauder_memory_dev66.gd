@@ -54,6 +54,23 @@ func run():
         e.queue_free()
     var dir = game.marauder_director
 
+    # the first people met on the road: the trader, before any raiders
+    check(not bool(dir.memory.get("met_trader", false)), "a new world starts with the trader already met")
+    dir.age = dir.FIRST_TRADER_DELAY + 1.0
+    dir.check_t = 0.0
+    await frames(3)
+    var first = dir.squads.filter(func(q): return str(q.kind.get("trader", "")) != "")
+    check(first.size() == 1 and dir.memory["met_trader"], "the trader did not come first")
+    check(dir.squads.size() == 1, "raiders came along with the first trader")
+    for q in dir.squads.duplicate():
+        dir._remove(q)
+    dir.check_t = 0.0
+    await frames(3)
+    check(dir.squads.filter(func(q): return str(q.kind.get("trader", "")) != "").is_empty(), "the first-meeting trader came twice")
+    for q in dir.squads.duplicate():
+        dir._remove(q)
+    dir.age = 0.0
+
     # names
     var nicks = {}
     for i in range(12):

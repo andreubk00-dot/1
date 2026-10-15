@@ -21,7 +21,7 @@ const SQUAD_TYPES = [
     {"outfit": "deserter", "size": [2, 3], "weapons": ["akm", "akm", "shotgun"], "personality": "hostile", "w": 2},
     {"outfit": "deserter", "size": [1, 1], "weapons": ["akm"], "personality": "neutral", "w": 2},
     # dev66: Кузьмич the road trader with his guard (index 6)
-    {"outfit": "bandit", "size": [2, 2], "weapons": ["shotgun", "akm"], "personality": "neutral", "trader": "wanderer_kuzmich", "w": 2},
+    {"outfit": "gopnik", "outfits": ["gopnik", "deserter"], "size": [2, 2], "weapons": ["makarov", "akm"], "personality": "neutral", "trader": "wanderer_kuzmich", "w": 2},
 ]
 const TRADER_TYPE = 6
 const TRADER_STOP = 130.0       # the caravan halts for a customer this close
@@ -99,6 +99,9 @@ var memory = {"spared": [], "executions": 0, "execution_day": -99}
 const SPARED_KEEP = 4
 const REUNION_CHANCE = 0.35
 const NO_MERCY_AT = 2
+# the first people a new survivor meets on the road are Кузьмич and his guard:
+# not every armed man out there is an enemy (about 13:30 on the first day)
+const FIRST_TRADER_DELAY = 90.0
 const MERCY_FORGET_DAYS = 3
 var check_t = 0.0
 var age = 0.0
@@ -198,6 +201,7 @@ func restore_memory(raw) -> void:
     if typeof(raw) != TYPE_DICTIONARY:
         return
     memory["executions"] = clampi(int(raw.get("executions", 0)), 0, 20)
+    memory["met_trader"] = bool(raw.get("met_trader", false))
     memory["execution_day"] = int(raw.get("execution_day", -99))
     for rec in raw.get("spared", []) if typeof(raw.get("spared", [])) == TYPE_ARRAY else []:
         if typeof(rec) != TYPE_DICTIONARY:
@@ -252,6 +256,8 @@ func _tick_trader(sq) -> void:
         if not sq.has_meta("greeted"):
             sq.set_meta("greeted", true)
             trader.say_line("Стой-стой, не стреляй! Торговлю ведём? Патроны, бинты, мелочь.", 4.0)
+            if game.field_hints != null:
+                game.field_hints.hint("road_trader", "Не каждый с оружием — враг. Кузьмич торгует с дороги (E — ТОРГОВАТЬ), нейтральные бродяги не стреляют первыми. Но ствол на них не наводи.")
     if game.trader_open and game.active_trader_id == tid and d > TRADER_FAR:
         game._close_trader()
 
@@ -304,6 +310,11 @@ func _maybe_pilfer(sq, lead) -> void:
 
 
 func _maybe_spawn() -> void:
+    if not bool(memory.get("met_trader", false)) and age >= FIRST_TRADER_DELAY and squads.size() < MAX_SQUADS \
+            and game.player_death_time <= 0.0 and not game._high_risk_floor_active():
+        if spawn_squad(SQUAD_TYPES[TRADER_TYPE]) != null:
+            memory["met_trader"] = true
+            return
     if age < FIRST_DELAY or squads.size() >= MAX_SQUADS:
         return
     if game.player_death_time > 0.0 or game._high_risk_floor_active():
@@ -335,7 +346,8 @@ func spawn_squad(force_type: Dictionary = {}, at: Vector2 = Vector2(INF, INF)):
     for i in range(n):
         var m = Marauder.new()
         var weapons: Array = t["weapons"]
-        m.setup(game, str(t["outfit"]), str(weapons[i % weapons.size()]), str(t["personality"]))
+        var outfits: Array = t.get("outfits", [t["outfit"]])
+        m.setup(game, str(outfits[i % outfits.size()]), str(weapons[i % weapons.size()]), str(t["personality"]))
         m.squad = sq
         m.slot = i
         if i == 0 and str(t.get("trader", "")) != "":

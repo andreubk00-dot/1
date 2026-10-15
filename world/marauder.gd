@@ -208,7 +208,7 @@ func _ready() -> void:
         add_to_group("interactable")
         if has_meta("trader_id"):
             set_meta("interaction_type", "trader")
-            set_meta("display_name", "ТОРГОВАТЬ")
+            set_meta("display_name", nick)
         else:
             set_meta("interaction_type", "marauder_talk")
             set_meta("display_name", "ГОВОРИТЬ")
@@ -357,7 +357,8 @@ func _neutral_watch() -> void:
         facing = (p - global_position).normalized()
         say_line("Ты?.. Это ты меня тогда отпустил. Подойди — должок за мной.", 4.5)
         return
-    if d < 150.0 and state_t > 3.0:
+    # a trader's guard does not growl at the customers
+    if d < 150.0 and state_t > 3.0 and not (squad != null and squad.get("hold") == true):
         _bark("warn")
     # a gun pointed at them for long enough is a threat
     var aimed = game.aim_direction.dot(to / max(d, 0.001)) > 0.965 and (game.equipped_melee_id == "")
