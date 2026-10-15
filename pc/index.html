@@ -1248,6 +1248,18 @@ canvas { touch-action:none; }
   }
 }
 
+
+/* Release QA: on short landscape screens the relic reroll remains scroll-reachable. */
+@media (max-height:600px) and (min-width:721px){
+  #relicScreen .relic-card{
+    max-height:calc(100dvh - 92px);
+    overflow-x:hidden;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    scrollbar-gutter:stable;
+  }
+}
+
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
