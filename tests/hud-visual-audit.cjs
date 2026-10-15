@@ -16,6 +16,8 @@ async function probe(page,name,phase){
  const hits=[];
  for(const [a,b] of pairs)for(let i=0;i<(v.m[a]||[]).length;i++)for(let j=0;j<(v.m[b]||[]).length;j++){if(a===b&&j<=i)continue;const z=area(v.m[a][i],v.m[b][j]);if(z>24)hits.push({a,b,area:z,first:v.m[a][i],second:v.m[b][j]});}
  for(const [sel,rr] of Object.entries(v.m))for(const r of rr){if(r.w>0&&r.h>0&&(r.l< -4||r.r>v.w+4||r.t< -4||r.b>v.h+4))hits.push({outOfBounds:sel,rect:r});}
+ if(phase==='boss' && !(v.m['#bossHud']||[]).length)hits.push({outOfBounds:'bossHud unexpectedly hidden during boss QA'});
+ if(phase==='boss' && !(v.m['#bossObjective']||[]).length)hits.push({outOfBounds:'boss objective unexpectedly hidden during boss QA'});
  const data={view:name,phase,viewport:[v.w,v.h],scrollWidth:v.scrollWidth,hits};report.push(data);console.log('HUD_AUDIT '+JSON.stringify(data));
  await page.screenshot({path:'screenshots/hud-qa/'+name+'-'+phase+'.png'});
 }
@@ -28,7 +30,7 @@ async function run([name,w,h,port]){
  await probe(page,name,'home');
  await page.evaluate(()=>{const g=window.__ENDLESS_DEFENDERS__;g.save.tutorialDone=true;g.audio.enabled=false;g.startRun(false);g.updateBattleHud();});
  await page.waitForTimeout(180);await probe(page,name,'battle');
- await page.evaluate(()=>{const g=window.__ENDLESS_DEFENDERS__,b=document.getElementById('bossHud');b.classList.remove('hidden');document.getElementById('comboHud').classList.remove('hidden');document.getElementById('bossName').textContent='АЭГИДА-10';document.getElementById('bossAbility').textContent='Фазовая броня';const e={boss:g.bossSpec(100),hp:100,maxHp:100,weakCooldown:0,weakOpen:1};g.run.interactives=[];g.updateBossObjective(e);});
+ await page.evaluate(()=>{const g=window.__ENDLESS_DEFENDERS__;g.paused=true;const b=document.getElementById('bossHud');b.classList.remove('hidden');document.getElementById('comboHud').classList.remove('hidden');document.getElementById('bossName').textContent='АЭГИДА-10';document.getElementById('bossAbility').textContent='Фазовая броня';const e={boss:g.bossSpec(100),hp:100,maxHp:100,weakCooldown:0,weakOpen:1};g.run.interactives=[];g.updateBossObjective(e);});
  await probe(page,name,'boss');
  await page.evaluate(()=>{for(const id of ['bossHud','comboHud','bossObjective'])document.getElementById(id).classList.add('hidden');for(const id of ['fieldOrderHud','riftHud'])document.getElementById(id).classList.remove('hidden');});
  await probe(page,name,'notices');
