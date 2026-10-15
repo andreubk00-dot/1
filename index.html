@@ -1229,6 +1229,17 @@ canvas { touch-action:none; }
   #labScreen .upgrade-row h4,#labScreen .upgrade-row p{overflow-wrap:anywhere}
 }
 
+
+/* Small-phone release QA: all modal cards stay within the padded safe viewport. */
+@media (max-width:360px){
+  .modal-screen > .modal-card{
+    max-width:calc(100vw - 36px);
+    width:calc(100vw - 36px);
+    min-width:0;
+    box-sizing:border-box;
+  }
+}
+
 </style>
   <!-- Yandex SDK: no verified ad callback means no bonus. -->
   <script src="/sdk.js"></script>
