@@ -129,7 +129,10 @@ func run() -> void:
     rec = main.VerticalSlice.record(main.faction_state)
     check(int(rec.get("clinical_incapacitations",0)) == failures_before,"non-clinical death polluted slice failure history")
     check(main.world_day == day_before and abs(main.world_minutes - minute_before) < 1.5,"non-clinical legacy respawn unexpectedly gained six-hour penalty")
-    check(main.current_chunk == Vector2i(0,0),"non-clinical legacy respawn no longer returns to generic start chunk")
+    # dev62: a death outside the clinic is a DayZ death - the kit stays on the
+    # body at the start crossroads, a new survivor wakes elsewhere
+    check(main.current_chunk != Vector2i(0,0),"non-clinical death respawned the new survivor on top of the body")
+    check(not main.player_bodies.is_empty(),"non-clinical death left no body with the old kit")
 
     main.queue_free()
     await process_frame

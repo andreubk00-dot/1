@@ -300,6 +300,8 @@ var roof_records = []
 var defeated = {}
 var qa_hide_interaction_prompt = false
 var qa_visual_mode = false
+# balance playtest bot: steers and aims like qa_visual_mode, but takes damage
+var qa_bot_driver = false
 var qa_locked_aim = Vector2.ZERO
 var qa_forced_move_direction = Vector2.ZERO
 var qa_forced_gait_phase = -1.0
@@ -705,6 +707,13 @@ var discovered_chunks = {}
 # building footprints of every loaded sector, for the field map: key -> [[x,y,w,h]]
 # in 1/96 of a sector (8 world px); only discovered sectors are drawn and saved
 var map_footprints = {}
+# dev62: DayZ-style death - the survivor's things stay on the body where they
+# fell; a new survivor starts elsewhere with almost nothing. Each body:
+# {"coord":[x,y],"pos":[x,y],"id":"body_N","day":d,"dir":k}
+var player_bodies = []
+var next_body_id = 1
+var player_death_pos = Vector2.ZERO
+const BODY_LIFETIME_DAYS = 7
 var discovered_pois = {}
 
 # 0.86 region map + expedition foundation. The map is informational: terrain
@@ -4162,7 +4171,7 @@ func _process(delta):
         player.velocity = Vector2.ZERO
     else:
         move_direction = Input.get_vector("move_left","move_right","move_up","move_down")
-        if qa_visual_mode and qa_forced_move_direction.length() > 0.01:
+        if (qa_visual_mode or qa_bot_driver) and qa_forced_move_direction.length() > 0.01:
             move_direction = qa_forced_move_direction.normalized()
         if Input.is_action_just_pressed("crouch"):
             is_crouching = not is_crouching
@@ -4277,7 +4286,7 @@ func _process(delta):
         return
 
     var mouse_pos = get_global_mouse_position()
-    if qa_visual_mode and qa_locked_aim.length() > 0.01:
+    if (qa_visual_mode or qa_bot_driver) and qa_locked_aim.length() > 0.01:
         aim_direction = qa_locked_aim
     elif not inventory_open and not trader_open and not contract_open and not region_map_open and not developer_panel_open and player.global_position.distance_to(mouse_pos) > 2.0:
         aim_direction = (mouse_pos - player.global_position).normalized()
@@ -7402,6 +7411,7 @@ func _begin_player_death():
     if player_death_time > 0.0:
         return
     player_death_time = 0.001
+    player_death_pos = player.global_position
     player.velocity = Vector2.ZERO
     is_sprinting = false
     is_crouching = false
@@ -7511,9 +7521,21 @@ func _respawn_player():
         _save_state()
         return
 
-    _set_survival_feedback("Вы пришли в себя",2.0)
-    player.global_position = Vector2(420,430)
+    # the old survivor is gone: everything they carried stays on the body,
+    # the new one wakes up somewhere else with a bandage, a bottle and a knife
+    var body_coord = _leave_player_body(player_death_pos if player_death_pos != Vector2.ZERO else player.global_position)
+    player_death_pos = Vector2.ZERO
+    _fresh_spawn_kit()
+    hunger = 72.0
+    thirst = 64.0
+    fatigue = 20.0
+    player.global_position = _fresh_spawn_position(body_coord)
     _refresh_chunks(true)
+    if body_coord.x < 900000:
+        _set_survival_feedback("Новый выживший. Ваше тело с вещами лежит там, где вы погибли (метка на карте, M).",6.0)
+    else:
+        _set_survival_feedback("Новый выживший",3.0)
+    _save_state()
 
 # -------------------------------------------------------------------
 # COMBAT / WEAPONS / MEDICAL
@@ -8409,6 +8431,51 @@ func _enemy_bullet_armor_factor(enemy,shot_dir:Vector2) -> float:
         _play_distance_sfx("melee_hit",enemy.global_position,-14.0,420.0,0.02)
     return 1.0 - armor
 
+# dev62: what the dead still had on them (DayZ infected carry a little):
+# one in six leaves a small find, the kind depending on who they were
+const POCKET_DROP_CHANCE = 0.16
+const POCKET_TABLES = {
+    "civil":[["bandage",1,1,3],["ammo_9x18",2,5,3],["canned_meat",1,1,2],["water",1,1,2],["cloth",1,2,2],["painkillers",1,1,1]],
+    "soldier":[["ammo_545",3,8,4],["ammo_9x18",3,6,2],["bandage",1,1,2],["emergency_ration",1,1,1]],
+    "patient":[["bandage",1,2,3],["painkillers",1,1,2],["antiseptic",1,1,1],["sterile_bandage",1,1,1]],
+    "hazmat":[["antiseptic",1,1,2],["water",1,1,2],["tape",1,1,2],["sterile_bandage",1,1,1]],
+}
+
+func _infected_pocket_drop(enemy):
+    if _high_risk_floor_active() or randf() >= POCKET_DROP_CHANCE:
+        return
+    var variant = int(enemy.get_meta("infected_variant",0))
+    var table_id = "civil"
+    if variant == INFECTED_VARIANT_SOLDIER:
+        table_id = "soldier"
+    elif variant == INFECTED_VARIANT_PATIENT:
+        table_id = "patient"
+    elif variant == INFECTED_VARIANT_HAZMAT:
+        table_id = "hazmat"
+    var table = POCKET_TABLES[table_id]
+    var total = 0
+    for row in table:
+        total += int(row[3])
+    var r = randi() % total
+    var pick = table[0]
+    for row in table:
+        r -= int(row[3])
+        if r < 0:
+            pick = row
+            break
+    var id = str(pick[0])
+    if not item_defs.has(id):
+        return
+    var qty = randi_range(int(pick[1]),int(pick[2]))
+    var pos = enemy.global_position
+    var coord = _world_to_chunk(pos)
+    if not loaded_chunks.has(coord):
+        return
+    var record = {"drop_id":next_drop_id,"id":id,"qty":qty,"x":pos.x,"y":pos.y}
+    next_drop_id += 1
+    dropped_items.append(record)
+    _spawn_world_item(loaded_chunks[coord],coord,id,qty,pos - loaded_chunks[coord].global_position,"",int(record["drop_id"]),"")
+
 func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
     if not is_instance_valid(enemy):
         return
@@ -8439,6 +8506,7 @@ func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
         defeated[key] = true
         _high_risk_check_incident_resolution(c,sid)
         _spawn_infected_corpse(enemy,hit_dir)
+        _infected_pocket_drop(enemy)
         enemy.queue_free()
 
 func _ai_state_valid(state):
@@ -17154,6 +17222,11 @@ func _close_inventory():
         _play_ui_sfx("close")
         if active_container_key != "":
             _play_world_sfx("container_close",-14.0,0.04)
+            if active_container_key.find(":container:body_") >= 0:
+                var closing_key = active_container_key
+                active_container_key = ""
+                if container_states.get(closing_key,{}).get("items",[]).is_empty():
+                    _expire_player_bodies()
     inventory_open = false
     active_container_key = ""
     selected_inventory_index = -1
@@ -18248,6 +18321,8 @@ func _take_selected_container():
         entries[selected_container_index] = entry
 
     state["items"] = entries
+    if entries.is_empty():
+        state["emptied_day"] = world_day
     container_states[active_container_key] = state
     _target_farm_note_container_change(active_container_key,false)
     _award_container_discovery(active_container_key,moved)
@@ -18412,6 +18487,8 @@ func _update_interaction_prompt():
             interaction_label.text = "УКРЕПИТЬ ОКНО  •  100%"
     elif type == "workbench":
         interaction_label.text = "ВЕРСТАК  •  КРАФТ"
+    elif type == "water_pump":
+        interaction_label.text = "НАПИТЬСЯ / НАПОЛНИТЬ  •  КОЛОНКА"
     elif type == "trader":
         interaction_label.text = "ТОРГОВАТЬ  •  %s" % name.to_upper()
     elif type == "contract_board":
@@ -18537,7 +18614,11 @@ func _interactable_reachable(node):
     # Doors/windows/barricades are themselves world colliders. Reaching their
     # own collision body is a valid interaction; a different wall in front is not.
     var hit_breach = _collider_breach_node(hit.get("collider",null))
-    return hit_breach == node
+    if hit_breach == node:
+        return true
+    # solid fixtures (a pump) carry their own collider: touching it is reaching it
+    var hit_collider = hit.get("collider",null)
+    return is_instance_valid(hit_collider) and hit_collider.has_meta("interact_owner") and hit_collider.get_meta("interact_owner") == node
 
 func _interact():
     var target = _nearest_interactable()
@@ -18574,6 +18655,8 @@ func _interact():
         _toggle_base_campfire(target)
     elif type == "base_rain_collector":
         _collect_rainwater(target)
+    elif type == "water_pump":
+        _use_water_pump(target)
     elif type == "base_lamp":
         _toggle_base_lamp(target)
     elif type == "base_cot":
@@ -19198,6 +19281,17 @@ func _create_container(chunk, coord, local_pos, container_id, loot_table, displa
         state["target_farm"] = target_farm
         state["generated_day"] = int(state.get("generated_day",world_day))
         state["refresh_cycle"] = int(state.get("refresh_cycle",0))
+        if state.get("items",[]).is_empty() and _container_respawns(key,str(loot_table),poi_id,target_farm):
+            # dev62: the DayZ loot economy - an emptied ordinary container is
+            # restocked when the survivor comes back three days later
+            var emptied = int(state.get("emptied_day",-1))
+            if emptied < 0:
+                state["emptied_day"] = world_day
+            elif world_day - emptied >= LOOT_RESPAWN_DAYS:
+                var cycle = int(state.get("respawn_cycle",0)) + 1
+                state["respawn_cycle"] = cycle
+                state["items"] = _generate_loot("%s:r%d" % [key,cycle],loot_table,int(state["grid_w"]),int(state["grid_h"]))
+                state.erase("emptied_day")
         container_states[key] = state
         if target_farm and state.get("items",[]).is_empty():
             _target_farm_schedule_if_cleared(poi_id)
@@ -19217,6 +19311,15 @@ func _create_container(chunk, coord, local_pos, container_id, loot_table, displa
 
     _world_prop_sprite("crate",node,Vector2(0,-2),0,0.90)
     return node
+
+const LOOT_RESPAWN_DAYS = 3
+const LOOT_NO_RESPAWN_TABLES = ["player_body","all_items_test","weapon_cache_test"]
+
+func _container_respawns(key:String,table:String,poi_id:String,target_farm:bool) -> bool:
+    if target_farm or poi_id != "" or table in LOOT_NO_RESPAWN_TABLES or not loot_tables.has(table):
+        return false
+    # one-off finds stay one-off: world-event caches and the start sector
+    return key.find(":container:event_") < 0 and not key.begins_with("0:0:")
 
 func _generate_loot(key, table_name, grid_w=CONTAINER_W, grid_h=CONTAINER_H):
     var entries = []
@@ -19239,9 +19342,21 @@ func _generate_loot(key, table_name, grid_w=CONTAINER_W, grid_h=CONTAINER_H):
     rng.seed = int(abs(hash(key))) + 1
 
     for rule in table:
-        if rng.randf() <= float(rule.get("chance",1.0)):
+        var rule_id = str(rule.get("id",""))
+        var rule_def = item_defs.get(rule_id,{})
+        var is_ammo = str(rule_def.get("category","")) == "ammo"
+        var chance = float(rule.get("chance",1.0))
+        # guaranteed rules (authored reserves, quest caches) are left alone
+        if chance < 0.999:
+            if is_ammo:
+                chance *= LOOT_AMMO_CHANCE_MULT
+            elif str(rule_def.get("use","")) in ["bandage","sterile_bandage"]:
+                chance *= LOOT_DRESSING_CHANCE_MULT
+        if rng.randf() <= chance:
             var qty = rng.randi_range(int(rule.get("min",1)), int(rule.get("max",1)))
-            _grid_add(entries, str(rule.get("id","")), qty, int(grid_w), int(grid_h))
+            if is_ammo:
+                qty = max(1,int(round(float(qty) * LOOT_AMMO_QTY_MULT)))
+            _grid_add(entries, rule_id, qty, int(grid_w), int(grid_h))
 
     return entries
 
@@ -21141,6 +21256,7 @@ func _load_chunk(coord):
     _record_map_footprint(chunk,coord)
 
     _spawn_saved_drops_for_chunk(chunk,coord)
+    _spawn_player_bodies_for_chunk(chunk,coord)
     # Static bodies become queryable after the physics server synchronizes.
     for child in chunk.get_children():
         if child.has_meta("is_enemy"):
@@ -21178,6 +21294,118 @@ func _sanitize_map_footprints(raw) -> Dictionary:
         if clean.size() >= 4096:
             break
     return clean
+
+func _leave_player_body(pos:Vector2) -> Vector2i:
+    # gather the carried and the worn into one grid on the body
+    var entries = []
+    var w = QA_ALL_ITEMS_CONTAINER_W
+    var h = QA_ALL_ITEMS_CONTAINER_H
+    for entry in inventory_entries:
+        _grid_add_existing_entry(entries,entry.duplicate(true),w,h)
+    _ensure_equipment_slots()
+    for slot in EQUIPMENT_SLOT_IDS:
+        var id = str(equipment.get(slot,""))
+        if id != "":
+            _grid_add(entries,id,1,w,h)
+            equipment[slot] = ""
+    inventory_entries = []
+    equipped_melee_id = ""
+    flashlight_on = false
+    rig_quick_ids = ["",""]
+    if entries.is_empty():
+        return Vector2i(999999,999999)
+    var coord = _world_to_chunk(pos)
+    var local = pos - Vector2(coord) * CHUNK_SIZE
+    var body_id = "body_%d" % next_body_id
+    next_body_id += 1
+    var key = "%d:%d:container:%s" % [coord.x,coord.y,body_id]
+    container_states[key] = {"name":"ВАШЕ ТЕЛО","loot_table":"player_body","grid_w":w,"grid_h":h,
+        "generated_day":world_day,"refresh_cycle":0,"poi_id":"","target_farm":false,"items":entries}
+    var rec = {"coord":[coord.x,coord.y],"pos":[local.x,local.y],"id":body_id,"day":world_day,"dir":visual_aim_dir8}
+    player_bodies.append(rec)
+    while player_bodies.size() > 3:
+        _remove_player_body(player_bodies[0])
+    map_markers[_zone_chunk_key(coord)] = {"kind":"cache","label":"ВАШЕ ТЕЛО • день %d" % world_day}
+    var chunk = loaded_chunks.get(coord,null)
+    if chunk != null:
+        _spawn_player_body(chunk,coord,rec)
+    return coord
+
+func _remove_player_body(rec:Dictionary):
+    var coord = Vector2i(int(rec["coord"][0]),int(rec["coord"][1]))
+    var key = "%d:%d:container:%s" % [coord.x,coord.y,str(rec.get("id",""))]
+    container_states.erase(key)
+    player_bodies.erase(rec)
+    var mk = _zone_chunk_key(coord)
+    if map_markers.has(mk) and str(map_markers[mk].get("label","")).begins_with("ВАШЕ ТЕЛО"):
+        map_markers.erase(mk)
+    for n in get_tree().get_nodes_in_group("player_bodies"):
+        if str(n.get_meta("container_key","")) == key:
+            n.queue_free()
+
+func _expire_player_bodies():
+    # a week on, the body is gone (DayZ bodies do not wait forever); an
+    # emptied one is gone as soon as it is left
+    for rec in player_bodies.duplicate():
+        var coord = Vector2i(int(rec["coord"][0]),int(rec["coord"][1]))
+        var key = "%d:%d:container:%s" % [coord.x,coord.y,str(rec.get("id",""))]
+        var empty = container_states.get(key,{}).get("items",[]).is_empty()
+        if world_day - int(rec.get("day",world_day)) >= BODY_LIFETIME_DAYS or (empty and active_container_key != key):
+            _remove_player_body(rec)
+
+func _spawn_player_body(chunk,coord,rec:Dictionary):
+    var local = Vector2(float(rec["pos"][0]),float(rec["pos"][1]))
+    var node = _create_container(chunk,coord,local,str(rec.get("id","body")),"player_body","ВАШЕ ТЕЛО",QA_ALL_ITEMS_CONTAINER_W,QA_ALL_ITEMS_CONTAINER_H)
+    if node == null:
+        return
+    node.add_to_group("player_bodies")
+    for c in node.get_children():
+        c.queue_free()
+    # the survivor as they fell: the last frame of the death clip
+    var tex = load("res://survivor_Die.png")
+    if tex != null:
+        var at = AtlasTexture.new()
+        at.atlas = tex
+        at.region = Rect2(7 * 128,(int(rec.get("dir",2)) % 8) * 128,128,128)
+        var sp = Sprite2D.new()
+        sp.texture = at
+        sp.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        sp.scale = Vector2(0.5,0.5)
+        sp.position = Vector2(0,-14)
+        sp.modulate = Color(0.86,0.84,0.82)
+        node.add_child(sp)
+    node.z_index = 6
+
+func _spawn_player_bodies_for_chunk(chunk,coord):
+    for rec in player_bodies:
+        if int(rec["coord"][0]) == coord.x and int(rec["coord"][1]) == coord.y:
+            _spawn_player_body(chunk,coord,rec)
+
+func _fresh_spawn_kit():
+    inventory_entries = []
+    _grid_add(inventory_entries,"bandage",1,INV_W,INV_H)
+    _grid_add(inventory_entries,"water",1,INV_W,INV_H)
+    _grid_add(inventory_entries,"combat_knife",1,INV_W,INV_H)
+    _ensure_runtime_item_instance_ids()
+    _switch_melee("combat_knife")
+    selected_inventory_index = -1
+
+func _fresh_spawn_position(avoid:Vector2i) -> Vector2:
+    # somewhere in the old town, away from the body and off the authored sites
+    var candidates = []
+    for y in range(-3,4):
+        for x in range(-3,4):
+            var c = Vector2i(x,y)
+            if absi(x) + absi(y) < 2:
+                continue
+            if avoid.x < 900000 and absi(c.x - avoid.x) + absi(c.y - avoid.y) < 2:
+                continue
+            if not RegionCatalog.poi_for_chunk(c).is_empty():
+                continue
+            candidates.append(c)
+    var pick = candidates[randi() % candidates.size()] if not candidates.is_empty() else Vector2i(0,0)
+    var offsets = [Vector2(384,240),Vector2(240,384),Vector2(528,384),Vector2(384,528)]
+    return Vector2(pick) * CHUNK_SIZE + offsets[randi() % offsets.size()]
 
 func _schedule_chunk_enemy_spawns(chunk):
     pending_spawn_chunks.append(chunk)
@@ -24945,6 +25173,7 @@ func _build_procedural_chunk(chunk,coord):
             )
     if not authored_poi and world_event.is_empty():
         _plant_forest_edges(chunk,coord,zone)
+        _place_water_pump(chunk,coord,zone)
 
     if not authored_poi and world_event.is_empty():
         _decorate_zone_street_art(chunk,zone,coord)
@@ -26440,6 +26669,94 @@ func _tree_blocks_door_swing(chunk,pos):
             return true
 
     return false
+
+# dev62: hand pumps (DayZ wells) - the dachas have them at most crossroads,
+# the town now and then, the woods rarely. Clean groundwater: drink your fill
+# and top up every flask and canister. Visual is drawn in whole world units.
+const WATER_PUMP_CHANCE = {"rural":0.6,"residential":0.24,"woodland":0.14,"commercial":0.08,"industrial":0.08,"central":0.12}
+const WATER_PUMP_SPOTS = [Vector2(238,238),Vector2(530,238),Vector2(238,530),Vector2(530,530)]
+
+func _place_water_pump(chunk,coord,zone):
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 1299709 + coord.y * 15485863 + 4441)) + 1
+    if rng.randf() >= float(WATER_PUMP_CHANCE.get(str(zone),0.0)):
+        return
+    var start = rng.randi_range(0,3)
+    for i in range(4):
+        var p:Vector2 = WATER_PUMP_SPOTS[(start + i) % 4]
+        if _tree_overlaps_building(chunk,p) or _tree_blocks_door_swing(chunk,p) or _forest_edge_blocked(chunk,p):
+            continue
+        _create_water_pump(chunk,p)
+        return
+
+func _create_water_pump(chunk,pos:Vector2):
+    var pump = Node2D.new()
+    pump.position = pos.round()
+    pump.z_index = 7
+    pump.z_as_relative = false
+    pump.add_to_group("interactable")
+    pump.add_to_group("water_pumps")
+    pump.set_meta("interaction_type","water_pump")
+    pump.set_meta("display_name","КОЛОНКА")
+    pump.set_meta("interaction_radius",40.0)
+    chunk.add_child(pump)
+    # concrete pad, the wet patch under the spout, the iron column and lever
+    var pad = Polygon2D.new()
+    pad.polygon = PackedVector2Array([Vector2(-9,2),Vector2(9,2),Vector2(9,9),Vector2(-9,9)])
+    pad.color = Color(0.46,0.46,0.42)
+    pad.z_index = -1
+    pump.add_child(pad)
+    var wet = Polygon2D.new()
+    wet.polygon = PackedVector2Array([Vector2(1,3),Vector2(8,3),Vector2(8,8),Vector2(1,8)])
+    wet.color = Color(0.25,0.29,0.31,0.85)
+    wet.z_index = -1
+    pump.add_child(wet)
+    for rect in [[Vector2(-3,-15),Vector2(5,18),Color(0.22,0.33,0.25)],[Vector2(-2,-15),Vector2(1,17),Color(0.32,0.45,0.34)],
+            [Vector2(-4,-17),Vector2(7,3),Color(0.18,0.27,0.21)],[Vector2(2,-11),Vector2(5,2),Color(0.20,0.30,0.23)],
+            [Vector2(6,-11),Vector2(1,3),Color(0.16,0.24,0.18)],[Vector2(-10,-18),Vector2(8,1),Color(0.12,0.12,0.12)],
+            [Vector2(-11,-19),Vector2(2,3),Color(0.14,0.14,0.14)]]:
+        var r = Polygon2D.new()
+        var o:Vector2 = rect[0]
+        var sz:Vector2 = rect[1]
+        r.polygon = PackedVector2Array([o,o + Vector2(sz.x,0),o + sz,o + Vector2(0,sz.y)])
+        r.color = rect[2]
+        pump.add_child(r)
+    var body = _add_static_rect(pump,Vector2(0,1),Vector2(8,6))
+    body.set_meta("interact_owner",pump)
+    return pump
+
+func _use_water_pump(node):
+    var drank = thirst < 99.0
+    thirst = 100.0
+    if drank:
+        stamina = min(_survival_stamina_cap(),stamina + 10.0)
+    # fill every flask and canister
+    _ensure_runtime_item_instance_ids()
+    _ensure_water_container_runtime_state()
+    var filled = 0.0
+    for entry in inventory_entries:
+        var item_id = str(entry.get("id",""))
+        if not _is_water_container_item(item_id):
+            continue
+        var iid = str(entry.get("instance_id",""))
+        var cap = float(item_defs[item_id].get("capacity_l",1.0))
+        var fill = _water_container_fill_l(item_id,iid)
+        if fill < cap - 0.001:
+            filled += cap - fill
+            _set_water_container_fill_l(item_id,iid,cap)
+    if drank or filled > 0.0:
+        _play_world_sfx("drink",-10.0,0.03)
+    var parts = []
+    if drank:
+        parts.append("Напились чистой воды")
+    if filled > 0.0:
+        parts.append("набрано %.1f л" % filled)
+    if parts.is_empty():
+        parts.append("Пить не хочется, ёмкостей нет")
+    _set_survival_feedback(" • ".join(parts),2.2)
+    var key = _zone_chunk_key(current_chunk)
+    if not map_markers.has(key):
+        map_markers[key] = {"kind":"water","label":"Колонка"}
 
 # dev61: a wood is walls of trees along its tracks, not a clearing with the
 # trees out of sight in the middle of the blocks. Woodland and rural tracks get
@@ -28543,6 +28860,14 @@ func _survival_speed_multiplier():
     mult *= _fatigue_speed_multiplier()
     return max(0.50,mult)
 
+const SURVIVAL_HUNGER_RATE = 0.040
+const SURVIVAL_THIRST_RATE = 0.066
+# dev62: rounds are what keeps a survivor alive in DayZ - they are found by
+# the handful, not by the box; dressings are rarer than food
+const LOOT_AMMO_QTY_MULT = 0.4
+const LOOT_AMMO_CHANCE_MULT = 0.8
+const LOOT_DRESSING_CHANCE_MULT = 0.7
+
 func _survival_damage_per_second():
     var damage = 0.0
     if hunger <= 0.0:
@@ -28624,8 +28949,11 @@ func _update_survival(delta):
     if wound_infection >= 50.0:
         activity_thirst_mult *= 1.0 + min(0.40,(wound_infection - 50.0) / 50.0 * 0.40)
 
-    hunger = max(0.0,hunger - delta * 0.018 * activity_hunger_mult)
-    thirst = max(0.0,thirst - delta * 0.028 * activity_thirst_mult)
+    # dev62 DayZ pacing: at rest a bottle lasts about ten real minutes and a
+    # tin a quarter of an hour; running doubles the thirst (was 0.018 / 0.028,
+    # a survivor could go nine game days without a drink)
+    hunger = max(0.0,hunger - delta * SURVIVAL_HUNGER_RATE * activity_hunger_mult)
+    thirst = max(0.0,thirst - delta * SURVIVAL_THIRST_RATE * activity_thirst_mult)
 
     if bleeding:
         var remaining_bleed_damage = max(0.0,MAX_BLEED_DAMAGE - bleed_damage_taken)
@@ -32477,6 +32805,7 @@ func _process_world_day_rollovers(previous_day:int,new_day:int) -> void:
             _set_survival_feedback("ИТОГ РЕГИОНА • %s" % str(ending.get("title","СЕЗОН ЗАВЕРШЁН")),5.0)
             call_deferred("_show_ending_screen",regional_result.get("outcome",{}),ending,tick_day)
     TradingMarket.restock_all(faction_state,new_day)
+    _expire_player_bodies()
 
 func _create_day_night():
     canvas_modulate = CanvasModulate.new()
@@ -33735,6 +34064,8 @@ func _save_state():
         "door_states":door_states,
         "shelter_breach_states":shelter_breach_states,
         "map_markers":map_markers,
+        "player_bodies":player_bodies,
+        "next_body_id":next_body_id,
         "picked_world_items":picked_world_items,
         "dropped_items":dropped_items,
         "next_drop_id":next_drop_id,
@@ -33969,6 +34300,13 @@ func _load_state():
     if typeof(shelter_breach_states) != TYPE_DICTIONARY:
         shelter_breach_states = {}
     map_markers = _sanitize_map_markers(parsed.get("map_markers",{}))
+    player_bodies = []
+    var raw_bodies = parsed.get("player_bodies",[])
+    if typeof(raw_bodies) == TYPE_ARRAY:
+        for b in raw_bodies:
+            if typeof(b) == TYPE_DICTIONARY and typeof(b.get("coord")) == TYPE_ARRAY and typeof(b.get("pos")) == TYPE_ARRAY and b["coord"].size() == 2 and b["pos"].size() == 2:
+                player_bodies.append({"coord":[int(b["coord"][0]),int(b["coord"][1])],"pos":[float(b["pos"][0]),float(b["pos"][1])],"id":str(b.get("id","body")),"day":int(b.get("day",1)),"dir":int(b.get("dir",2))})
+    next_body_id = max(1,int(parsed.get("next_body_id",player_bodies.size() + 1)))
     picked_world_items = parsed.get("picked_world_items",{})
     dropped_items = parsed.get("dropped_items",[])
     next_drop_id = int(parsed.get("next_drop_id",1))

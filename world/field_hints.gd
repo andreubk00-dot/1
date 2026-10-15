@@ -186,6 +186,10 @@ func _check_hints() -> void:
     var hour = int(float(game.world_minutes) / 60.0) % 24
     if hour >= 20 or hour < 6:
         hint("dark", "Темно. F — фонарь: светит далеко, но и вас видно издалека.")
+    for pump in get_tree().get_nodes_in_group("water_pumps"):
+        if is_instance_valid(pump) and pump.global_position.distance_to(game.player.global_position) < 140.0:
+            hint("pump", "Колонка: E — напиться вдоволь и наполнить флягу или канистру. Её отметят на карте.")
+            break
     if float(game.thirst) < 45.0:
         hint("thirst", "Хочется пить: Tab → ПКМ по воде. Воду ищите на кухнях и в магазинах.")
     if float(game.hunger) < 45.0:

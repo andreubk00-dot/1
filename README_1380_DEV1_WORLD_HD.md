@@ -1079,3 +1079,32 @@ Found by a scripted play session from a fresh start:
   just beyond the ruts (with gaps; a dirt track has no pavement, so the
   protected band there is the track itself). Its own seed - loot, cars and
   infected stay where they were.
+
+## dev62 — DayZ rules: death costs everything, water and rounds matter
+
+- **Death**: the survivor's whole kit - pack contents and everything worn -
+  stays on the body where they fell, a searchable container («ВАШЕ ТЕЛО»)
+  marked on the map. A new survivor wakes 2+ sectors away in the old town
+  with a bandage, a bottle and a knife, hungry and thirsty. The world, the
+  day and the map knowledge stay. A body lasts 7 days (at most three are
+  kept) and disappears once emptied. The Lazaret's scripted evacuation in the
+  first clinical run still keeps the gear (it is a rescue, not a death).
+- **Pacing** (measured with a playtest bot and a loot census of 121 sectors):
+  thirst and hunger ran nine game days without a drink; now a bottle lasts
+  about ten real minutes and a tin about a quarter of an hour (running
+  doubles the thirst). Health only regenerates while fed and watered (>= 70),
+  so eating is healing.
+- **Loot economy**: rounds came by the box (29 per sector) - now about nine
+  per sector (40 % quantity, 80 % chance); dressings 30 % rarer.
+- **Hand pumps** («КОЛОНКА»): about one sector in seven, most in the dachas -
+  drink your fill and top up every flask and canister; found pumps are
+  marked on the map.
+- **Pockets**: one dead infected in six leaves a small find by who they were
+  (civilians: a bandage, a few 9x18, a tin; soldiers: 5.45; patients and
+  hazmat crews: medicine).
+- `qa_bot_driver` lets a scripted driver steer and aim like the QA mode but
+  without its invulnerability (balance playtests).
+- **Loot respawn** (the DayZ economy): an emptied ordinary container is
+  restocked from its table when the survivor comes back three or more days
+  after emptying it. Authored sites keep their own refill cycles; bodies,
+  world-event caches, test crates and the start sector never refill.
