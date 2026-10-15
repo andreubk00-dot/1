@@ -6,9 +6,9 @@ const profiles=[
  ['mobile-tight',568,320,4174],['mobile-portrait',390,844,4174],
  ['small-portrait',320,568,4174]
 ];
-const sels=['.brand','.resources','.hud-top','.hud-top .hud-pill','.hud-bottom','#unitCards','#skillBtn','#bossHud','#bossObjective','#comboHud','#riftHud','#fieldOrderHud','#commanderCombatHud'];
+const sels=['.brand','.resources','.hud-top','.hud-top .hud-pill','.hud-bottom','#unitCards','#skillBtn','#bossHud','#bossObjective','#waveBanner','#comboHud','#riftHud','#fieldOrderHud','#commanderCombatHud'];
 const area=(a,b)=>Math.max(0,Math.min(a.r,b.r)-Math.max(a.l,b.l))*Math.max(0,Math.min(a.b,b.b)-Math.max(a.t,b.t));
-const pairs=[['.brand','.resources'],['.hud-top .hud-pill','.hud-top .hud-pill'],['#unitCards','#commanderCombatHud'],['#skillBtn','#commanderCombatHud'],['#bossHud','#bossObjective'],['#bossObjective','#commanderCombatHud'],['#bossObjective','#unitCards'],['#bossObjective','#skillBtn'],['#fieldOrderHud','#bossHud'],['#fieldOrderHud','#bossObjective'],['#fieldOrderHud','#commanderCombatHud'],['#comboHud','#bossHud'],['#comboHud','#bossObjective'],['#comboHud','#fieldOrderHud'],['#riftHud','#fieldOrderHud']];
+const pairs=[['.brand','.resources'],['.hud-top .hud-pill','.hud-top .hud-pill'],['#unitCards','#commanderCombatHud'],['#skillBtn','#commanderCombatHud'],['#bossHud','#bossObjective'],['#bossHud','#waveBanner'],['#bossObjective','#waveBanner'],['#bossObjective','#commanderCombatHud'],['#bossObjective','#unitCards'],['#bossObjective','#skillBtn'],['#fieldOrderHud','#bossHud'],['#fieldOrderHud','#bossObjective'],['#fieldOrderHud','#commanderCombatHud'],['#comboHud','#bossHud'],['#comboHud','#bossObjective'],['#comboHud','#fieldOrderHud'],['#riftHud','#fieldOrderHud']];
 const report=[];
 fs.mkdirSync('screenshots/hud-qa',{recursive:true});
 async function probe(page,name,phase){

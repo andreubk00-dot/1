@@ -1204,6 +1204,10 @@ canvas { touch-action:none; }
   .topbar .icon-btn{min-width:32px;width:32px;height:38px;min-height:38px;padding:0 3px}
 }
 
+
+/* Keep transitional wave announcements from covering live boss health and tactics. */
+.boss-hud:not(.hidden) ~ #waveBanner{display:none!important}
+
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
