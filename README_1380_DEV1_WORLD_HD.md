@@ -1252,3 +1252,41 @@ nothing overlaps.
   bottle or a ration for ten rounds of his gun (or a bandage); otherwise a
   rumour.
 - Garrison cost: 21 men in a fight at the base, no measurable frame cost.
+
+## dev66 — raiders who remember, a trader on the road, the night shift
+
+- **Names**: every raider has a name; his mates shout it when he goes down
+  («Хромого завалили!»).
+- **Mercy remembered**: a raider searched and let go is remembered. From
+  the next day he may come back along the road, alone and neutral; he knows
+  the survivor («Ты?.. Это ты меня тогда отпустил»), and once pays his debt -
+  a trauma kit, a sterile bandage, a ration or antibiotics, rounds for the
+  survivor's own gun, and a tip (where «Чёрный двор» is, or how its night
+  shift works). Saved with the world.
+- **No mercy remembered too**: shooting men with their hands up gets round.
+  After two, cowards no longer surrender - they fight («Он сдавшихся
+  кончает!») - until the rumour fades, a step every three quiet days.
+- **Кузьмич**, the road trader, walks with a guard among the roaming
+  squads: the caravan halts for a customer, the stall opens with E
+  («ТОРГОВАТЬ • КУЗЬМИЧ») on the shared talon economy - ammo of every
+  calibre, bandages, painkillers, food, tape, a torch, a magazine - at road
+  prices (no town behind him), fresh goods each time he comes. Walk off and
+  the stall closes; turn a gun on him and there is no more trade. He is the
+  first man a new survivor meets (about 13:30 on day one): not every armed
+  man is an enemy. A hint names it the first time.
+- **Night shift at the base**: from 02:00 the men on the walls and the gate
+  go, one after another (14 game minutes apart), to report at the nearest
+  guard point (garage crossing, guardhouse, barracks, the fire, the boiler
+  house, the HQ), wait there and come back; the post stands empty
+  meanwhile and the guard points get crowded. An alarm ends it. The gate
+  rules in the base mention it; a grateful raider may tell it.
+- Prompts for the new actions: «ГОВОРИТЬ • БРОДЯГА» (the name once he gave
+  it), «ОБЫСКАТЬ • СДАЛСЯ», «ТОРГОВАТЬ • КУЗЬМИЧ»; a trader's guard does not
+  growl at customers; long lines over the head wrap.
+- Early game, measured from a new start: makarov and 24 rounds, two
+  bandages, water, knife; within two sectors ~51 water, ~56 food, ~104
+  medical items, 3 infected next to the start, the first raiders after 16
+  game hours - the first day was safe and empty, now it has the trader.
+- Tests: `tests/test_marauder_memory_dev66.gd` (38 checks: names, the spared
+  man's return, debt, no mercy and its fading, save, the first trader, the
+  road stall); the base test checks the night shift (446 checks).
