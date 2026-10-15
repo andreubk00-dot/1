@@ -32,15 +32,30 @@ func run():
         for w in ["makarov", "akm", "shotgun", "none"]:
             check(ResourceLoader.exists("res://art/marauders/%s_%s_Walk.png" % [o, w]), "missing sheet %s %s" % [o, w])
 
+    # dev64 sounds: four voices, deaths, the passing round
+    for v in range(4):
+        for k in ["hurt", "shout"]:
+            for i in range(1, 4):
+                check(ResourceLoader.exists("res://audio/marauders/v%d_%s_%d.wav" % [v, k, i]), "missing voice v%d %s %d" % [v, k, i])
+    for i in range(1, 7):
+        check(ResourceLoader.exists("res://audio/marauders/death_%d.wav" % i), "missing death cry %d" % i)
+    for i in range(1, 4):
+        check(game._cached_world_audio("flyby_%d" % i) != null, "missing bullet flyby %d" % i)
+
     # hostile squad engages a player standing in the open
     var p = game.player.global_position
     var sq = dir.spawn_squad(dir.SQUAD_TYPES[2], p + Vector2(220, 0))
     check(sq != null and sq.members.size() >= 2, "hostile squad did not spawn")
+    # daylight, and they look this way (detection geometry is not under test)
+    game.world_minutes = 12.0 * 60.0
+    for m in sq.members:
+        m.facing = (p - m.global_position).normalized()
     for m in sq.members:
         check(dir._free_at(m.global_position), "marauder spawned inside geometry")
         check(m.is_in_group("marauders") and m.has_meta("is_enemy"), "marauder not targetable")
     var hp0 = game.health
-    await frames(480)
+    # accuracy is a dice roll: give them fifteen seconds
+    await frames(900)
     var fighting = sq.alive().filter(func(m): return m.state == "combat").size()
     check(fighting >= 1, "squad never engaged the player")
     check(game.health < hp0, "squad engaged but never hurt the player")
@@ -79,7 +94,8 @@ func run():
     var mc = sqc.members[0]
     await frames(90)
     game._damage_enemy(mc, 50.0, Vector2.LEFT)
-    await frames(20)
+    # the hit shoves him back first (dev64), then he gives up
+    await frames(50)
     check(mc.surrendered and mc.weapon_dropped and mc.state == "surrender", "coward did not surrender")
     var drops = game.dropped_items.filter(func(d): return str(d.get("id", "")) == mc.weapon)
     check(not drops.is_empty(), "surrendered coward did not drop the weapon")
@@ -101,6 +117,63 @@ func run():
     check(warned, "neutral never warned about the raised gun")
     check(mn.hostile_to_player, "neutral ignored a gun pointed at them")
     game.qa_bot_driver = false
+
+    # dev64: a silent takedown from behind with a blade
+    game.health = 100.0
+    var sqt = dir.spawn_squad(dir.SQUAD_TYPES[2], game.player.global_position + Vector2(0, -60))
+    var victim = sqt.members[0]
+    for m in sqt.members:
+        m.awareness = 0.0
+        m._set_state("patrol")
+    victim.facing = Vector2.UP
+    victim.global_position = game.player.global_position + Vector2(0, -24)
+    victim.awareness = 0.0
+    check(victim.unaware_of(game.player.global_position), "a raider facing away is not unaware")
+    check(game._takedown_target() == victim, "no takedown prompt behind an unaware raider")
+    victim.silent_takedown(Vector2.UP)
+    await frames(80)
+    check(not is_instance_valid(victim) or victim.dead, "takedown did not kill")
+    for s in dir.squads.duplicate():
+        dir._remove(s)
+    await frames(2)
+
+    # dev64: a hit shoves the raider and spoils his aim
+    var sqh = dir.spawn_squad(dir.SQUAD_TYPES[4], game.player.global_position + Vector2(200, 0))
+    var mh = sqh.members[0]
+    await frames(10)
+    var before = mh.global_position
+    game._damage_enemy(mh, 30.0, Vector2.RIGHT)
+    await frames(8)
+    check(mh.global_position.x > before.x + 2.0, "a 30-damage hit did not shove the raider back")
+    check(mh.flinch_t > 0.0, "a hit did not spoil the raider's aim")
+
+    # dev64: a fight survives a save and reload
+    mh._set_state("combat")
+    game._save_state()
+    var g3 = Main.new()
+    root.add_child(g3)
+    await frames(8)
+    var restored = []
+    for s in g3.marauder_director.squads:
+        restored += s.alive()
+    check(not restored.is_empty(), "squads near the player vanished on reload")
+    check(restored.any(func(m): return m.state == "combat"), "a fight in progress was not restored as a fight")
+    g3.queue_free()
+    await frames(2)
+    for s in dir.squads.duplicate():
+        dir._remove(s)
+    await frames(2)
+
+    # dev64: raiders open a closed door in their way
+    var doors = game.get_tree().get_nodes_in_group("doors").filter(func(d): return is_instance_valid(d) and not bool(d.get_meta("door_open", false)))
+    check(not doors.is_empty(), "no closed door to test with")
+    if not doors.is_empty():
+        var door = doors[0]
+        var sqd = dir.spawn_squad(dir.SQUAD_TYPES[3], door.global_position + Vector2(0, 30))
+        var md = sqd.members[0]
+        md.global_position = door.global_position + Vector2(0, 26)
+        md._open_door_ahead(Vector2(0, -40))
+        check(bool(door.get_meta("door_open", false)), "a raider could not open the closed door in front of him")
 
     # director: at most two squads, gone when the player leaves
     for s in dir.squads.duplicate():

@@ -2837,6 +2837,7 @@ const FieldHints = preload("res://world/field_hints.gd")
 var field_hints = null
 const MarauderDirector = preload("res://world/marauder_director.gd")
 var marauder_director = null
+var marauder_saved = []
 var field_hints_saved = {}
 var pixel_ui_font = null
 
@@ -2969,6 +2970,8 @@ func _ready():
     marauder_director.name = "MarauderDirector"
     marauder_director.game = self
     add_child(marauder_director)
+    if not marauder_saved.is_empty():
+        marauder_director.call_deferred("restore",marauder_saved)
     _ensure_shelter_threat_indicator()
     _create_weather_visuals()
     _create_day_night()
@@ -7688,6 +7691,11 @@ func _perform_melee_attack():
             continue
 
         var push_dir = enemy.global_position - player.global_position
+        if enemy.has_method("unaware_of") and enemy.unaware_of(player.global_position):
+            # a silent takedown: one blow, no shout, only witnesses react
+            enemy.silent_takedown(push_dir.normalized())
+            hit_count += 1
+            continue
         _apply_enemy_impulse(enemy,push_dir,knockback,stagger_time)
         _damage_enemy(enemy,damage,push_dir.normalized())
         hit_count += 1
@@ -8040,6 +8048,9 @@ func _world_sfx_path(kind):
         "infected_spit": return "res://audio/infected/infected_spit.wav"
         "player_hit": return "res://audio/infected/player_hit.wav"
         "spit_hit": return "res://audio/infected/spit_hit.wav"
+        "flyby_1": return "res://audio/world/bullet_flyby_1.wav"
+        "flyby_2": return "res://audio/world/bullet_flyby_2.wav"
+        "flyby_3": return "res://audio/world/bullet_flyby_3.wav"
         "drink": return "res://audio/world/drink.wav"
         "eat": return "res://audio/world/eat.wav"
         "bandage": return "res://audio/world/bandage.wav"
@@ -18455,6 +18466,13 @@ func _update_interaction_prompt():
             hud_interaction_panel.visible = false
         return
 
+    # dev64: a raider who has not noticed you, within a blade's reach from behind
+    if equipped_melee_id != "" and _takedown_target() != null:
+        interaction_label.text = "ЛКМ  •  ТИХО УБИТЬ"
+        if hud_interaction_panel != null:
+            hud_interaction_panel.visible = true
+        return
+
     var target = _nearest_interactable()
     if target == null:
         interaction_label.text = ""
@@ -21354,6 +21372,34 @@ const MARAUDER_EXTRAS = {
     "bandit":[["bandage",0.45],["canned_meat",0.3],["water",0.35],["field_backpack",0.3],["tape",0.3],["painkillers",0.2]],
     "deserter":[["bandage",0.5],["emergency_ration",0.45],["water",0.4],["police_vest",0.3],["field_rig",0.25],["sterile_bandage",0.2]],
 }
+
+func _takedown_target():
+    if player == null:
+        return null
+    for m in get_tree().get_nodes_in_group("marauders"):
+        if not is_instance_valid(m) or not m.has_method("unaware_of"):
+            continue
+        if m.global_position.distance_to(player.global_position) > 34.0:
+            continue
+        if m.unaware_of(player.global_position) and _melee_line_clear(m.global_position):
+            return m
+    return null
+
+func _npc_open_door(node,from_pos:Vector2,kicked:bool = false) -> bool:
+    # a raider opens (or in a fight kicks open) a closed door, the leaf swinging
+    # away from them, with the same sounds and noise as the player's doors
+    var key = str(node.get_meta("door_key",""))
+    if key == "" or bool(door_states.get(key,false)):
+        return false
+    var local_from = node.to_local(from_pos)
+    node.set_meta("door_swing",-PI * 0.5 if local_from.y >= 0.0 else PI * 0.5)
+    door_states[key] = true
+    _apply_door_state(node,true,false)
+    _emit_ai_sound(node.global_position,180.0 if kicked else 82.0,"door",1.4 if kicked else 0.85)
+    _play_distance_sfx("melee_hit" if kicked else "door_open",node.global_position,-8.0 if kicked else -11.0,520.0,0.02)
+    if kicked:
+        _play_distance_sfx("door_open",node.global_position,-9.0,520.0,0.02)
+    return true
 
 func _leave_marauder_body(m):
     # what the raider had on them, in one grid where they fell
@@ -26866,6 +26912,9 @@ func _plant_forest_edges(chunk,coord,zone):
     var rng = RandomNumberGenerator.new()
     rng.seed = int(abs(coord.x * 83492791 + coord.y * 2971215073 + 991)) + 1
     var planted = 0
+    # gather what the edge must keep clear of once, not per candidate (the
+    # door test alone walked every door of every loaded sector)
+    var ctx = _forest_edge_context(chunk)
     for side in [DIRT_TRACK_MIN,DIRT_TRACK_MAX]:
         var outward = -1.0 if side == DIRT_TRACK_MIN else 1.0
         for vertical in [true,false]:
@@ -26876,11 +26925,50 @@ func _plant_forest_edges(chunk,coord,zone):
                 p += Vector2(rng.randf_range(-3.0,3.0),rng.randf_range(-3.0,3.0)) * (Vector2(0,1) if vertical else Vector2(1,0))
                 var keep = rng.randf() >= gap
                 var scale_factor = rng.randf_range(0.78,1.12)
-                if keep and not _point_on_road_or_sidewalk(p,true) and not _tree_overlaps_building(chunk,p) and not _tree_blocks_door_swing(chunk,p) and not _forest_edge_blocked(chunk,p):
-                    if _create_tree(chunk,p,scale_factor,true) != null:
+                if keep and not _point_on_road_or_sidewalk(p,true) and not _forest_edge_hits(ctx,p):
+                    var tree = _create_tree(chunk,p,scale_factor,true)
+                    if tree != null:
                         planted += 1
+                        ctx["trees"].append(p)
                 t += spacing * rng.randf_range(0.75,1.3)
     chunk.set_meta("forest_edge_trees",planted)
+
+func _forest_edge_context(chunk) -> Dictionary:
+    var ctx = {"buildings":[],"doors":[],"blocks":[],"trees":[]}
+    var area = Rect2(chunk.global_position - Vector2(100,100),Vector2(CHUNK_SIZE + 200,CHUNK_SIZE + 200))
+    for door in get_tree().get_nodes_in_group("doors"):
+        if is_instance_valid(door) and area.has_point(door.global_position):
+            ctx["doors"].append(door.global_position - chunk.global_position)
+    for child in chunk.get_children():
+        if not is_instance_valid(child):
+            continue
+        if child.has_meta("world_building"):
+            var size = child.get_meta("building_size",Vector2.ZERO)
+            if typeof(size) == TYPE_VECTOR2 and size != Vector2.ZERO:
+                var clearance = Vector2(30,42)
+                ctx["buildings"].append(Rect2(child.position - size * 0.5 - clearance,size + clearance * 2.0))
+        if bool(child.get_meta("world_event_root",false)):
+            ctx["blocks"].append(_world_event_rect(child).grow(22.0))
+        if bool(child.get_meta("world_car",false)):
+            ctx["blocks"].append(Rect2(child.position - Vector2(44,28),Vector2(88,56)))
+        if bool(child.get_meta("world_tree",false)):
+            ctx["trees"].append(child.position)
+    return ctx
+
+func _forest_edge_hits(ctx:Dictionary,p:Vector2) -> bool:
+    for r in ctx["buildings"]:
+        if r.has_point(p):
+            return true
+    for r in ctx["blocks"]:
+        if r.has_point(p):
+            return true
+    for d in ctx["doors"]:
+        if p.distance_to(d) < 92.0:
+            return true
+    for t in ctx["trees"]:
+        if p.distance_to(t) < 20.0:
+            return true
+    return false
 
 func _forest_edge_blocked(chunk,p:Vector2) -> bool:
     for child in chunk.get_children():
@@ -34158,6 +34246,7 @@ func _save_state():
         "shelter_breach_states":shelter_breach_states,
         "map_markers":map_markers,
         "player_bodies":player_bodies,
+        "marauder_squads":marauder_director.serialize() if marauder_director != null else [],
         "next_body_id":next_body_id,
         "picked_world_items":picked_world_items,
         "dropped_items":dropped_items,
@@ -34405,6 +34494,7 @@ func _load_state():
                     clean_body["sheet"] = str(b["sheet"])
                 player_bodies.append(clean_body)
     next_body_id = max(1,int(parsed.get("next_body_id",player_bodies.size() + 1)))
+    marauder_saved = parsed.get("marauder_squads",[]) if typeof(parsed.get("marauder_squads",[])) == TYPE_ARRAY else []
     picked_world_items = parsed.get("picked_world_items",{})
     dropped_items = parsed.get("dropped_items",[])
     next_drop_id = int(parsed.get("next_drop_id",1))

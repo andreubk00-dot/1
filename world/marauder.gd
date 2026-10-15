@@ -94,6 +94,15 @@ var voice: AudioStreamPlayer2D = null
 var lamp: PointLight2D = null
 var _clip = ""
 var _sheets = {}
+# dev64: voice, steps, hit reactions, doors
+var mouth: AudioStreamPlayer2D = null
+var gear: AudioStreamPlayer2D = null
+var voice_id = 0
+var step_mark = 0.0
+var stagger_t = 0.0
+var knock = Vector2.ZERO
+var flinch_t = 0.0
+var door_t = 0.0
 
 
 func setup(p_game, p_outfit: String, p_weapon: String, p_personality: String) -> void:
@@ -108,6 +117,7 @@ func setup(p_game, p_outfit: String, p_weapon: String, p_personality: String) ->
     max_hp = 110.0 if outfit == "deserter" else (90.0 if outfit == "gopnik" else 100.0)
     hp = max_hp
     state = "neutral" if personality == "neutral" else "patrol"
+    voice_id = randi() % 4
 
 
 func _ready() -> void:
@@ -156,6 +166,16 @@ func _ready() -> void:
     voice.max_distance = 1100.0
     voice.attenuation = 1.4
     add_child(voice)
+    mouth = AudioStreamPlayer2D.new()
+    mouth.bus = "SFX"
+    mouth.max_distance = 700.0
+    mouth.attenuation = 1.6
+    add_child(mouth)
+    gear = AudioStreamPlayer2D.new()
+    gear.bus = "SFX"
+    gear.max_distance = 420.0
+    gear.attenuation = 1.8
+    add_child(gear)
     if game.player_light != null and game.player_light.texture != null:
         lamp = PointLight2D.new()
         lamp.texture = game.player_light.texture
@@ -190,17 +210,29 @@ func _physics_process(delta: float) -> void:
             mag += take
             reserve -= take
     think_t -= delta
+    flinch_t = max(0.0, flinch_t - delta)
+    door_t = max(0.0, door_t - delta)
     if think_t <= 0.0:
         think_t = 0.15
         _perceive()
         _infected_contact(0.15)
-    var move = _decide(delta)
+    var move = Vector2.ZERO
+    if stagger_t > 0.0:
+        # knocked back by a hit: the body is carried, then the legs catch it
+        stagger_t -= delta
+        move = knock
+        knock = knock.move_toward(Vector2.ZERO, delta * 520.0)
+    else:
+        move = _decide(delta)
+        if move.length() > 5.0:
+            _open_door_ahead(move)
     velocity = move
     move_and_slide()
     var moved = global_position.distance_to(last_pos)
     walk_dist += moved
     stuck_t = stuck_t + delta if (move.length() > 5.0 and moved < 0.2) else max(0.0, stuck_t - delta)
     last_pos = global_position
+    _footsteps(move)
     _animate(move)
 
 
@@ -358,10 +390,13 @@ func _decide(delta: float) -> Vector2:
                 return Vector2.ZERO
             return _go_to(heard_pos, WALK_SPEED * 1.15, delta)
         "search":
-            if state_t > 9.0:
+            if state_t > 12.0:
                 _bark("lost")
                 _set_state("patrol")
                 return Vector2.ZERO
+            # go and look where the target was last seen, then look round
+            if global_position.distance_to(heard_pos) > 26.0 and state_t < 9.0:
+                return _go_to(heard_pos, WALK_SPEED * 1.2, delta)
             facing = facing.rotated(delta * 1.6)
             return Vector2.ZERO
         "combat":
@@ -400,6 +435,7 @@ func _combat_move(delta: float) -> Vector2:
     target_infected = _threatening_infected()
     var sees = (now - last_seen_time) < 0.35
     if hp < max_hp * 0.3 and personality != "fanatic":
+        set_meta("flee_reason", "hp")
         flee_t = 9.0
         _bark("flee", true)
         _set_state("flee")
@@ -417,6 +453,7 @@ func _combat_move(delta: float) -> Vector2:
         return Vector2.ZERO
     if mag <= 0:
         if reserve <= 0:
+            set_meta("flee_reason", "ammo")
             flee_t = 12.0
             _bark("flee", true)
             _set_state("flee")
@@ -424,6 +461,7 @@ func _combat_move(delta: float) -> Vector2:
         if reload_t <= 0.0:
             reload_t = float(arms["reload"])
             _bark("reload")
+            _play_gear(game._weapon_reload_audio_path(weapon), -9.0)
         # reload from behind something
         return _seek_cover(p, delta)
     if reload_t > 0.0:
@@ -531,7 +569,27 @@ func _go_to(goal: Vector2, speed: float, delta: float) -> Vector2:
                 return not test_move(t, b - a))
             path = res.get("path", [])
             if path.is_empty():
-                path = [global_position + to.limit_length(40.0).rotated(randf_range(-1.0, 1.0))]
+                # the goal is behind walls: make for the door that leads there
+                var door = _door_toward(goal)
+                if door != null:
+                    # through the doorway: a step in front of it, the gap
+                    # itself (the leaf sits in the wall), a step beyond
+                    var dp = door.global_position
+                    var approach = dp + (global_position - dp).normalized() * 22.0
+                    var beyond = dp + (goal - dp).normalized() * 24.0
+                    path = []
+                    if global_position.distance_to(dp) > 30.0:
+                        var r2 = Nav.plan(global_position, approach, func(a, b):
+                            var t2 = global_transform
+                            t2.origin = a
+                            return not test_move(t2, b - a))
+                        path = r2.get("path", [])
+                        if path.is_empty():
+                            path = [approach]
+                    path.append(dp)
+                    path.append(beyond)
+                else:
+                    path = [global_position + to.limit_length(40.0).rotated(randf_range(-1.0, 1.0))]
     while not path.is_empty() and global_position.distance_to(path[0]) < 6.0:
         path.pop_front()
     if path.is_empty():
@@ -587,6 +645,8 @@ func _fire(target_pos: Vector2, infected) -> void:
     if game.is_crouching:
         chance -= 0.1
     chance -= game._time_night_factor() * (0.05 if game.flashlight_on else 0.18)
+    if flinch_t > 0.0:
+        chance *= 0.55
     chance = clamp(chance, 0.06, 0.85)
     var hits = 0
     for i in range(int(arms["pellets"])):
@@ -596,7 +656,13 @@ func _fire(target_pos: Vector2, infected) -> void:
     if hits > 0:
         game._apply_enemy_hit(float(arms["damage"]) * hits)
     else:
-        end = target_pos + dir.rotated(PI * 0.5) * randf_range(-22.0, 22.0) + dir * randf_range(10.0, 60.0)
+        var miss = randf_range(6.0, 26.0) * (1.0 if randf() < 0.5 else -1.0)
+        end = target_pos + dir.rotated(PI * 0.5) * miss + dir * randf_range(10.0, 60.0)
+        # a near miss: the crack of the round going past, a flinch of the view
+        if abs(miss) < 20.0:
+            game._play_world_sfx("flyby_%d" % (randi() % 3 + 1), -7.0, 0.06)
+            if bool(game.get_meta("settings", {}).get("camera_shake", true)) if game.has_meta("settings") else true:
+                game.camera_kick += Vector2(randf_range(-1.5, 1.5), randf_range(-1.5, 1.5))
     game._spawn_temp_tracer(muzzle, end, 0.07)
 
 
@@ -656,6 +722,14 @@ func take_damage(amount: float, hit_dir: Vector2, from_player: bool) -> void:
     hp -= amount
     hurt_anim = 0.25
     game._blood_hit(global_position, hit_dir, hp <= 0.0)
+    # the hit shoves the body back and spoils the aim for a moment; a load of
+    # buckshot can knock a man off his feet for a beat
+    var shove = clamp(amount * 3.2, 30.0, 170.0)
+    if hit_dir.length() > 0.01 and _free_step(hit_dir.normalized() * 6.0):
+        knock = hit_dir.normalized() * shove
+        stagger_t = clamp(0.1 + amount / 120.0, 0.12, 0.45)
+    flinch_t = 1.0
+    fire_t = max(fire_t, 0.35)
     if from_player:
         if not hostile_to_player:
             become_hostile()
@@ -671,6 +745,7 @@ func take_damage(amount: float, hit_dir: Vector2, from_player: bool) -> void:
         _die(hit_dir)
     elif amount >= 8.0:
         _bark("hurt")
+        _say("hurt")
 
 
 func _surrender() -> void:
@@ -687,6 +762,7 @@ func _surrender() -> void:
 
 func _die(hit_dir: Vector2) -> void:
     dead = true
+    _say("death")
     die_t = 0.0
     collision_layer = 0
     remove_from_group("marauders")
@@ -755,6 +831,8 @@ func _bark(kind: String, force: bool = false) -> void:
     bark_label.visible = true
     bark_life = 2.2
     bark_cd = 4.0
+    if kind in ["spot", "flank", "friend_down", "flee", "surrender", "infected", "aim"]:
+        _say("shout")
 
 
 func _update_bark(delta: float) -> void:
@@ -776,3 +854,120 @@ func _update_lamp() -> void:
     var night = game._time_night_factor()
     lamp.energy = 0.55 * night if state != "flee" else 0.0
     lamp.offset = facing * 26.0
+
+
+# ------------------------------------------------------------- dev64 additions --
+func _say(kind: String) -> void:
+    if mouth == null:
+        return
+    var path = ""
+    match kind:
+        "hurt":
+            path = "res://audio/marauders/v%d_hurt_%d.wav" % [voice_id, randi() % 3 + 1]
+        "shout":
+            path = "res://audio/marauders/v%d_shout_%d.wav" % [voice_id, randi() % 3 + 1]
+        "death":
+            path = "res://audio/marauders/death_%d.wav" % (randi() % 6 + 1)
+    if path == "" or (mouth.playing and kind == "shout"):
+        return
+    var stream = game._cached_weapon_audio(path)
+    if stream == null:
+        return
+    mouth.stream = stream
+    mouth.volume_db = -6.0 if kind == "death" else -8.0
+    mouth.pitch_scale = randf_range(0.96, 1.04)
+    mouth.play()
+
+
+func _play_gear(path: String, db: float) -> void:
+    if gear == null or path == "":
+        return
+    var stream = game._cached_weapon_audio(path)
+    if stream == null:
+        return
+    gear.stream = stream
+    gear.volume_db = db
+    gear.pitch_scale = randf_range(0.97, 1.03)
+    gear.play()
+
+
+func _footsteps(move: Vector2) -> void:
+    # two footfalls per gait cycle, on the surface underfoot; running is louder
+    if move.length() < 5.0:
+        return
+    var clip = "Run" if move.length() > COMBAT_SPEED + 4.0 else "Walk"
+    var half = STRIDE[clip] * 0.5
+    if walk_dist - step_mark < half:
+        return
+    step_mark = walk_dist
+    var surface = game._footstep_surface_at(global_position)
+    var take = "step_%s_%d" % [surface, randi() % int(game.STEP_TAKES.get(surface, 1)) + 1]
+    game._play_distance_sfx(take, global_position, -13.0 if clip == "Run" else -17.0, 380.0, 0.05)
+
+
+func _open_door_ahead(move: Vector2) -> void:
+    if door_t > 0.0:
+        return
+    var ahead = move.normalized()
+    for d in get_tree().get_nodes_in_group("doors"):
+        if not is_instance_valid(d) or bool(d.get_meta("door_open", false)):
+            continue
+        var to = d.global_position - global_position
+        if to.length() > 34.0 or (to.length() > 10.0 and ahead.dot(to.normalized()) < 0.2):
+            continue
+        var kicked = state == "combat"
+        if game._npc_open_door(d, global_position, kicked):
+            door_t = 0.6
+            # a kicked-in door costs a beat; an opened one a little less
+            stagger_t = 0.25 if kicked else 0.15
+            knock = Vector2.ZERO
+            path = []
+        return
+
+
+func _door_toward(goal: Vector2):
+    # the door (open or shut) that best leads to a goal inside a building
+    var best = null
+    var best_cost = INF
+    for d in get_tree().get_nodes_in_group("doors"):
+        if not is_instance_valid(d):
+            continue
+        var dg = d.global_position.distance_to(goal)
+        var ds = d.global_position.distance_to(global_position)
+        if dg > 240.0 or ds > 420.0:
+            continue
+        if dg + ds < best_cost:
+            best_cost = dg + ds
+            best = d
+    return best
+
+
+func unaware_of(from_pos: Vector2) -> bool:
+    # not fighting, not looking this way: a blade from behind ends it quietly
+    if dead or state in ["combat", "flee", "surrender"] or awareness >= 0.45:
+        return false
+    var to_attacker = (from_pos - global_position).normalized()
+    return facing.dot(to_attacker) < 0.25
+
+
+func silent_takedown(dir: Vector2) -> void:
+    if dead:
+        return
+    hp = 0.0
+    game._blood_hit(global_position, dir, true)
+    game._play_world_sfx("melee_hit", -14.0, 0.03)
+    # only those who saw it raise the alarm
+    if squad != null:
+        for m in squad.alive():
+            if m == self:
+                continue
+            if m.global_position.distance_to(global_position) < 200.0 and m._clear_line(m.global_position, global_position) and m.facing.dot((global_position - m.global_position).normalized()) > 0.0:
+                m.squad_alert(game.player.global_position)
+                m._bark("friend_down", true)
+    dead = true
+    die_t = 0.0
+    collision_layer = 0
+    remove_from_group("marauders")
+    _set_clip("Die", 0)
+    if squad != null:
+        squad.member_lost(self)

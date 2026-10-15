@@ -1153,3 +1153,29 @@ Living raiders, AI-driven (`world/marauder.gd`, `world/marauder_director.gd`).
 - Bullets, blades and the HUD threat logic treat them like infected; rest
   is refused with a hostile raider within 420 units; first-run hint.
 - Test: `tests/test_marauders_dev63.gd` (32 checks).
+
+## dev64 — marauders, second pass: doors, voices, stealth, weight, saves
+
+- **Doors**: a raider opens a closed door in his way; in a fight he kicks it
+  in (louder, a beat lost). When the target is behind walls the route goes
+  to the best door: a step in front of it, through the gap, a step beyond -
+  a squad now storms a house the player hid in (four of four trials: inside
+  in 3-4 s). Search walks to the last seen spot before looking round.
+- **Sound**: footsteps on the surface underfoot (louder at a run), the
+  weapon's own reload, four distinct voices (each raider keeps one) for
+  pain and alarm shouts, six death cries, and the crack of a round passing
+  close - with a small flinch of the view - when they miss.
+- **Stealth**: a raider who has not noticed the player and faces away can be
+  killed silently with a blade from behind («ЛКМ • ТИХО УБИТЬ»); only squad
+  mates who saw it raise the alarm.
+- **Weight**: a hit shoves the body back (buckshot hardest) and spoils the
+  aim for a second; a staggered raider does not shoot.
+- **Saves**: squads near the player are saved - position, health, rounds,
+  voice, surrender - and a fight in progress comes back as a fight.
+- Voices: HaelDB «Male Grunt/Yelling sounds» (CC0 option of a dual
+  licence), thebardofblasphemy «grunts of male death and pain» (CC0); the
+  flyby is synthesised in `tools/import_cc0_audio.py`.
+- `tests/test_marauders_dev63.gd` now 78 checks.
+- Sector loads: the forest edge gathered its obstacles per candidate (and the
+  door test walked every door of every loaded sector) - 6 ms per woodland
+  sector; it now collects them once (0.7 ms), same placement.

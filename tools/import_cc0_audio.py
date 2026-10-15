@@ -324,3 +324,47 @@ for i in range(5):
 snow = sorted(glob.glob(os.path.join(OGA, '42-snow-and-gravel-footsteps/x/Corsica_S-Walking_in_Snow/*snow_covered_gravel_1*.flac')))[:4]
 for i, f in enumerate(snow):
     save(step(load(f), length=0.32, peak=0.5), os.path.join(STEPS, 'snow_%d.wav' % (i + 6)))
+
+# --- dev64: marauder voices and the snap of a passing bullet -----------------
+# HaelDB «Male Grunt/Yelling sounds» (dual OGA-BY 3.0 / CC0 - used under CC0):
+# four performers, so each raider keeps one voice; thebardofblasphemy «grunts
+# of male death and pain» (CC0) for dying. The flyby is synthesised here.
+MV = os.path.join(OGA, 'male-gruntyelling-sounds/x/yelling sounds')
+MO = os.path.join(ROOT, 'audio', 'marauders')
+os.makedirs(MO, exist_ok=True)
+
+
+def voice_clip(path, length, peak):
+    x = load(path)
+    x = segment(x, onset(x, 0.08), length)
+    return norm(fade(highpass(x, 90), tail=0.3, shape=2.0), peak)
+
+# voice n: (hurt takes, shout takes) - short barks for pain, longer for alarm
+VOICES = {
+    0: (['yell12', 'yell13', 'yell6'], ['yell3', 'yell8', 'yell9']),
+    1: (['1yell1', '1yell9', '1yell15'], ['1yell3', '1yell4', '1yell11']),
+    2: (['2yell1', '2yell7', '2yell9'], ['2yell3', '2yell10', '2yell11']),
+    3: (['3grunt1', '3grunt3', '3grunt5'], ['3yell7', '3yell8', '3yell12']),
+}
+for v, (hurt, shout) in VOICES.items():
+    for i, name in enumerate(hurt):
+        save(voice_clip(os.path.join(MV, name + '.wav'), 0.45, 0.55), os.path.join(MO, 'v%d_hurt_%d.wav' % (v, i + 1)))
+    for i, name in enumerate(shout):
+        save(voice_clip(os.path.join(MV, name + '.wav'), 0.85, 0.5), os.path.join(MO, 'v%d_shout_%d.wav' % (v, i + 1)))
+death = load(os.path.join(OGA, 'grunts-male-death-and-pain/a.wav'))
+hits = split_hits(death, min_gap=0.35, frac=0.12, length=1.1)
+for i, x in enumerate(hits[:6]):
+    save(norm(fade(highpass(x, 80), tail=0.5, shape=2.0), 0.55), os.path.join(MO, 'death_%d.wav' % (i + 1)))
+
+# a bullet passing close: a band-passed noise burst with a falling pitch and a
+# sharp snap at the front - three variants
+rng = np.random.default_rng(1964)
+for i in range(3):
+    n = int(0.16 * SR)
+    t = np.arange(n) / SR
+    noise = rng.standard_normal(n)
+    sweep = np.sin(2 * np.pi * (2400 - 1500 * t / t[-1]) * t)
+    env = np.exp(-t * (26 + i * 6)) * np.minimum(1.0, t / 0.004)
+    x = highpass(noise * 0.6 + sweep * 0.25, 900 + i * 250) * env
+    x[:int(0.006 * SR)] += rng.standard_normal(int(0.006 * SR)) * np.linspace(1, 0, int(0.006 * SR)) * 0.9
+    save(norm(x, 0.42), os.path.join(ROOT, 'audio', 'world', 'bullet_flyby_%d.wav' % (i + 1)))

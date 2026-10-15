@@ -278,3 +278,78 @@ func notify_sound(origin: Vector2, radius: float, kind: String, source) -> void:
         for m in sq.alive():
             if m != source:
                 m.hear(origin, radius, kind)
+
+
+# ------------------------------------------------------------- dev64: saving --
+# Squads near the survivor are part of the moment: a save in the middle of a
+# fight brings the same men back, where they stood, as wounded and as angry.
+func serialize() -> Array:
+    var out = []
+    if game == null or game.player == null:
+        return out
+    for sq in squads:
+        var members = []
+        var near = false
+        for m in sq.alive():
+            if m.global_position.distance_to(game.player.global_position) < DESPAWN_DIST:
+                near = true
+            members.append({
+                "outfit": m.outfit, "weapon": m.weapon, "personality": m.personality,
+                "hostile": m.hostile_to_player, "x": m.global_position.x, "y": m.global_position.y,
+                "hp": m.hp, "mag": m.mag, "reserve": m.reserve, "slot": m.slot,
+                "combat": m.state == "combat", "surrendered": m.surrendered, "dropped": m.weapon_dropped,
+                "voice": m.voice_id,
+            })
+        if not near or members.is_empty():
+            continue
+        var route = []
+        for p in sq.route:
+            route.append([p.x, p.y])
+        out.append({"members": members, "route": route, "leg": sq.leg})
+    return out
+
+
+func restore(data: Array) -> void:
+    for raw in data:
+        if typeof(raw) != TYPE_DICTIONARY or typeof(raw.get("members")) != TYPE_ARRAY:
+            continue
+        var sq = Squad.new()
+        sq.director = self
+        for p in raw.get("route", []):
+            if typeof(p) == TYPE_ARRAY and p.size() == 2:
+                sq.route.append(Vector2(float(p[0]), float(p[1])))
+        sq.leg = clampi(int(raw.get("leg", 0)), 0, max(0, sq.route.size() - 1))
+        for md in raw["members"]:
+            if typeof(md) != TYPE_DICTIONARY:
+                continue
+            var outfit = str(md.get("outfit", "bandit"))
+            var weapon = str(md.get("weapon", "makarov"))
+            if outfit not in ["gopnik", "bandit", "deserter"] or not Marauder.ARMS.has(weapon):
+                continue
+            var m = Marauder.new()
+            m.setup(game, outfit, weapon, str(md.get("personality", "hostile")))
+            m.hostile_to_player = bool(md.get("hostile", m.hostile_to_player))
+            m.hp = clamp(float(md.get("hp", m.max_hp)), 1.0, m.max_hp)
+            m.mag = clampi(int(md.get("mag", m.mag)), 0, int(Marauder.ARMS[weapon]["mag"]))
+            m.reserve = clampi(int(md.get("reserve", m.reserve)), 0, 120)
+            m.slot = clampi(int(md.get("slot", 0)), 0, 2)
+            m.voice_id = clampi(int(md.get("voice", 0)), 0, 3)
+            m.surrendered = bool(md.get("surrendered", false))
+            m.weapon_dropped = bool(md.get("dropped", false))
+            m.squad = sq
+            var p = Vector2(float(md.get("x", 0.0)), float(md.get("y", 0.0)))
+            m.position = p if _free_at(p) else p + Vector2(12, 0)
+            game.add_child(m)
+            if bool(md.get("combat", false)) and m.hostile_to_player:
+                m.last_seen_pos = game.player.global_position
+                m.last_seen_time = Time.get_ticks_msec() / 1000.0
+                m._set_state("combat")
+                m.fire_t = 1.2
+            elif m.surrendered:
+                m.flee_t = 20.0
+                m._set_state("flee")
+            sq.members.append(m)
+        if not sq.members.is_empty():
+            if sq.route.is_empty():
+                sq.route = [sq.members[0].global_position]
+            squads.append(sq)
