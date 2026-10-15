@@ -180,6 +180,9 @@ func run():
                 if raw[0] == off:
                     var at2 = origin + raw[1]
                     check(_hits(all_rects, Rect2(at2 - Vector2(9, 9), Vector2(18, 18))) == null, "patrol point of %s in a solid at %s" % [pt["id"], str(raw[1])])
+        for sp in MarauderBase.SHIFT_POINTS:
+            if sp[0] == off:
+                check(_hits(all_rects, Rect2(origin + sp[1] - Vector2(24, 12), Vector2(48, 24))) == null, "shift point in a solid at " + str(sp[1]))
         if MarauderBase.RESERVE_DOOR[0] == off:
             var dp = origin + MarauderBase.RESERVE_DOOR[1]
             check(_hits(all_rects, Rect2(dp - Vector2(16, 9), Vector2(32, 18))) == null, "barracks door blocked")
@@ -229,6 +232,30 @@ func run():
         sentry._set_state("combat")
         await frames(150)
         check(sentry.global_position.distance_to(post) <= sentry.leash + 12.0, "gate sentry left his post: " + str(sentry.global_position.distance_to(post)))
+
+    # dev66: the night shift - the NW tower man goes to report, his post stands
+    # empty, he comes back and holds it again
+    game.world_minutes = base.shift_start_minute("tower_nw") + 1.0
+    var nw = base.groups.get("tower_nw", null)
+    check(nw != null, "no man on the NW tower")
+    if nw != null:
+        var tw = nw.alive()[0]
+        tw._set_state("patrol")
+        await frames(40)
+        check(str(tw.get_meta("shift_state", "")) in ["going", "waiting"], "the NW tower man did not go off shift")
+        var empty_seen = false
+        var back = false
+        for i in range(60 * 60):
+            await physics_frame
+            if not base.post_manned("tower_nw"):
+                empty_seen = true
+            if empty_seen and str(tw.get_meta("shift_state", "")) == "" and base.post_manned("tower_nw"):
+                back = true
+                break
+        check(empty_seen, "the post never stood empty during the shift")
+        check(back and tw.leash > 0.0, "the man never came back to his post")
+        check(int(base.shift_done.get("tower_nw", -1)) == game.world_day, "the shift was not recorded for the day")
+    game.world_minutes = 12.0 * 60.0
 
     # the alarm: siren, the men near come to look, the reserve follows
     var camp = []

@@ -61,10 +61,28 @@ const RESERVE_DOOR = [Vector2i(-1, 1), Vector2(130, 350)]
 const SIREN_AT = [Vector2i(1, 1), Vector2(684, 520)]
 const FORMATION = [Vector2.ZERO, Vector2(-24, 18), Vector2(-24, -18)]
 
+# dev66: the night shift. From 02:00 the men on the walls and the gate go one
+# after another to report at the nearest guard point and come back; the post
+# stands empty meanwhile - a window for whoever is watching. An alarm ends it.
+const SHIFT_POSTS = ["gate_s", "gate_tower", "tower_nw", "tower_ne", "tower_sw", "tower_se", "shop"]
+const SHIFT_START = 120.0        # 02:00
+const SHIFT_STAGGER = 14.0       # game minutes between one man and the next
+const SHIFT_WAIT = 10.0          # real seconds at the guard point
+const SHIFT_POINTS = [
+    [Vector2i(-1, -1), Vector2(384, 384)],  # the garage crossing
+    [Vector2i(-1, 0), Vector2(250, 362)],   # the gate guardhouse
+    [Vector2i(-1, 1), Vector2(130, 362)],   # the barracks door
+    [Vector2i(0, 0), Vector2(440, 470)],    # the fire on the crossing
+    [Vector2i(1, -1), Vector2(384, 384)],   # the boiler house crossing
+    [Vector2i(1, 1), Vector2(384, 384)],    # the HQ crossing
+]
+
 const BARKS_BASE = {
     "alarm": ["Тревога! Чужой на базе!", "Подъём! К оружию!", "Нас шмонают! Все сюда!"],
     "boss": ["Ну давай, подходи!", "Седой тебе не по зубам.", "Валите его!"],
     "idle": ["Холодно, зараза...", "Когда смена?", "Седой опять не в духе.", "Курить есть?"],
+    "shift_off": ["Смена! Пошёл отмечаться.", "Всё, мой черёд. Пошёл.", "Сменщик где? Ладно, сам схожу."],
+    "shift_on": ["Всё, на пост.", "Опять до утра торчать...", "Ну, пошёл обратно."],
 }
 
 
@@ -110,6 +128,8 @@ class Group:
 
     func slot_target(m) -> Vector2:
         if kind != "patrol" and kind != "reserve":
+            if str(m.get_meta("shift_state", "")) in ["going", "waiting"]:
+                return m.get_meta("shift_target", m.global_position)
             return m.get_meta("post_pos", m.global_position)
         var lead = leader()
         if lead == null:
@@ -146,6 +166,7 @@ var reserve_t = -1.0
 var siren: AudioStreamPlayer2D = null
 var idle_bark_t = 12.0
 var announced_today = -1
+var shift_done = {}          # post id -> the day its man last went off shift
 
 
 func _ready() -> void:
@@ -253,6 +274,7 @@ func _physics_process(delta: float) -> void:
     _daily()
     _sync_groups()
     _idle_chatter(TICK)
+    _night_shift()
     if not bool(state["visited"]) and contains(game.player.global_position):
         state["visited"] = true
     # the first look at the walls: what this place is and how it can be taken
@@ -472,6 +494,70 @@ func raise_alarm(pos: Vector2, from) -> void:
             # they know where the noise was, not where the survivor is now
             m.heard_pos = pos
             m._set_state("investigate")
+
+
+func shift_start_minute(post_id: String) -> float:
+    return SHIFT_START + SHIFT_STAGGER * float(SHIFT_POSTS.find(post_id))
+
+
+func _shift_point(from: Vector2) -> Vector2:
+    var best = from
+    var bd = INF
+    for raw in SHIFT_POINTS:
+        var p = world_pos(raw[0], raw[1])
+        var d = p.distance_to(from)
+        if d < bd:
+            bd = d
+            best = p
+    return best
+
+
+func _night_shift() -> void:
+    var now = Time.get_ticks_msec() / 1000.0
+    for g in groups.values():
+        for m in g.alive():
+            if not m.post_id in SHIFT_POSTS:
+                continue
+            var phase = str(m.get_meta("shift_state", ""))
+            if phase == "":
+                var start = shift_start_minute(m.post_id)
+                var day_done = int(shift_done.get(m.post_id, -1)) == game.world_day
+                if day_done or alarm_active() or m.state != "patrol":
+                    continue
+                if game.world_minutes < start or game.world_minutes > start + 180.0:
+                    continue
+                m.set_meta("shift_state", "going")
+                m.set_meta("shift_target", _shift_point(m.get_meta("post_pos", m.global_position)) + Vector2(randf_range(-18, 18), randf_range(-8, 8)))
+                shift_done[m.post_id] = game.world_day
+                m.leash = 0.0
+                m.say_line(BARKS_BASE["shift_off"][randi() % BARKS_BASE["shift_off"].size()], 2.4)
+            elif phase == "going":
+                if alarm_active() or m.state != "patrol":
+                    m.set_meta("shift_state", "back")
+                elif m.global_position.distance_to(m.get_meta("shift_target")) < 16.0:
+                    m.set_meta("shift_state", "waiting")
+                    m.set_meta("shift_until", now + SHIFT_WAIT)
+            elif phase == "waiting":
+                if alarm_active() or m.state != "patrol" or now >= float(m.get_meta("shift_until", now)):
+                    m.set_meta("shift_state", "back")
+                    m.say_line(BARKS_BASE["shift_on"][randi() % BARKS_BASE["shift_on"].size()], 2.2)
+            elif phase == "back":
+                var post = m.get_meta("post_pos", m.global_position)
+                if m.global_position.distance_to(post) < 10.0:
+                    m.set_meta("shift_state", "")
+                    m.leash_pos = post
+                    m.leash = 70.0 if m.get_meta("post_role", "") == "tower" else 120.0
+
+
+func post_manned(post_id: String) -> bool:
+    # is the man of this post standing on it now (for the tests and the hints)
+    var g = groups.get(post_id, null)
+    if g == null:
+        return false
+    for m in g.alive():
+        if m.global_position.distance_to(m.get_meta("post_pos", m.global_position)) < 20.0:
+            return true
+    return false
 
 
 func alarm_active() -> bool:

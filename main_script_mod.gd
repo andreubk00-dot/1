@@ -21599,7 +21599,7 @@ func _repay_debt(m) -> String:
     var ammo_id = str(weapon_defs.get(current_weapon_id,{}).get("ammo","")) if equipped_melee_id == "" else ""
     if ammo_id != "" and item_defs.has(ammo_id):
         _marauder_drop_item(ammo_id,12,_free_body_spot(at + Vector2(12,4)))
-    var tip = "Ночью на «Чёрном дворе» меняется караул — пока новые не встанут, посты пустые."
+    var tip = "С двух ночи на «Чёрном дворе» смена: вышки пустеют по очереди, зато у караулок толкучка."
     if not discovered_pois.has("marauder_base"):
         discovered_pois["marauder_base"] = true
         tip = "Седой сидит на старом ЖБИ восточнее Механиков. С юга в стене пролом — я сам там лазил."
