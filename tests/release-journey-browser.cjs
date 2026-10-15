@@ -48,6 +48,20 @@ async function checkPanel(page,name,stage,selector,actions){
  }
  return data;
 }
+// A visible button can still be obscured by an unrelated overlay.
+// Probe the real hit target after scrolling into view, not just its rectangle.
+async function assertClickable(page,selector,stage){
+ const loc=page.locator(selector).first();
+ assert(await loc.isVisible(),stage+' control not visible: '+selector);
+ await loc.scrollIntoViewIfNeeded();
+ const hit=await loc.evaluate(el=>{
+   const r=el.getBoundingClientRect(),x=Math.max(0,Math.min(innerWidth-1,r.left+r.width/2)),
+       y=Math.max(0,Math.min(innerHeight-1,r.top+r.height/2));
+   const top=document.elementFromPoint(x,y);
+   return {target:top?.id||top?.className||top?.tagName,clickable:!!top&&(el===top||el.contains(top)),center:[x,y]};
+ });
+ assert(hit.clickable,stage+' control intercepted: '+selector+' '+JSON.stringify(hit));
+}
 async function run(profile){
  const browser=await profile.browser.launch({headless:true});
  const context=await browser.newContext({viewport:{width:profile.width,height:profile.height},serviceWorkers:'block',
@@ -69,6 +83,7 @@ async function run(profile){
        await page.locator('#coachContinueBtn').click();
        assert(!(await page.locator('#coachScreen').isVisible()),'Coach did not close');
      }
+     await assertClickable(page,'#'+id+' .close-btn',id+' close');
      await page.locator('#'+id+' .close-btn').click();
      assert(!(await page.locator('#'+id).isVisible()),'Cannot close '+id);
    }
@@ -79,6 +94,7 @@ async function run(profile){
    assert(await page.locator('#pauseScreen').isVisible(),'Pause missing');
    assert((await page.evaluate(()=>window.__ENDLESS_DEFENDERS__.paused)),'Combat runs under pause overlay');
    await checkPanel(page,profile.name,'pause','#pauseScreen .modal-card',['#resumeBtn','#exitRunBtn']);
+   await assertClickable(page,'#resumeBtn','pause resume');
    await page.locator('#resumeBtn').click();
    assert(!(await page.locator('#pauseScreen').isVisible()),'Pause did not close');
    // A deterministic wave-five fixture tests real relic UI and save transitions.
@@ -93,11 +109,13 @@ async function run(profile){
    await checkPanel(page,profile.name,'relic','#relicScreen .modal-card',['#relicRerollBtn','[data-relic]:first-child']);
    const before=await page.evaluate(()=>window.__ENDLESS_DEFENDERS__.run.rerolls);
    if(before>0){
+     await assertClickable(page,'#relicRerollBtn','relic reroll');
      await page.locator('#relicRerollBtn').click();
      assert.equal(await page.locator('[data-relic]').count(),3,'Reroll broke relic choices');
      assert.equal(await page.evaluate(()=>window.__ENDLESS_DEFENDERS__.run.rerolls),before-1,'Reroll did not debit count');
      await checkPanel(page,profile.name,'relic-reroll','#relicScreen .modal-card',['[data-relic]:first-child']);
    }
+   await assertClickable(page,'[data-relic]','relic choice');
    await page.locator('[data-relic]').first().click();
    const selected=await page.evaluate(()=>({paused:window.__ENDLESS_DEFENDERS__.paused,
      count:window.__ENDLESS_DEFENDERS__.run.relics.length}));
@@ -118,6 +136,7 @@ async function run(profile){
      await page.locator('#coachContinueBtn').click();
      assert(!(await page.locator('#coachScreen').isVisible()),'Result coach failed to dismiss');
    }
+   await assertClickable(page,'#resultContinueBtn','results continue');
    await page.locator('#resultContinueBtn').click();
    await page.waitForTimeout(150);
    assert(await page.locator('#homeScreen').isVisible(),'Cannot return home after result');
