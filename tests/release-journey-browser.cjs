@@ -23,7 +23,7 @@ async function checkPanel(page,name,stage,selector,actions){
    const viewport={w:innerWidth,h:innerHeight};
    const rect=el=>{const b=el.getBoundingClientRect();return {x:+b.x.toFixed(1),y:+b.y.toFixed(1),w:+b.width.toFixed(1),h:+b.height.toFixed(1),right:+b.right.toFixed(1),bottom:+b.bottom.toFixed(1)}};
    const buttons=[...card.querySelectorAll('button')].filter(el=>el.getClientRects().length).map(el=>({id:el.id||el.dataset.relic||el.textContent.trim().slice(0,24),rect:rect(el)}));
-   return {viewport,card:rect(card),clientWidth:card.clientWidth,scrollWidth:card.scrollWidth,clientHeight:card.clientHeight,scrollHeight:card.scrollHeight,buttons,visible:!card.closest('.hidden')};
+   return {viewport,card:rect(card),clientWidth:card.clientWidth,scrollWidth:card.scrollWidth,clientHeight:card.clientHeight,scrollHeight:card.scrollHeight,overflowX:getComputedStyle(card).overflowX,overflowY:getComputedStyle(card).overflowY,buttons,visible:!card.closest('.hidden')};
  },{selector,actions});
  audit.push({name,stage,...data});
  await page.screenshot({path:path.join(dest,name+'-'+stage+'.png')});
@@ -31,14 +31,18 @@ async function checkPanel(page,name,stage,selector,actions){
  assert(data.card.w>150&&data.card.h>100,'Collapsed '+stage+' dialog');
  assert(data.card.x>=-4&&data.card.right<=data.viewport.w+4,
    'Dialog outside horizontal viewport '+name+' '+stage+': '+JSON.stringify(data));
- assert(data.scrollWidth<=data.clientWidth+5,
-   'Dialog content horizontally clipped '+name+' '+stage+': '+JSON.stringify(data));
+ // Decorative clipped :before/:after pseudo-elements can increase scrollWidth
+ // while the actual text and buttons remain inside the clip boundary.
+ assert(data.scrollWidth<=data.clientWidth+5||['hidden','clip'].includes(data.overflowX),
+   'Horizontal scrolling in dialog '+name+' '+stage+': '+JSON.stringify(data));
+ if(data.scrollHeight>data.clientHeight+5)assert(['auto','scroll'].includes(data.overflowY),
+   'Tall dialog has unreachable controls '+name+' '+stage+': '+JSON.stringify(data));
  for(const id of actions) {
    const el=page.locator(id);
    if(await el.count() && await el.isVisible()) {
      await el.scrollIntoViewIfNeeded();
      const b=await el.boundingBox();
-     assert(b&&b.width>=25&&b.height>=20&&b.x>=-4&&b.x+b.width<=data.viewport.w+4,
+     assert(b&&b.width>=25&&b.height>=20&&b.x>=-4&&b.x+b.width<=data.viewport.w+4&&b.y>=-4&&b.y+b.height<=data.viewport.h+4,
        'Control not usable '+name+' '+stage+' '+id+': '+JSON.stringify(b));
    }
  }
@@ -101,6 +105,7 @@ async function run(profile){
    assert(!(await page.locator('#relicScreen').isVisible()),'Relic modal remains over combat');
    await page.evaluate(()=>window.__ENDLESS_DEFENDERS__.endRun(true));
    assert(await page.locator('#resultScreen').isVisible(),'Result screen not shown');
+   await page.waitForTimeout(480); // do not snapshot the opening opacity animation
    const earned=await page.evaluate(()=>({shards:window.__ENDLESS_DEFENDERS__.save.shards,
       gems:window.__ENDLESS_DEFENDERS__.save.gems,version:window.__ENDLESS_DEFENDERS__.save.version,
       completed:window.__ENDLESS_DEFENDERS__.run.completed}));
