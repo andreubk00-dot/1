@@ -1237,6 +1237,17 @@ canvas { touch-action:none; }
   #labScreen .upgrade-row p{overflow-wrap:anywhere}
 }
 
+
+/* Small-phone release QA: all modal cards stay within the padded safe viewport. */
+@media (max-width:360px){
+  .modal-screen > .modal-card{
+    max-width:calc(100vw - 36px);
+    width:calc(100vw - 36px);
+    min-width:0;
+    box-sizing:border-box;
+  }
+}
+
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
