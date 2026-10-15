@@ -33060,16 +33060,22 @@ func _close_base_build():
 const MARAUDER_BASE_NEWS = {
     "boss":"На «Чёрном дворе» убит Седой, главарь мародёров. Говорят, его люди грызутся за общак.",
     "cleared":"«Чёрный двор» зачищен: гарнизон мародёров перебит, ворота стоят открытыми. Артель надеется вернуть завод.",
-    "reclaimed":"На «Чёрный двор» пришли новые люди. Над воротами снова горят бочки — база мародёров ожила."
+    "reclaimed":"На «Чёрный двор» пришли новые люди. Над воротами снова горят бочки — база мародёров ожила.",
+    "raid":"Люди Седого с «Чёрного двора» снова взяли обоз Артели на восточной дороге. У «Механиков» пусто на складе."
 }
 
 func _marauder_base_news(kind:String):
     var text = str(MARAUDER_BASE_NEWS.get(kind,""))
     if text == "":
         return
-    _record_world_news("danger" if kind == "reclaimed" else "world","mechanics",text,world_day,int(world_minutes),kind != "reclaimed")
+    _record_world_news("danger" if kind in ["reclaimed","raid"] else "world","mechanics",text,world_day,int(world_minutes),kind != "reclaimed")
     if kind == "cleared" or kind == "boss":
         discovered_pois["marauder_base"] = true
+    if kind == "cleared":
+        # the roads breathe: the Artel and the Perron feel safer at once
+        FactionEconomy.adjust_resource(faction_state,"mechanics","security",12.0)
+        FactionEconomy.adjust_resource(faction_state,"perron","security",6.0)
+        _set_survival_feedback("«Чёрный двор» пал. На дорогах станет тише.",5.0)
 
 func _marauder_base_rumor() -> String:
     # what the settlements say about the base, depending on how it stands

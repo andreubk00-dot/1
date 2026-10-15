@@ -108,6 +108,11 @@ var leash_pos = Vector2(INF, INF)
 var leash = 0.0
 var sight_mult = 1.0
 var post_id = ""
+# veterans of the base: quicker on the trigger, steadier, in vests
+var aim_bonus = 0.0
+var settle_time = 4.0
+var aim_in = Vector2(0.7, 1.2)
+var armor_mult = 1.0
 
 
 func setup(p_game, p_outfit: String, p_weapon: String, p_personality: String) -> void:
@@ -350,7 +355,7 @@ func _enter_combat(seen: bool) -> void:
         return
     _set_state("combat")
     # bringing the gun up and finding the target takes a moment
-    fire_t = max(fire_t, randf_range(0.7, 1.2))
+    fire_t = max(fire_t, randf_range(aim_in.x, aim_in.y))
     if seen:
         _bark("spot", true)
     if squad != null:
@@ -363,7 +368,7 @@ func squad_alert(pos: Vector2) -> void:
     last_seen_pos = pos
     heard_pos = pos
     _set_state("combat")
-    fire_t = max(fire_t, randf_range(0.9, 1.5))
+    fire_t = max(fire_t, randf_range(aim_in.x + 0.2, aim_in.y + 0.3))
 
 
 func _set_state(s: String) -> void:
@@ -649,8 +654,8 @@ func _fire(target_pos: Vector2, infected) -> void:
             game._spawn_temp_tracer(muzzle, target_pos + dir.rotated(PI * 0.5) * randf_range(-14.0, 14.0), 0.06)
         return
     # against the player: range, the player's motion, crouching and the dark all help
-    var settle = clamp((Time.get_ticks_msec() / 1000.0 - engaged_at) / 4.0, 0.0, 1.0)
-    var chance = float(arms["accuracy"]) * lerp(0.6, 1.0, settle) - d / float(arms["reach"]) * 0.4
+    var settle = clamp((Time.get_ticks_msec() / 1000.0 - engaged_at) / settle_time, 0.0, 1.0)
+    var chance = (float(arms["accuracy"]) + aim_bonus) * lerp(0.6, 1.0, settle) - d / float(arms["reach"]) * 0.4
     if game.player.velocity.length() > 40.0:
         chance -= 0.16 if game.is_sprinting else 0.08
     if game.is_crouching:
@@ -758,6 +763,10 @@ func marauder_take_damage(amount: float, hit_dir: Vector2) -> void:
 func take_damage(amount: float, hit_dir: Vector2, from_player: bool) -> void:
     if dead:
         return
+    amount *= armor_mult
+    # a man on his post stands behind sandbags or a tower rail
+    if leash > 0.0 and global_position.distance_to(leash_pos) < 14.0 and velocity.length() < 10.0:
+        amount *= 0.65
     hp -= amount
     hurt_anim = 0.25
     game._blood_hit(global_position, hit_dir, hp <= 0.0)

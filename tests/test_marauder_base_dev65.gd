@@ -201,6 +201,13 @@ func run():
         if m.post_id == "boss":
             boss = m
     check(boss != null and boss.hostile_to_player and boss.max_hp >= 250.0, "the boss is missing or harmless")
+    # veterans: steadier, in vests; the boss sits in his office at the back of the HQ
+    for m in men:
+        check(m.aim_bonus > 0.0 and m.armor_mult < 1.0 and m.settle_time < 4.0, "garrison member is not a veteran: " + m.post_id)
+    if boss != null:
+        check(boss.armor_mult <= 0.6, "the boss wears no armor")
+        var office = base.world_pos(Vector2i(1, 1), Vector2(232, 222))
+        check(boss.global_position.distance_to(office) < 20.0, "the boss is not in his office")
 
     # sentries keep to their posts even in a fight
     var sentry = null
@@ -238,7 +245,7 @@ func run():
     # the boss falls with his kit; the Artel's contract becomes ready
     check(not game._contract_known_sites().has("cleared:marauder_base"), "contract ready before the boss died")
     if boss != null and is_instance_valid(boss):
-        game._damage_enemy(boss, 600.0, Vector2.RIGHT)
+        game._damage_enemy(boss, 2000.0, Vector2.RIGHT)
     await frames(90)
     check(int(base.state["boss_dead_day"]) == game.world_day, "the boss' death was not recorded")
     var boss_body = game.player_bodies.filter(func(b): return str(b.get("name", "")) == "ГЛАВАРЬ «СЕДОЙ»")
@@ -281,6 +288,18 @@ func run():
     await frames(40)
     check(not base.is_cleared() and base.strength() == 1.0, "the base was not taken back")
     check(base.members().size() >= 10, "no new garrison after the reclaim")
+
+    # a standing base presses the roads and robs the Artel once it is known
+    check(base.roaming_pressure(base.center()) > 1.0, "a standing base does not press the roads")
+    game.discovered_pois["marauder_base"] = true
+    base.state["last_raid_day"] = -99
+    base.state["reserve_day"] = -1
+    base._daily()
+    check(int(base.state["last_raid_day"]) == game.world_day, "no raid on the Artel's road")
+    # cleared: the roads thin out
+    base.state["cleared_day"] = game.world_day
+    check(base.roaming_pressure(base.center()) < 1.0, "a cleared base still presses the roads")
+    base.state["cleared_day"] = -1
 
     # the map marks the base as a danger once known
     game.discovered_pois["marauder_base"] = true

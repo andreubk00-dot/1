@@ -178,6 +178,9 @@ func _maybe_spawn() -> void:
         return
     # about one squad every three or four minutes while fewer than two roam
     var chance = 0.18 * (1.0 - game._time_night_factor() * 0.45)
+    # the raiders' base presses the roads around it; once it falls they thin out
+    if game.marauder_base != null:
+        chance *= game.marauder_base.roaming_pressure(game.player.global_position)
     if randf() > chance:
         return
     spawn_squad()

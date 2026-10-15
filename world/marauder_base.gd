@@ -43,7 +43,7 @@ const POSTS = [
     {"id": "hq_l", "cell": Vector2i(1, 1), "pos": Vector2(146, 352), "role": "post", "look": 90.0, "outfit": "deserter", "weapon": "akm"},
     {"id": "hq_r", "cell": Vector2i(1, 1), "pos": Vector2(238, 352), "role": "post", "look": 90.0, "outfit": "deserter", "weapon": "shotgun"},
     {"id": "armory", "cell": Vector2i(1, 1), "pos": Vector2(578, 352), "role": "post", "look": 90.0, "outfit": "bandit", "weapon": "akm"},
-    {"id": "boss", "cell": Vector2i(1, 1), "pos": Vector2(190, 352), "role": "boss", "look": 90.0, "outfit": "deserter", "weapon": "akm"},
+    {"id": "boss", "cell": Vector2i(1, 1), "pos": Vector2(232, 222), "role": "boss", "look": 90.0, "outfit": "deserter", "weapon": "akm"},
 ]
 
 # patrols walk their loop for ever: points are [cell offset, local position]
@@ -170,7 +170,7 @@ func _ready() -> void:
 
 
 static func default_state() -> Dictionary:
-    return {"dead": {}, "boss_dead_day": -1, "cleared_day": -1, "reserve_day": -1, "reserve_used": 0, "alarms": 0, "visited": false}
+    return {"dead": {}, "boss_dead_day": -1, "cleared_day": -1, "reserve_day": -1, "reserve_used": 0, "alarms": 0, "visited": false, "last_raid_day": -99}
 
 
 func load_state(raw) -> void:
@@ -180,7 +180,7 @@ func load_state(raw) -> void:
     if typeof(raw.get("dead")) == TYPE_DICTIONARY:
         for k in raw["dead"].keys():
             state["dead"][str(k)] = int(raw["dead"][k])
-    for k in ["boss_dead_day", "cleared_day", "reserve_day", "reserve_used", "alarms"]:
+    for k in ["boss_dead_day", "cleared_day", "reserve_day", "reserve_used", "alarms", "last_raid_day"]:
         state[k] = int(raw.get(k, state[k]))
     state["visited"] = bool(raw.get("visited", false))
 
@@ -271,6 +271,31 @@ func _daily() -> void:
     if int(state["reserve_day"]) != game.world_day:
         state["reserve_day"] = game.world_day
         state["reserve_used"] = 0
+        _raid_the_road()
+
+
+# While the base stands, Седой's men rob the Artel's convoys on the east road.
+# The survivor hears about it once he knows the place (before that it is just
+# the world's background). Every third day: a chronicle line, the Artel's
+# stores thinner.
+func _raid_the_road() -> void:
+    if is_cleared() or not game.discovered_pois.has(POI_ID):
+        return
+    if int(state.get("last_raid_day", -99)) + 3 > game.world_day:
+        return
+    state["last_raid_day"] = game.world_day
+    game.FactionEconomy.adjust_resource(game.faction_state, "mechanics", "technical", -3.0)
+    game.FactionEconomy.adjust_resource(game.faction_state, "mechanics", "security", -2.0)
+    game._marauder_base_news("raid")
+
+
+# How hard the roads are pressed by raiders around a point: more roaming squads
+# near a standing base, far fewer for the days after it fell.
+func roaming_pressure(at: Vector2) -> float:
+    if is_cleared():
+        return 0.55
+    var sectors = at.distance_to(center()) / float(game.CHUNK_SIZE)
+    return 1.5 if sectors < 7.0 else 1.0
 
 
 func _chunk_loaded(cell: Vector2i) -> bool:
@@ -344,6 +369,11 @@ func _make(outfit: String, weapon: String, personality: String, at: Vector2, g, 
     m.slot = slot
     m.position = at if _free_at(at) else _nearest_free(at)
     m.set_meta("base_member", true)
+    # the garrison is the raiders' best: steadier hands, vests on the deserters
+    m.aim_bonus = 0.12
+    m.settle_time = 2.0
+    m.aim_in = Vector2(0.4, 0.75)
+    m.armor_mult = 0.72 if outfit == "deserter" else 0.88
     game.add_child(m)
     g.members.append(m)
     return m
@@ -365,7 +395,7 @@ func _spawn_post(p: Dictionary) -> void:
     m.facing = look
     if g.kind in ["post", "tower", "boss"]:
         m.leash_pos = m.position
-        m.leash = 70.0 if g.kind == "tower" else (150.0 if g.kind == "boss" else 120.0)
+        m.leash = 70.0 if g.kind == "tower" else (90.0 if g.kind == "boss" else 120.0)
     if g.kind == "tower":
         m.sight_mult = 1.35
     if g.kind == "boss":
@@ -376,6 +406,8 @@ func _spawn_post(p: Dictionary) -> void:
         m.set_meta("body_name", "ГЛАВАРЬ «СЕДОЙ»")
         m.set_meta("body_extra", BOSS_KIT)
         m.scale = Vector2(1.06, 1.06)
+        m.armor_mult = 0.55
+        m.aim_bonus = 0.18
     groups[id] = g
 
 
