@@ -202,6 +202,16 @@ func run():
         md._open_door_ahead(Vector2(0, -40))
         check(bool(door.get_meta("door_open", false)), "a raider could not open the closed door in front of him")
 
+    # dev65: routes keep out of the guarded towns
+    var perron = game.RegionCatalog.poi_by_id("settlement_perron")
+    if not perron.is_empty():
+        var town: Vector2i = perron["coord"]
+        for k in range(20):
+            var r = dir._route_from(Vector2(town + Vector2i(3, 0)) * game.CHUNK_SIZE + Vector2(384, 384))
+            for pt in r.slice(1):
+                check(not dir.safe_chunk(game._world_to_chunk(pt)), "a squad route leads into a settlement")
+        check(dir.safe_chunk(town), "settlement chunk not recognised as safe")
+
     # director: at most two squads, gone when the player leaves
     for s in dir.squads.duplicate():
         dir._remove(s)

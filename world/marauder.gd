@@ -283,6 +283,10 @@ func _clear_line(a: Vector2, b: Vector2) -> bool:
 func _perceive() -> void:
     if game.player_death_time > 0.0:
         return
+    # a survivor inside a guarded town is not prey for a roaming squad
+    if post_id == "" and game.marauder_director != null and game.marauder_director.safe_chunk(game._world_to_chunk(game.player.global_position)):
+        awareness = max(0.0, awareness - 0.1)
+        return
     var now = Time.get_ticks_msec() / 1000.0
     if _player_visible():
         var d = global_position.distance_to(game.player.global_position)

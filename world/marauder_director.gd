@@ -120,8 +120,21 @@ func _tick_squad(sq) -> void:
         _remove(sq)
         return
     var lead = sq.leader()
+    # at a town's walls they turn back; a fight does not follow the survivor in
+    if lead != null and safe_chunk(game._world_to_chunk(lead.global_position)):
+        for m in alive:
+            if m.state in ["combat", "investigate", "search"]:
+                m._set_state("patrol")
+        if not sq.has_meta("turned"):
+            sq.set_meta("turned", true)
+            sq.route.reverse()
+            sq.leg = 1
     if lead != null and lead.state == "patrol":
         _maybe_pilfer(sq, lead)
+
+
+func safe_chunk(coord: Vector2i) -> bool:
+    return bool(game.RegionCatalog.poi_for_chunk(coord).get("safe_settlement", false))
 
 
 func on_player_respawn() -> void:
@@ -261,6 +274,16 @@ func _route_from(spot: Vector2) -> Array:
             var d = toward - here
             if d != Vector2i.ZERO:
                 best = Vector2i(signi(d.x), 0) if abs(d.x) >= abs(d.y) else Vector2i(0, signi(d.y))
+        # raiders keep out of the guarded towns (dev65)
+        if safe_chunk(here + best):
+            options.shuffle()
+            best = Vector2i.ZERO
+            for o in options:
+                if not safe_chunk(here + o):
+                    best = o
+                    break
+            if best == Vector2i.ZERO:
+                break
         here += best
         route.append(Vector2(here) * size + Vector2(384, 384) + Vector2(randf_range(-30, 30), randf_range(-30, 30)))
     return route
