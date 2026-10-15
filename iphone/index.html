@@ -1190,6 +1190,8 @@ canvas { touch-action:none; }
   /* The desktop rift entrance keyframes animate a -50% X offset, which
      displaced the left-anchored mobile HUD entirely offscreen. */
   .rift-hud{animation:none}
+  /* Keep Commander controls clear of Pulse and defender cards on compact screens. */
+  .commander-combat-hud{margin-bottom:8px}
 }
 @media (max-width:360px){
   .topbar{padding-left:5px;padding-right:5px}
