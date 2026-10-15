@@ -59,6 +59,8 @@ jobs:
               node tests/simulate-runs.cjs "$profile" "$seed" 1
             done
           done
+      - name: Stress long-run combat invariants and boss progression
+        run: node tests/combat-longrun-release-v1824.test.cjs
       - name: Verify combat difficulty gates across squad progression
         run: node tests/combat-pacing-v1824.test.cjs
       - name: Verify reachable defender-contract combat gates by squad

@@ -47,10 +47,39 @@ if(rangeFactor!==1){const find=g.findTarget.bind(g);g.findTarget=(u,d)=>find(u,d
 g.startRun(false);
 const preferred=['warhead','overclock','shield','capacitor','resonance','scavenger','cryo','blast','chain'];
 const checkpoints=[],maxTicks=140000,maxWave=120,step=.05;
+const auditEnabled=process.argv[5]==='audit';
+const bossWaves=new Set(),issues=[],auditMax={enemies:0,projectiles:0,particles:0,effects:0,floats:0,orbs:0};
+let checks=0,lastObservedWave=1;
 let previousWave=0,ticks=0,seconds=0,maxEnemies=0,error=null;
 try {
  while(g.inRun&&g.run.wave<=maxWave&&ticks<maxTicks){
   const r=g.run;
+  if(auditEnabled){
+    if(r.wave<lastObservedWave)issues.push('Wave regressed from '+lastObservedWave+' to '+r.wave);
+    if(r.wave>lastObservedWave+1)issues.push('Skipped wave '+lastObservedWave+' to '+r.wave);
+    lastObservedWave=r.wave;
+    for(const e of r.enemies)if(e.boss)bossWaves.add(r.wave);
+    if(ticks%20===0){
+      checks++;
+      for(const [key,value] of Object.entries({core:r.core,maxCore:r.maxCore,energy:r.energy,score:r.score,spawned:r.spawned,toSpawn:r.toSpawn,skillCd:r.skillCd,commanderCharge:r.commanderCharge||0})){
+        if(!Number.isFinite(value))issues.push('Invalid '+key+' at wave '+r.wave+': '+value);
+      }
+      if(r.energy<-.001)issues.push('Negative energy on wave '+r.wave);
+      if(r.spawned>r.toSpawn)issues.push('Overspawn at wave '+r.wave);
+      if(r.lastCleared>r.wave)issues.push('Invalid last-cleared wave '+r.lastCleared);
+      const pools={enemies:r.enemies,projectiles:r.projectiles,particles:r.particles,effects:r.effects||[],floats:r.floats,orbs:r.orbs||[]};
+      for(const [pool,arr] of Object.entries(pools)){
+        auditMax[pool]=Math.max(auditMax[pool],arr.length);
+        if(arr.length>1200)issues.push('Unbounded '+pool+' at wave '+r.wave+': '+arr.length);
+        for(const entity of arr.slice(0,150)){
+          for(const key of ['x','y','hp','maxHp','life','ttl']){
+            if(entity[key]!==undefined&&!Number.isFinite(entity[key]))issues.push('Invalid '+pool+'.'+key+' at wave '+r.wave);
+          }
+        }
+      }
+      if(issues.length)throw Error(issues.slice(0,6).join('; '));
+    }
+  }
   if(r.wave!==previousWave){
    if(previousWave&&previousWave%5===0){
     g.presentRelicChoice();
@@ -80,6 +109,7 @@ try {
 const report={profile:kind,seed:Number(process.argv[3]||12345),rangeMultiplier:rangeFactor,
  reached:g.run?.wave||0,cleared:g.run?.lastCleared||0,alive:g.inRun,
  core:Math.round(g.run?.core||0),energy:Math.round(g.run?.energy||0),
- seconds:Math.round(seconds),ticks,maxEnemies,checkpoints,error};
+ seconds:Math.round(seconds),ticks,maxEnemies,checkpoints,error,
+ audit:auditEnabled?{checks,bossWaves:[...bossWaves].sort((a,b)=>a-b),max: auditMax,issues}:null};
 console.log(JSON.stringify(report));
 if(error)process.exitCode=1;
