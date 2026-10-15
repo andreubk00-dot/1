@@ -1223,6 +1223,22 @@ canvas { touch-action:none; }
 /* Transient status messages must not intercept result/reward buttons. */
 #toast{pointer-events:none}
 
+
+/* Release QA: the Laboratory must fit a 320px phone without side scrolling. */
+@media (max-width:360px){
+  #labScreen .modal-card{
+    width:min(520px,calc(100vw - 36px));
+    max-width:calc(100vw - 36px);
+    min-width:0;
+    box-sizing:border-box;
+  }
+  #labScreen .upgrade-row{grid-template-columns:minmax(0,1fr);gap:10px}
+  #labScreen .upgrade-row>*{min-width:0}
+  #labScreen .buy-upgrade{width:100%;min-width:0;max-width:100%;justify-self:stretch}
+  #labScreen .upgrade-row h4,
+  #labScreen .upgrade-row p{overflow-wrap:anywhere}
+}
+
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
