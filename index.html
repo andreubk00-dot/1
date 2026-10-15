@@ -1240,6 +1240,18 @@ canvas { touch-action:none; }
   }
 }
 
+
+/* Release QA: on short landscape screens the relic reroll remains scroll-reachable. */
+@media (max-height:600px) and (min-width:721px){
+  #relicScreen .relic-card{
+    max-height:calc(100dvh - 92px);
+    overflow-x:hidden;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    scrollbar-gutter:stable;
+  }
+}
+
 </style>
   <!-- Yandex SDK: no verified ad callback means no bonus. -->
   <script src="/sdk.js"></script>
