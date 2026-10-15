@@ -678,6 +678,34 @@ func _muzzle_flash(at: Vector2, dir: Vector2) -> void:
     var tw = f.create_tween()
     tw.tween_property(f, "modulate:a", 0.0, 0.06)
     tw.tween_callback(f.queue_free)
+    # the flash lights the shooter and the walls round him for a moment
+    if lamp != null and game._time_night_factor() > 0.2:
+        var flash = PointLight2D.new()
+        flash.texture = lamp.texture
+        flash.texture_scale = 0.35
+        flash.energy = 1.4
+        flash.color = Color(1.0, 0.8, 0.5)
+        flash.global_position = at
+        game.add_child(flash)
+        var tl = flash.create_tween()
+        tl.tween_property(flash, "energy", 0.0, 0.07)
+        tl.tween_callback(flash.queue_free)
+    # a spent case flicks out to the right and rolls to a stop
+    if weapon != "shotgun" or randf() < 0.5:
+        var case = Polygon2D.new()
+        case.polygon = PackedVector2Array([Vector2(0, 0), Vector2(1.5, 0), Vector2(1.5, 1), Vector2(0, 1)])
+        case.color = Color(0.82, 0.66, 0.3) if weapon != "shotgun" else Color(0.7, 0.2, 0.16)
+        case.z_index = -5
+        case.z_as_relative = false
+        case.global_position = (global_position + Vector2(0, 4)).round()
+        game.add_child(case)
+        var side = Vector2(-dir.y, dir.x)
+        var land = case.global_position + side * randf_range(10.0, 18.0) - dir * randf_range(0.0, 6.0) + Vector2(0, 6)
+        var tc = case.create_tween()
+        tc.tween_property(case, "global_position", land.round(), 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+        tc.tween_interval(8.0)
+        tc.tween_property(case, "modulate:a", 0.0, 1.5)
+        tc.tween_callback(case.queue_free)
 
 
 func _threatening_infected():

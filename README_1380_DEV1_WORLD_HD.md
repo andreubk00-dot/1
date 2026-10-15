@@ -1175,6 +1175,8 @@ Living raiders, AI-driven (`world/marauder.gd`, `world/marauder_director.gd`).
 - Voices: HaelDB «Male Grunt/Yelling sounds» (CC0 option of a dual
   licence), thebardofblasphemy «grunts of male death and pain» (CC0); the
   flyby is synthesised in `tools/import_cc0_audio.py`.
+- Shots light up the shooter at night for a moment; spent cases flick out
+  and lie on the ground for a few seconds.
 - `tests/test_marauders_dev63.gd` now 78 checks.
 - Sector loads: the forest edge gathered its obstacles per candidate (and the
   door test walked every door of every loaded sector) - 6 ms per woodland
