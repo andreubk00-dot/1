@@ -1208,6 +1208,17 @@ canvas { touch-action:none; }
 /* Keep transitional wave announcements from covering live boss health and tactics. */
 .boss-hud:not(.hidden) ~ #waveBanner{display:none!important}
 
+
+/* Release QA: result actions remain reachable on short browser and phone viewports.
+   The decorative glow extends outside the box; clip X but scroll actual results on Y. */
+#resultScreen .result-card{
+  max-height:min(88dvh, calc(100dvh - 116px));
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
