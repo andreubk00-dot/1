@@ -459,9 +459,7 @@ func raise_alarm(pos: Vector2, from) -> void:
             siren.play()
         if is_instance_valid(from):
             var lines: Array = BARKS_BASE["boss"] if from.post_id == "boss" else BARKS_BASE["alarm"]
-            from.bark_label.text = lines[randi() % lines.size()]
-            from.bark_label.visible = true
-            from.bark_life = 2.6
+            from.say_line(lines[randi() % lines.size()], 2.6)
         if reserve_t <= 0.0:
             reserve_t = RESERVE_DELAY
     alarm_t = ALARM_TIME
@@ -492,7 +490,7 @@ func member_lost(g, m) -> void:
     rest.erase(m)
     if m.dead:
         if not rest.is_empty():
-            rest[0]._bark("friend_down", true)
+            rest[0].mourn(m)
         if m.post_id != "" and m.post_id != "reserve":
             state["dead"][m.post_id] = game.world_day
         if m.post_id == "boss":
@@ -536,9 +534,7 @@ func _idle_chatter(dt: float) -> void:
     if near.is_empty():
         return
     var m = near[randi() % near.size()]
-    m.bark_label.text = BARKS_BASE["idle"][randi() % BARKS_BASE["idle"].size()]
-    m.bark_label.visible = true
-    m.bark_life = 2.4
+    m.say_line(BARKS_BASE["idle"][randi() % BARKS_BASE["idle"].size()], 2.4)
 
 
 func members() -> Array:

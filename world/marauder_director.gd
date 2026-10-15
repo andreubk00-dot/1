@@ -62,7 +62,7 @@ class Squad:
         var rest = alive()
         rest.erase(m)
         if not rest.is_empty() and m.dead:
-            rest[0]._bark("friend_down", true)
+            rest[0].mourn(m)
 
     func slot_target(m) -> Vector2:
         var lead = leader()
@@ -86,6 +86,14 @@ class Squad:
 
 var game = null
 var squads = []
+# dev66: what the raiders remember about the survivor - the men he let go
+# (one of them may turn up again, grateful) and the ones he shot with their
+# hands up (then nobody surrenders to him for a few days)
+var memory = {"spared": [], "executions": 0, "execution_day": -99}
+const SPARED_KEEP = 4
+const REUNION_CHANCE = 0.35
+const NO_MERCY_AT = 2
+const MERCY_FORGET_DAYS = 3
 var check_t = 0.0
 var age = 0.0
 var spawned_total = 0
@@ -131,6 +139,84 @@ func _tick_squad(sq) -> void:
             sq.leg = 1
     if lead != null and lead.state == "patrol":
         _maybe_pilfer(sq, lead)
+
+
+func remember_spared(m) -> void:
+    var list: Array = memory["spared"]
+    list.append({"nick": m.nick, "outfit": m.outfit, "weapon": m.weapon, "voice": m.voice_id, "day": game.world_day})
+    while list.size() > SPARED_KEEP:
+        list.pop_front()
+
+
+func note_execution(m) -> void:
+    _forget_executions()
+    memory["executions"] = int(memory["executions"]) + 1
+    memory["execution_day"] = game.world_day
+    # whoever saw it will say so
+    for sq in squads:
+        for o in sq.alive():
+            if o != m and o.global_position.distance_to(m.global_position) < 300.0:
+                o._bark("no_mercy", true)
+                return
+
+
+func _forget_executions() -> void:
+    # rumours fade: one step every few quiet days
+    var since = game.world_day - int(memory["execution_day"])
+    if int(memory["executions"]) > 0 and since >= MERCY_FORGET_DAYS:
+        memory["executions"] = max(0, int(memory["executions"]) - int(since / MERCY_FORGET_DAYS))
+        memory["execution_day"] = game.world_day
+
+
+func no_mercy() -> bool:
+    _forget_executions()
+    return int(memory["executions"]) >= NO_MERCY_AT
+
+
+func _reunion_type():
+    # a man let go at least a day ago may come back along the road, alone
+    for rec in memory["spared"]:
+        if game.world_day >= int(rec["day"]) + 1 and not bool(rec.get("met", false)):
+            return rec
+    return null
+
+
+func serialize_memory() -> Dictionary:
+    return memory.duplicate(true)
+
+
+func restore_memory(raw) -> void:
+    memory = {"spared": [], "executions": 0, "execution_day": -99}
+    if typeof(raw) != TYPE_DICTIONARY:
+        return
+    memory["executions"] = clampi(int(raw.get("executions", 0)), 0, 20)
+    memory["execution_day"] = int(raw.get("execution_day", -99))
+    for rec in raw.get("spared", []) if typeof(raw.get("spared", [])) == TYPE_ARRAY else []:
+        if typeof(rec) != TYPE_DICTIONARY:
+            continue
+        var outfit = str(rec.get("outfit", "bandit"))
+        var weapon = str(rec.get("weapon", "makarov"))
+        if outfit not in ["gopnik", "bandit", "deserter"] or not Marauder.ARMS.has(weapon):
+            continue
+        memory["spared"].append({"nick": str(rec.get("nick", "")).left(16), "outfit": outfit, "weapon": weapon,
+            "voice": clampi(int(rec.get("voice", 0)), 0, 3), "day": int(rec.get("day", 1)), "met": bool(rec.get("met", false)),
+            "paid": bool(rec.get("paid", false))})
+    while memory["spared"].size() > SPARED_KEEP:
+        memory["spared"].pop_front()
+
+
+func spawn_reunion(rec, at: Vector2 = Vector2(INF, INF)):
+    var t = {"outfit": rec["outfit"], "size": [1, 1], "weapons": [rec["weapon"]], "personality": "neutral", "w": 0}
+    var sq = spawn_squad(t, at)
+    if sq == null:
+        return null
+    var m = sq.members[0]
+    m.nick = str(rec["nick"])
+    m.voice_id = int(rec["voice"])
+    m.set_meta("spared", true)
+    m.set_meta("spared_rec", rec)
+    rec["met"] = true
+    return sq
 
 
 func safe_chunk(coord: Vector2i) -> bool:
@@ -195,6 +281,10 @@ func _maybe_spawn() -> void:
     if game.marauder_base != null:
         chance *= game.marauder_base.roaming_pressure(game.player.global_position)
     if randf() > chance:
+        return
+    var rec = _reunion_type()
+    if rec != null and randf() < REUNION_CHANCE:
+        spawn_reunion(rec)
         return
     spawn_squad()
 
@@ -324,7 +414,8 @@ func serialize() -> Array:
                 "hostile": m.hostile_to_player, "x": m.global_position.x, "y": m.global_position.y,
                 "hp": m.hp, "mag": m.mag, "reserve": m.reserve, "slot": m.slot,
                 "combat": m.state == "combat", "surrendered": m.surrendered, "dropped": m.weapon_dropped,
-                "voice": m.voice_id,
+                "voice": m.voice_id, "nick": m.nick, "spared": m.has_meta("spared"),
+                "traded": bool(m.get_meta("traded", false)),
             })
         if not near or members.is_empty():
             continue
@@ -360,6 +451,16 @@ func restore(data: Array) -> void:
             m.reserve = clampi(int(md.get("reserve", m.reserve)), 0, 120)
             m.slot = clampi(int(md.get("slot", 0)), 0, 2)
             m.voice_id = clampi(int(md.get("voice", 0)), 0, 3)
+            if str(md.get("nick", "")) != "":
+                m.nick = str(md["nick"]).left(16)
+            if bool(md.get("traded", false)):
+                m.set_meta("traded", true)
+            if bool(md.get("spared", false)):
+                m.set_meta("spared", true)
+                m.set_meta("greeted", true)
+                for rec in memory["spared"]:
+                    if str(rec["nick"]) == m.nick:
+                        m.set_meta("spared_rec", rec)
             m.surrendered = bool(md.get("surrendered", false))
             m.weapon_dropped = bool(md.get("dropped", false))
             m.squad = sq

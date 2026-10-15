@@ -2845,6 +2845,7 @@ var marauder_saved = []
 const MarauderBase = preload("res://world/marauder_base.gd")
 var marauder_base = null
 var marauder_base_saved = {}
+var marauder_memory_saved = {}
 var field_hints_saved = {}
 var pixel_ui_font = null
 
@@ -2979,6 +2980,7 @@ func _ready():
     add_child(marauder_director)
     if not marauder_saved.is_empty():
         marauder_director.call_deferred("restore",marauder_saved)
+    marauder_director.restore_memory(marauder_memory_saved)
     marauder_base = MarauderBase.new()
     marauder_base.name = "MarauderBase"
     marauder_base.game = self
@@ -21565,10 +21567,11 @@ func _search_captive(m):
     if not discovered_pois.has("marauder_base") and randf() < 0.6:
         discovered_pois["marauder_base"] = true
         line = "Не стреляй! Я скажу... Седой сидит на старом ЖБИ, восточнее Механиков. «Чёрный двор». С юга в стене дыра."
-    m.bark_label.text = line.left(64) if line.length() > 64 else line
-    m.bark_label.visible = true
-    m.bark_life = 3.5
+    m.say_line(line,4.5)
     _set_survival_feedback("Обыскан: %s" % line,4.5)
+    if marauder_director != null and not m.has_meta("base_member"):
+        # he will remember who let him go (dev66)
+        marauder_director.remember_spared(m)
     m.flee_t = 30.0
     m._set_state("flee")
 
@@ -21582,10 +21585,36 @@ const MARAUDER_RUMORS = [
     "Воду бери из колонок, из луж — сам знаешь, что будет."
 ]
 
+# what the man the survivor once let go brings back: a useful thing and a tip
+const SPARED_GIFTS = ["trauma_kit","sterile_bandage","emergency_ration","antibiotics"]
+
+func _repay_debt(m) -> String:
+    var rec = m.get_meta("spared_rec",{})
+    if typeof(rec) == TYPE_DICTIONARY:
+        rec["paid"] = true
+    m.set_meta("traded",true)
+    var gift = SPARED_GIFTS[randi() % SPARED_GIFTS.size()]
+    var at = _free_body_spot(m.global_position + (player.global_position - m.global_position).normalized() * 14.0)
+    _marauder_drop_item(gift,1,at)
+    var ammo_id = str(weapon_defs.get(current_weapon_id,{}).get("ammo","")) if equipped_melee_id == "" else ""
+    if ammo_id != "" and item_defs.has(ammo_id):
+        _marauder_drop_item(ammo_id,12,_free_body_spot(at + Vector2(12,4)))
+    var tip = "Ночью на «Чёрном дворе» меняется караул — пока новые не встанут, посты пустые."
+    if not discovered_pois.has("marauder_base"):
+        discovered_pois["marauder_base"] = true
+        tip = "Седой сидит на старом ЖБИ восточнее Механиков. С юга в стене пролом — я сам там лазил."
+    return "Держи, это тебе. Я %s, запомни. %s" % [m.nick,tip]
+
 func _talk_marauder(m):
     if not is_instance_valid(m) or m.hostile_to_player:
         return
     var line = MARAUDER_RUMORS[randi() % MARAUDER_RUMORS.size()]
+    if m.has_meta("spared") and not bool(m.get_meta("traded",false)):
+        line = _repay_debt(m)
+        m.facing = (player.global_position - m.global_position).normalized()
+        m.say_line(line,5.5)
+        _set_survival_feedback(line,5.5)
+        return
     if not bool(m.get_meta("traded",false)):
         var give = ""
         for id in ["canned_meat","water","emergency_ration"]:
@@ -21601,9 +21630,7 @@ func _talk_marauder(m):
             _marauder_drop_item(got,qty,_free_body_spot(m.global_position + (player.global_position - m.global_position).normalized() * 14.0))
             line = "%s за %s? Идёт. Держи, клади на землю — сам подберёшь." % [str(item_defs.get(got,{}).get("short",got)),str(item_defs.get(give,{}).get("short",give)).to_lower()]
     m.facing = (player.global_position - m.global_position).normalized()
-    m.bark_label.text = line.left(70)
-    m.bark_label.visible = true
-    m.bark_life = 4.0
+    m.say_line(line,4.5)
     _set_survival_feedback(line,4.5)
 
 func _marauder_drop_weapon(m):
@@ -34574,6 +34601,7 @@ func _save_state():
         "player_bodies":player_bodies,
         "marauder_squads":marauder_director.serialize() if marauder_director != null else [],
         "marauder_base":marauder_base.serialize() if marauder_base != null else {},
+        "marauder_memory":marauder_director.serialize_memory() if marauder_director != null else {},
         "next_body_id":next_body_id,
         "picked_world_items":picked_world_items,
         "dropped_items":dropped_items,
@@ -34823,6 +34851,9 @@ func _load_state():
     next_body_id = max(1,int(parsed.get("next_body_id",player_bodies.size() + 1)))
     marauder_saved = parsed.get("marauder_squads",[]) if typeof(parsed.get("marauder_squads",[])) == TYPE_ARRAY else []
     marauder_base_saved = parsed.get("marauder_base",{}) if typeof(parsed.get("marauder_base",{})) == TYPE_DICTIONARY else {}
+    marauder_memory_saved = parsed.get("marauder_memory",{}) if typeof(parsed.get("marauder_memory",{})) == TYPE_DICTIONARY else {}
+    if marauder_director != null:
+        marauder_director.restore_memory(marauder_memory_saved)
     if marauder_base != null:
         marauder_base.load_state(marauder_base_saved)
     picked_world_items = parsed.get("picked_world_items",{})

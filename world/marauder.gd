@@ -38,7 +38,12 @@ const BARKS = {
     "warn": ["Иди своей дорогой.", "Не подходи.", "Мы тебя не трогаем."],
     "aim": ["Опусти ствол!", "Ствол убрал, быстро!"],
     "friend_down": ["Сеню завалили!", "Он наших кладёт!"],
+    "no_mercy": ["Он сдавшихся кончает! Бейся!", "Сдаваться? Ему? Ага, щас."],
 }
+
+# dev66: every raider has a name his mates shout
+const NICKS = ["Сеня", "Хромой", "Лысый", "Гвоздь", "Штырь", "Малой", "Кабан", "Косой",
+    "Толян", "Шнырь", "Боцман", "Рыжий", "Бурый", "Чиж", "Глухой", "Сыч", "Кирпич", "Вован"]
 
 var game = null
 var squad = null
@@ -108,6 +113,7 @@ var leash_pos = Vector2(INF, INF)
 var leash = 0.0
 var sight_mult = 1.0
 var post_id = ""
+var nick = ""
 # veterans of the base: quicker on the trigger, steadier, in vests
 var aim_bonus = 0.0
 var settle_time = 4.0
@@ -128,6 +134,7 @@ func setup(p_game, p_outfit: String, p_weapon: String, p_personality: String) ->
     hp = max_hp
     state = "neutral" if personality == "neutral" else "patrol"
     voice_id = randi() % 4
+    nick = NICKS[randi() % NICKS.size()]
 
 
 func _ready() -> void:
@@ -339,6 +346,12 @@ func _neutral_watch() -> void:
     if d > 280.0 or not _clear_line(global_position, p):
         aim_warn_t = max(0.0, aim_warn_t - 0.15)
         return
+    if has_meta("spared") and not has_meta("greeted") and d < 170.0:
+        # the man the survivor let go: he knows that face
+        set_meta("greeted", true)
+        facing = (p - global_position).normalized()
+        say_line("Ты?.. Это ты меня тогда отпустил. Подойди — должок за мной.", 4.5)
+        return
     if d < 150.0 and state_t > 3.0:
         _bark("warn")
     # a gun pointed at them for long enough is a threat
@@ -468,8 +481,13 @@ func _combat_move(delta: float) -> Vector2:
         _set_state("flee")
         return Vector2.ZERO
     if personality == "coward" and hp < max_hp * 0.55 and not surrendered:
-        _surrender()
-        return Vector2.ZERO
+        if game.marauder_director != null and game.marauder_director.no_mercy():
+            # they heard what happens to those who give up to this one
+            personality = "hostile"
+            _bark("no_mercy", true)
+        else:
+            _surrender()
+            return Vector2.ZERO
     if target_infected != null:
         var ti = target_infected.global_position
         facing = (ti - global_position).normalized()
@@ -777,6 +795,8 @@ func marauder_take_damage(amount: float, hit_dir: Vector2) -> void:
 func take_damage(amount: float, hit_dir: Vector2, from_player: bool) -> void:
     if dead:
         return
+    # killing a man with his hands up: the word gets round (dev66)
+    var begging = surrendered and state == "surrender" and from_player
     amount *= armor_mult
     # a man on his post stands behind sandbags or a tower rail
     if leash > 0.0 and global_position.distance_to(leash_pos) < 14.0 and velocity.length() < 10.0:
@@ -804,6 +824,8 @@ func take_damage(amount: float, hit_dir: Vector2, from_player: bool) -> void:
             flee_t = 20.0
             _set_state("flee")
     if hp <= 0.0:
+        if begging and game.marauder_director != null:
+            game.marauder_director.note_execution(self)
         _die(hit_dir)
     elif amount >= 8.0:
         _bark("hurt")
@@ -895,12 +917,30 @@ func _bark(kind: String, force: bool = false) -> void:
     var lines = BARKS.get(kind, [])
     if lines.is_empty():
         return
-    bark_label.text = lines[randi() % lines.size()]
-    bark_label.visible = true
-    bark_life = 2.2
+    say_line(lines[randi() % lines.size()], 2.2)
     bark_cd = 4.0
     if kind in ["spot", "flank", "friend_down", "flee", "surrender", "infected", "aim"]:
         _say("shout")
+
+
+func mourn(fallen) -> void:
+    # his mates shout his name when he goes down
+    var name_of = fallen.nick if is_instance_valid(fallen) and fallen.nick != "" else "Сеню"
+    var lines = ["%s завалили!" % name_of, "%s! Твою ж..." % name_of, "Он наших кладёт!"]
+    say_line(lines[randi() % lines.size()], 2.4)
+    _say("shout")
+
+
+func say_line(text: String, life: float = 2.6) -> void:
+    # a longer line wraps over two or three rows above the head
+    bark_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if text.length() > 30 else TextServer.AUTOWRAP_OFF
+    var rows = 1 if text.length() <= 30 else int(ceil(text.length() / 30.0))
+    bark_label.size = Vector2(150, 9 * rows + 3)
+    bark_label.position = Vector2(-75, -52 - 8 * (rows - 1))
+    bark_label.text = text
+    bark_label.visible = true
+    bark_life = life
+    bark_cd = max(bark_cd, 2.0)
 
 
 func _update_bark(delta: float) -> void:
@@ -1031,7 +1071,7 @@ func silent_takedown(dir: Vector2) -> void:
                 continue
             if m.global_position.distance_to(global_position) < 200.0 and m._clear_line(m.global_position, global_position) and m.facing.dot((global_position - m.global_position).normalized()) > 0.0:
                 m.squad_alert(game.player.global_position)
-                m._bark("friend_down", true)
+                m.mourn(self)
     dead = true
     die_t = 0.0
     collision_layer = 0
