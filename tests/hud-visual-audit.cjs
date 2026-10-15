@@ -8,7 +8,7 @@ const profiles=[
 ];
 const sels=['.brand','.resources','.hud-top','.hud-top .hud-pill','.hud-bottom','#unitCards','#skillBtn','#bossHud','#bossObjective','#comboHud','#riftHud','#fieldOrderHud','#commanderCombatHud'];
 const area=(a,b)=>Math.max(0,Math.min(a.r,b.r)-Math.max(a.l,b.l))*Math.max(0,Math.min(a.b,b.b)-Math.max(a.t,b.t));
-const pairs=[['.brand','.resources'],['.hud-top .hud-pill','.hud-top .hud-pill'],['.hud-bottom','#commanderCombatHud'],['#bossHud','#bossObjective'],['#bossObjective','#commanderCombatHud'],['#bossObjective','#unitCards'],['#bossObjective','#skillBtn'],['#fieldOrderHud','#bossHud'],['#fieldOrderHud','#bossObjective'],['#fieldOrderHud','#commanderCombatHud'],['#comboHud','#bossHud'],['#comboHud','#bossObjective'],['#comboHud','#fieldOrderHud'],['#riftHud','#fieldOrderHud']];
+const pairs=[['.brand','.resources'],['.hud-top .hud-pill','.hud-top .hud-pill'],['#unitCards','#commanderCombatHud'],['#skillBtn','#commanderCombatHud'],['#bossHud','#bossObjective'],['#bossObjective','#commanderCombatHud'],['#bossObjective','#unitCards'],['#bossObjective','#skillBtn'],['#fieldOrderHud','#bossHud'],['#fieldOrderHud','#bossObjective'],['#fieldOrderHud','#commanderCombatHud'],['#comboHud','#bossHud'],['#comboHud','#bossObjective'],['#comboHud','#fieldOrderHud'],['#riftHud','#fieldOrderHud']];
 const report=[];
 fs.mkdirSync('screenshots/hud-qa',{recursive:true});
 async function probe(page,name,phase){
@@ -37,4 +37,4 @@ async function run([name,w,h,port]){
  if(errors.length)throw new Error(name+' JS errors: '+errors.join(' / '));
  }finally{await browser.close();}
 }
-(async()=>{for(const p of profiles)await run(p);fs.writeFileSync('screenshots/hud-qa/report.json',JSON.stringify(report,null,2));})().catch(e=>{console.error(e);process.exitCode=1});
+(async()=>{for(const p of profiles)await run(p);fs.writeFileSync('screenshots/hud-qa/report.json',JSON.stringify(report,null,2));const problems=report.filter(x=>x.hits.length);if(problems.length)throw new Error('HUD overlaps or clipped elements: '+JSON.stringify(problems.map(x=>({view:x.view,phase:x.phase,hits:x.hits.map(v=>({a:v.a,b:v.b,area:v.area,outOfBounds:v.outOfBounds}))}))));})().catch(e=>{console.error(e);process.exitCode=1});
