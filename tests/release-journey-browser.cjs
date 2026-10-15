@@ -112,6 +112,12 @@ async function run(profile){
    assert.equal(earned.version,21,'Save version changed');
    assert.equal(earned.completed,4,'Run result wave depth drifted');
    await checkPanel(page,profile.name,'result','#resultScreen .modal-card',['#resultContinueBtn','#doubleRewardBtn']);
+   // A new record can unlock a first-time contextual tip over the results.
+   if(await page.locator('#coachScreen').isVisible()){
+     assert(await page.locator('#coachContinueBtn').isVisible(),'Result coach lacks dismiss action');
+     await page.locator('#coachContinueBtn').click();
+     assert(!(await page.locator('#coachScreen').isVisible()),'Result coach failed to dismiss');
+   }
    await page.locator('#resultContinueBtn').click();
    await page.waitForTimeout(150);
    assert(await page.locator('#homeScreen').isVisible(),'Cannot return home after result');
