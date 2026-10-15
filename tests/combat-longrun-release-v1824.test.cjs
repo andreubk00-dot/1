@@ -30,7 +30,7 @@ for(const [profile,seeds] of trials){
       assert(data.audit.bossWaves.includes(30),label+' missed third boss');
     }
     if(profile==='veteran'){
-      assert.equal(data.reached,120,label+' failed to reach late-wave gate');
+      assert.equal(data.reached,121,label+' did not clear wave 120 and advance to 121');
       assert.equal(data.alive,true,label+' veteran progression prematurely terminated');
       assert(data.audit.bossWaves.includes(100),label+' did not reach late boss cycle');
     }
