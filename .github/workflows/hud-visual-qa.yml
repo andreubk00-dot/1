@@ -1,0 +1,38 @@
+name: Guardborn HUD Visual QA
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - endless-defenders-iphone-v1810
+permissions:
+  contents: read
+jobs:
+  layout-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Serve PC and mobile
+        run: |
+          nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory pc >/tmp/qa-pc.log 2>&1 &
+          nohup python3 -m http.server 4174 --bind 127.0.0.1 --directory iphone >/tmp/qa-mobile.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && curl -fsS http://127.0.0.1:4174/ >/dev/null && break
+            sleep 1
+          done
+      - name: Probe real HUD layouts in seven viewport sizes
+        run: node tests/hud-visual-audit.cjs
+      - name: Upload HUD screenshots and overlap report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardborn-hud-visual-audit
+          path: screenshots/hud-qa/
+          if-no-files-found: ignore
