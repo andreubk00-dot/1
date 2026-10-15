@@ -1223,6 +1223,6 @@ nothing overlaps.
 - Balance (scripted runs): walking openly into the gate at noon is death in
   ~15 s; crouching through the breach at night reaches the workshops
   unseen. 
-- Test: `tests/test_marauder_base_dev65.gd` (391 checks: placement,
+- Test: `tests/test_marauder_base_dev65.gd` (403 checks: placement,
   overlaps, passability, posts on free floor, garrison, alarm, reserve, boss,
   clearing, save, reclaim, map, contract).

@@ -44,12 +44,24 @@ func run():
 
     # hostile squad engages a player standing in the open
     var p = game.player.global_position
-    var sq = dir.spawn_squad(dir.SQUAD_TYPES[2], p + Vector2(220, 0))
+    # a spot in the open with a clear line to the player (a parked car is cover)
+    var at = p + Vector2(220, 0)
+    for k in range(16):
+        var c = p + Vector2(220, 0).rotated(TAU * k / 16.0)
+        var q = PhysicsRayQueryParameters2D.create(c, p)
+        q.collision_mask = game.LAYER_WORLD
+        if dir._free_at(c) and game.get_world_2d().direct_space_state.intersect_ray(q).is_empty():
+            at = c
+            break
+    var sq = dir.spawn_squad(dir.SQUAD_TYPES[2], at)
     check(sq != null and sq.members.size() >= 2, "hostile squad did not spawn")
     # daylight, and they look this way (detection geometry is not under test)
     game.world_minutes = 12.0 * 60.0
     for m in sq.members:
         m.facing = (p - m.global_position).normalized()
+    # a random route can lead them off before they look round: they stay
+    sq.route = [sq.members[0].global_position]
+    sq.leg = 0
     for m in sq.members:
         check(dir._free_at(m.global_position), "marauder spawned inside geometry")
         check(m.is_in_group("marauders") and m.has_meta("is_enemy"), "marauder not targetable")
