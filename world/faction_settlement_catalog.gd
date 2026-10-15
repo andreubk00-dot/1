@@ -153,6 +153,21 @@ const TOWNS = {
 # in the south wall of the workshop sector, a rail spur in the east, the boss'
 # HQ in the far south-east corner. "loot" per building, "keep" = rail bed rects
 # no clutter may land on.
+# readable traces inside the base (sector index -> clue). Positions sit on free
+# floor: HQ and общак in their back rooms, the rest in the yards.
+const BASE_NOTES = {
+    8:{"id":"black_yard_sedoy_ledger","title":"Тетрадь Седого","prompt":"ТЕТРАДЬ","prop_kind":"paper_stack","scale":0.40,"pos":Vector2(150,222),
+       "text":"«Хромому — два цинка 7.62, отработал. Механикам передать: восточная дорога наша, пока платят. Новых к общаку не пускать. Пролом на юге — Сене, сказал же: до холодов. Если Рубеж сунется — уходим через ветку.»"},
+    4:{"id":"black_yard_stash_inventory","title":"Опись общака","prompt":"ОПИСЬ","prop_kind":"paper_stack","scale":0.40,"pos":Vector2(120,212),
+       "text":"«Обоз Артели (вторник): шесть канистр, ящик инструмента, двое ушли. Фура с трассы: консервы, вода, бинты. Двое с Перрона: два ствола, рюкзак. Делить по-честному. Седому — треть.»"},
+    3:{"id":"black_yard_post_rules","title":"Правила поста","prompt":"ПРАВИЛА","prop_kind":"paper_stack","scale":0.40,"pos":Vector2(244,356),
+       "text":"«На посту не спать. Чужой у ворот — сначала крикни, потом стреляй. Своих по свисту. Ночью фонари не гасить. Кто бросит пост — к Седому на разговор.»"},
+    6:{"id":"black_yard_letter_home","title":"Письмо","prompt":"ПИСЬМО","prop_kind":"newspapers","scale":0.38,"pos":Vector2(520,470),
+       "text":"«Мам, я живой. Тут кормят и есть крыша. Люди тут не хорошие, но с ними не трогают. Как наберу на дорогу — уйду к вам на Перрон. Не говори никому, где я.»"},
+    7:{"id":"black_yard_breach_note","title":"Записка у пролома","prompt":"ЗАПИСКА","prop_kind":"paper_stack","scale":0.38,"pos":Vector2(664,700),
+       "text":"«Сеня! Дыру заделай до холодов, плиты у котельной. Седой узнает, что через неё к нам ходят, — обоим конец.»"}
+}
+
 # outer walls: the west gate is the only way in for a vehicle; the breach is a
 # gap knocked through the south wall of the workshop sector (x of its middle)
 const BASE_BREACH_X = 600.0

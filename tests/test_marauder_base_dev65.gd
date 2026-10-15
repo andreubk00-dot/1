@@ -89,6 +89,7 @@ func run():
     # -------------------------------------------------------- layout --
     var models = {}
     var kinds = {}
+    var notes = 0
     for off in fp:
         var coord = anchor + off
         var cell = PoiCatalog.cell("marauder_base", off)
@@ -158,6 +159,11 @@ func run():
         for loose in cell.get("loose_containers", []):
             var lp = origin + loose["pos"]
             check(_hits(all_rects, Rect2(lp - Vector2(10, 10), Vector2(20, 20))) == null, tag + " stash boxed in: " + str(loose["name"]))
+        # the base's notes lie on free floor, readable
+        for n in chunk.get_children():
+            if n.has_meta("base_note"):
+                check(_hits(all_rects, Rect2(n.global_position - Vector2(5, 5), Vector2(10, 10))) == null, tag + " note in a solid: " + str(n.get_meta("story_id")))
+                notes += 1
         # the rail bed stays clear of clutter
         for r in cell.get("keep_clear", []):
             for node in chunk.get_children():
@@ -179,6 +185,7 @@ func run():
             check(_hits(all_rects, Rect2(dp - Vector2(16, 9), Vector2(32, 18))) == null, "barracks door blocked")
         game._unload_chunk(coord)
         await process_frame
+    check(notes == FSC.BASE_NOTES.size(), "base notes missing: " + str(notes))
     check(models.size() >= 8, "the base needs >=8 distinct building models, got " + str(models.size()))
     check(kinds.size() >= 14, "the base needs >=14 distinct structures, got " + str(kinds.size()))
     for k in ["searchlight_tower", "poi:boxcar", "poi:tank_wagon", "bonfire", "radio_mast", "btr"]:

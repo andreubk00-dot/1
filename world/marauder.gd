@@ -195,6 +195,12 @@ func _ready() -> void:
         add_child(lamp)
     last_pos = global_position
     _set_clip("Idle", 0)
+    if personality == "neutral":
+        # a wanderer who means no harm can be talked to (main: _talk_marauder)
+        add_to_group("interactable")
+        set_meta("interaction_type", "marauder_talk")
+        set_meta("display_name", "ГОВОРИТЬ")
+        set_meta("interaction_radius", 56.0)
 
 
 # ----------------------------------------------------------------- frame --
@@ -345,6 +351,8 @@ func become_hostile() -> void:
         return
     hostile_to_player = true
     personality = "hostile"
+    if str(get_meta("interaction_type", "")) == "marauder_talk":
+        remove_from_group("interactable")
     _enter_combat(true)
     if squad != null:
         squad.alert(self, game.player.global_position)
@@ -374,6 +382,8 @@ func squad_alert(pos: Vector2) -> void:
 func _set_state(s: String) -> void:
     if state == s:
         return
+    if state == "surrender" and is_in_group("interactable"):
+        remove_from_group("interactable")
     if s == "combat":
         engaged_at = Time.get_ticks_msec() / 1000.0
     state = s
@@ -420,7 +430,7 @@ func _decide(delta: float) -> Vector2:
                 _set_state("combat" if hostile_to_player and not surrendered else "patrol")
             return _go_to(global_position + away * 140.0, RUN_SPEED, delta)
         "surrender":
-            if state_t > 6.0:
+            if state_t > 12.0:
                 flee_t = 30.0
                 _set_state("flee")
             facing = (game.player.global_position - global_position).normalized()
@@ -804,12 +814,18 @@ func _surrender() -> void:
     game._marauder_drop_weapon(self)
     weapon_dropped = true
     _set_state("surrender")
+    # hands up: the survivor can search him (main: _search_captive)
+    add_to_group("interactable")
+    set_meta("interaction_type", "marauder_captive")
+    set_meta("display_name", "ОБЫСКАТЬ")
+    set_meta("interaction_radius", 46.0)
     if squad != null:
         squad.member_lost(self)
 
 
 func _die(hit_dir: Vector2) -> void:
     dead = true
+    remove_from_group("interactable")
     _say("death")
     die_t = 0.0
     collision_layer = 0

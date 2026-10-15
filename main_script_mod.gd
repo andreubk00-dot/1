@@ -18747,6 +18747,10 @@ func _interact():
         _talk_faction_npc(target)
     elif type == "story_clue":
         _read_story_clue(target)
+    elif type == "marauder_captive":
+        _search_captive(target)
+    elif type == "marauder_talk":
+        _talk_marauder(target)
     elif type == "base_heater":
         _toggle_base_heater(target)
     elif type == "base_campfire":
@@ -21525,6 +21529,83 @@ func _free_body_spot(at:Vector2) -> Vector2:
                 return c
     return at
 
+func _marauder_drop_item(id:String,qty:int,pos:Vector2):
+    var coord = _world_to_chunk(pos)
+    if not loaded_chunks.has(coord) or not item_defs.has(id) or qty <= 0:
+        return
+    var record = {"drop_id":next_drop_id,"id":id,"qty":qty,"x":pos.x,"y":pos.y}
+    next_drop_id += 1
+    dropped_items.append(record)
+    _spawn_world_item(loaded_chunks[coord],coord,id,qty,pos - loaded_chunks[coord].global_position,"",int(record["drop_id"]),"")
+
+# dev65: a raider who gave up can be searched. He turns out his pockets (what
+# he carried and his spare rounds) and, if he knows it, tells where the base
+# is; then he is let go and runs.
+func _search_captive(m):
+    if not is_instance_valid(m) or not m.surrendered or bool(m.get_meta("searched",false)):
+        return
+    m.set_meta("searched",true)
+    m.remove_from_group("interactable")
+    var at = m.global_position
+    var spots = [Vector2(14,6),Vector2(-14,6),Vector2(0,16),Vector2(18,-8)]
+    var n = 0
+    for row in MARAUDER_EXTRAS.get(m.outfit,[]):
+        if randf() < float(row[1]) + 0.25 and n < spots.size():
+            _marauder_drop_item(str(row[0]),1,_free_body_spot(at + spots[n]))
+            n += 1
+    var ammo_id = str(weapon_defs.get(m.weapon,{}).get("ammo",""))
+    if ammo_id != "" and m.mag + m.reserve > 0 and n < spots.size():
+        _marauder_drop_item(ammo_id,clampi(m.mag + m.reserve,1,40),_free_body_spot(at + spots[n]))
+        n += 1
+    if n == 0:
+        # nothing worth having: a rag and a crust
+        _marauder_drop_item("cloth",1,_free_body_spot(at + spots[0]))
+    _play_world_sfx("item_drop",-10.0,0.03)
+    var line = "Забирай, всё забирай! Только не стреляй."
+    if not discovered_pois.has("marauder_base") and randf() < 0.6:
+        discovered_pois["marauder_base"] = true
+        line = "Не стреляй! Я скажу... Седой сидит на старом ЖБИ, восточнее Механиков. «Чёрный двор». С юга в стене дыра."
+    m.bark_label.text = line.left(64) if line.length() > 64 else line
+    m.bark_label.visible = true
+    m.bark_life = 3.5
+    _set_survival_feedback("Обыскан: %s" % line,4.5)
+    m.flee_t = 30.0
+    m._set_state("flee")
+
+# dev65: a neutral wanderer trades a little: food or water for rounds of his
+# own gun or a bandage, once. Without anything to offer he shares a rumour.
+const MARAUDER_RUMORS = [
+    "На дорогах стало хуже. Седой с «Чёрного двора» всё под себя гребёт.",
+    "В депо по ночам кто-то ходит с фонарём. Не наши.",
+    "У Механиков платят за металл. Лучше, чем ничего.",
+    "Видел бегуна у трассы — быстрый, гад. Не беги от него, стреляй.",
+    "Воду бери из колонок, из луж — сам знаешь, что будет."
+]
+
+func _talk_marauder(m):
+    if not is_instance_valid(m) or m.hostile_to_player:
+        return
+    var line = MARAUDER_RUMORS[randi() % MARAUDER_RUMORS.size()]
+    if not bool(m.get_meta("traded",false)):
+        var give = ""
+        for id in ["canned_meat","water","emergency_ration"]:
+            if _inventory_count(id) > 0:
+                give = id
+                break
+        if give != "":
+            _consume_inventory_item(give,1)
+            m.set_meta("traded",true)
+            var ammo_id = str(weapon_defs.get(m.weapon,{}).get("ammo",""))
+            var got = ammo_id if ammo_id != "" and item_defs.has(ammo_id) else "bandage"
+            var qty = 10 if got != "bandage" else 1
+            _marauder_drop_item(got,qty,_free_body_spot(m.global_position + (player.global_position - m.global_position).normalized() * 14.0))
+            line = "%s за %s? Идёт. Держи, клади на землю — сам подберёшь." % [str(item_defs.get(got,{}).get("short",got)),str(item_defs.get(give,{}).get("short",give)).to_lower()]
+    m.facing = (player.global_position - m.global_position).normalized()
+    m.bark_label.text = line.left(70)
+    m.bark_label.visible = true
+    m.bark_life = 4.0
+    _set_survival_feedback(line,4.5)
+
 func _marauder_drop_weapon(m):
     var pos = m.global_position + m.facing * 12.0
     var coord = _world_to_chunk(pos)
@@ -23247,6 +23328,11 @@ func _dress_marauder_base(chunk,coord,cell_data:Dictionary):
     floor_layer.name = "BaseFloor"
     floor_layer.z_index = -6
     chunk.add_child(floor_layer)
+    var note = FactionSettlementCatalog.BASE_NOTES.get(idx,{})
+    if not note.is_empty():
+        var clue = _create_environmental_story_clue(chunk,note)
+        if clue != null:
+            clue.set_meta("base_note",true)
     if idx == 5:
         _marauder_base_rails(floor_layer)
     if idx == 4:

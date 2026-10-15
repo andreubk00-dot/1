@@ -111,6 +111,12 @@ func run():
     check(mc.surrendered and mc.weapon_dropped and mc.state == "surrender", "coward did not surrender")
     var drops = game.dropped_items.filter(func(d): return str(d.get("id", "")) == mc.weapon)
     check(not drops.is_empty(), "surrendered coward did not drop the weapon")
+    # dev65: hands up - he can be searched, turns out his pockets and runs
+    check(mc.is_in_group("interactable") and str(mc.get_meta("interaction_type", "")) == "marauder_captive", "a surrendered raider cannot be searched")
+    var before_drops = game.dropped_items.size()
+    game._search_captive(mc)
+    check(game.dropped_items.size() > before_drops, "searching a captive gave nothing")
+    check(mc.state == "flee" and not mc.is_in_group("interactable"), "a searched captive did not run")
 
     # neutral: warns, then turns when a gun stays on them
     var sqn = dir.spawn_squad(dir.SQUAD_TYPES[3], game.player.global_position + Vector2(0, 140))
@@ -119,6 +125,15 @@ func run():
     sqn.leg = 0
     await frames(90)
     check(not mn.hostile_to_player, "neutral attacked unprovoked")
+    # dev65: a neutral can be talked to; with food to offer he trades rounds
+    check(str(mn.get_meta("interaction_type", "")) == "marauder_talk" and mn.is_in_group("interactable"), "a neutral cannot be talked to")
+    game._grid_add(game.inventory_entries, "canned_meat", 1, game.INV_W, game.INV_H)
+    var cans = game._inventory_count("canned_meat")
+    var drops0 = game.dropped_items.size()
+    game._talk_marauder(mn)
+    check(game._inventory_count("canned_meat") == cans - 1 and game.dropped_items.size() == drops0 + 1, "a neutral did not trade food for rounds")
+    game._talk_marauder(mn)
+    check(game.dropped_items.size() == drops0 + 1, "a neutral traded twice")
     game.qa_bot_driver = true
     var warned = false
     for i in range(420):

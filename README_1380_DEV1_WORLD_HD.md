@@ -1226,3 +1226,29 @@ nothing overlaps.
 - Test: `tests/test_marauder_base_dev65.gd` (403 checks: placement,
   overlaps, passability, posts on free floor, garrison, alarm, reserve, boss,
   clearing, save, reclaim, map, contract).
+
+### dev65, second pass — raid balance, the world around the base, talking to raiders
+
+- **Raid bot** (armed survivor, human reaction time and aim error) attacked
+  the first version in three ways and wiped it with barely a scratch. The
+  garrison are now the raiders' best: quicker on the trigger (0.4-0.75 s),
+  steady after 2 s instead of 4, +12% accuracy, vests on the deserters (28%
+  less damage), cover on their posts (35% less), and Седой (armored, 45%)
+  sits in his office at the back of the HQ. Result: the gate at noon with a
+  full kit costs most of the medicine and sometimes the life; the gate at
+  night is death; the breach at night, crouching, is the way in.
+- **The base in the world**: while it stands, raider squads are 50% more
+  frequent within seven sectors of it, and once you know about it Седой's
+  men rob the Artel's convoys every third day (a chronicle line, the
+  Artel's technical and security stores thinner). When it falls the roads
+  thin out (squads at 55% everywhere until new men take it back), the Artel
+  and the Perron feel safer at once.
+- **Notes**: Седой's ledger in his office, the inventory of the общак, the
+  gate post rules, a letter home in the tents, a note by the breach.
+- **Captives**: a raider who gave up can be searched (E, «ОБЫСКАТЬ»): he
+  turns out his pockets and spare rounds and may tell where «Чёрный двор»
+  is (the base appears on the map); then he runs. He waits 12 s now.
+- **Neutral wanderers** can be talked to (E, «ГОВОРИТЬ»): once, a tin, a
+  bottle or a ration for ten rounds of his gun (or a bandage); otherwise a
+  rumour.
+- Garrison cost: 21 men in a fight at the base, no measurable frame cost.
