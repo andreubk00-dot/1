@@ -1,0 +1,38 @@
+name: Guardborn Release Journey QA
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - endless-defenders-iphone-v1810
+permissions:
+  contents: read
+jobs:
+  release-journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm install --no-save --no-package-lock playwright@1.58.2
+          npx playwright install --with-deps chromium webkit
+      - name: Serve browsers
+        run: |
+          nohup python3 -m http.server 4173 --bind 127.0.0.1 --directory pc >/tmp/pc-release.log 2>&1 &
+          nohup python3 -m http.server 4174 --bind 127.0.0.1 --directory iphone >/tmp/mobile-release.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && curl -fsS http://127.0.0.1:4174/ >/dev/null && break
+            sleep 1
+          done
+      - name: Run release gameplay transitions and modal hit-target checks
+        run: node tests/release-journey-browser.cjs
+      - name: Save release screen evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardborn-release-journey-screenshots
+          path: screenshots/release-journey/
+          if-no-files-found: ignore
