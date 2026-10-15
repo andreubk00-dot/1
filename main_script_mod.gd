@@ -2843,6 +2843,9 @@ var marauder_director = null
 var marauder_saved = []
 # dev65: the raiders' base garrison and its saved state
 const MarauderBase = preload("res://world/marauder_base.gd")
+# dev67: the world beyond the screen (distant fights, dogs, wind, thunder, fires)
+const Soundscape = preload("res://world/soundscape.gd")
+var soundscape = null
 var marauder_base = null
 var marauder_base_saved = {}
 var marauder_memory_saved = {}
@@ -2970,6 +2973,10 @@ func _ready():
     _ensure_weapon_runtime_state(not has_meta("loaded_save") and weapon_instance_states.is_empty())
 
     _create_player()
+    soundscape = Soundscape.new()
+    soundscape.name = "Soundscape"
+    soundscape.game = self
+    add_child(soundscape)
     field_hints = FieldHints.new()
     field_hints.game = self
     field_hints.load_state(field_hints_saved)
@@ -8281,7 +8288,7 @@ func _music_mood() -> String:
         if c != _music_site_chunk:
             _music_site_chunk = c
             var poi = RegionCatalog.poi_for_chunk(c)
-            _music_site_danger = not poi.is_empty() and HighRiskSiteCatalog.has(str(poi.get("id","")))
+            _music_site_danger = not poi.is_empty() and (HighRiskSiteCatalog.has(str(poi.get("id",""))) or str(poi.get("kind","")) == "marauder_base")
         if _music_site_danger:
             return "danger"
     return "night" if _time_night_factor() > 0.5 else "day"
@@ -23366,6 +23373,13 @@ func _dress_marauder_base(chunk,coord,cell_data:Dictionary):
         var clue = _create_environmental_story_clue(chunk,note)
         if clue != null:
             clue.set_meta("base_note",true)
+    # the boiler house and the generator shed run day and night
+    if soundscape != null and idx in [2,7]:
+        var hum = Node2D.new()
+        hum.position = Vector2(136,300) if idx == 2 else Vector2(578,300)
+        hum.set_meta("base_generator",true)
+        chunk.add_child(hum)
+        soundscape.attach_loop(hum,"generator_loop",-10.0,420.0)
     if idx == 5:
         _marauder_base_rails(floor_layer)
     if idx == 4:
@@ -23474,6 +23488,9 @@ func _settlement_piece(chunk,piece:Dictionary):
         if prop != null:
             prop.z_as_relative = false
             prop.set_meta("settlement_piece_kind",kind)
+            # a settlement keeps its generators running (dev67)
+            if kind == "prop:generator_prop" and soundscape != null:
+                soundscape.attach_loop(prop,"generator_loop",-14.0,300.0)
         return prop
     var atlas_path = "res://settlement_props_v1.png"
     var index = SETTLEMENT_PIECE_KINDS.find(kind)
@@ -23532,8 +23549,12 @@ func _settlement_piece_light(node,kind:String,piece_scale:float):
         "fire_barrel","bonfire":
             _add_detail_light(node,Vector2(0,-30.0 * piece_scale * 2.0),SETTLEMENT_FIRE_LIGHT,0.78,1.05,true)
             _ellipse(Vector2(0,2),22,7,Color(1.0,0.55,0.22,0.07),node)
+            if soundscape != null:
+                soundscape.attach_loop(node,"fire_loop",-13.0 if kind == "fire_barrel" else -9.0,240.0)
         "field_kitchen","furnace","incinerator":
             _add_detail_light(node,Vector2(-6,-12),SETTLEMENT_FIRE_LIGHT,0.58,0.9,true)
+            if soundscape != null:
+                soundscape.attach_loop(node,"fire_loop",-18.0,170.0)
         "market_stall","market_stall_b","container_shop":
             _add_detail_light(node,Vector2(0,-24.0 * piece_scale * 2.0),Color(1.0,0.80,0.52),0.42,0.8,true)
         "searchlight_tower":
@@ -30883,6 +30904,8 @@ func _crow_take_off(crow,from:Vector2):
     var dir = (away + Vector2(randf_range(-0.4,0.4),randf_range(-0.4,0.1))).normalized()
     crow.set_meta("state","fly")
     crow.set_meta("vel",dir * randf_range(70.0,95.0))
+    if soundscape != null:
+        soundscape.crows_took_off(crow.global_position)
     crow.set_meta("alt",0.0)
     crow.get_meta("spr").flip_h = dir.x < 0.0
 
@@ -33458,6 +33481,9 @@ func _update_day_night(delta):
             min(1.0,brightness * 1.04 * weather_dim * blue_shift * sky_tint.b),
             1.0
         )
+        # dev67: lightning lights the whole street blue-white for a blink
+        if soundscape != null and soundscape.flash > 0.0:
+            canvas_modulate.color = canvas_modulate.color.lerp(Color(0.86,0.90,1.0),soundscape.flash * 0.6)
 
     var has_flashlight = str(equipment.get("utility","")) == "flashlight"
 

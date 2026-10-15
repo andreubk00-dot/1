@@ -385,3 +385,94 @@ level = 0.35 + 0.65 * np.sin(rise * np.pi / 2) * (1.0 - fall)
 x = highpass(tone * buzz * level, 160)
 x *= np.minimum(1.0, t / 0.25) * np.minimum(1.0, (T - t) / 0.6)
 save(norm(x, 0.5), os.path.join(ROOT, 'audio', 'world', 'base_siren.wav'))
+
+# --- dev67: the world around - dogs, crows, fire, generators, thunder, wind,
+# shooting far off ------------------------------------------------------------
+# HaelDB «Dog Barking (Mono)», zeroisnotnull «Crow Caw», fvcalderan «Crow»,
+# PagDev «Fireplace Sound Loop», YCbCr «Generator Loop», WuxiaScrub «Rain
+# Long Thunder» - all CC0. Distant gunfire is built from our own shots (FFSL,
+# CC0) muffled and echoed; wind gusts are synthesised.
+WO = os.path.join(ROOT, 'audio', 'world')
+
+
+def loop_xfade(x, length, xf=0.5):
+    # a seamless loop: the tail is crossfaded into the head
+    n = int(length * SR)
+    f = int(xf * SR)
+    x = x[:n + f].copy()
+    ramp = np.linspace(0.0, 1.0, f)
+    x[:f] = x[:f] * ramp + x[n:n + f] * (1.0 - ramp)
+    return x[:n]
+
+
+def trim(x, frac=0.01, pad=0.25):
+    # cut trailing silence: keep up to the last moment above frac of the peak
+    a = np.abs(x)
+    idx = np.flatnonzero(a > a.max() * frac)
+    end = min(len(x), (idx[-1] if len(idx) else len(x)) + int(pad * SR))
+    return x[:end]
+
+
+def echo(x, delays, gains):
+    out = np.concatenate([x, np.zeros(int(max(delays) * SR) + SR)])
+    for d, g in zip(delays, gains):
+        k = int(d * SR)
+        out[k:k + len(x)] += lowpass(x, 1400) * g
+    return out
+
+
+dog = load(os.path.join(OGA, 'dog-barking-mono/dog_barking.wav'))
+barks = split_hits(highpass(dog, 120), min_gap=0.5, frac=0.25, length=1.1)
+for i, x in enumerate(barks[:3]):
+    save(norm(fade(trim(x, 0.02, 0.12), tail=0.4, shape=2.0), 0.6), os.path.join(WO, 'dog_bark_%d.wav' % (i + 1)))
+crows = [load(os.path.join(OGA, 'crow-caw/crow_caw.wav')), load(os.path.join(OGA, 'crow/crow_0.ogg'))]
+for i, x in enumerate(crows):
+    save(norm(fade(highpass(x, 300), tail=0.3), 0.55), os.path.join(WO, 'crow_%d.wav' % (i + 1)))
+fire = load(os.path.join(OGA, 'fireplace-sound-loop/fire.wav'))
+save(norm(loop_xfade(highpass(fire, 90), 12.0), 0.5), os.path.join(WO, 'fire_loop.wav'))
+gen = load(os.path.join(OGA, 'generator-loop/loop_generator_1.mp3'))
+save(norm(loop_xfade(gen, 4.8, 0.4), 0.5), os.path.join(WO, 'generator_loop.wav'))
+storm = load(os.path.join(OGA, 'rain-long-thunder/rain-thunder.ogg'))
+# the claps: the loudest low-frequency moments, a few seconds each
+low = lowpass(storm, 180)
+env = np.convolve(np.abs(low), np.ones(int(0.25 * SR)) / (0.25 * SR), 'same')
+picks = []
+order = np.argsort(env)[::-1]
+for i in order[::400]:
+    if all(abs(i - p) > 6 * SR for p in picks):
+        picks.append(i)
+    if len(picks) == 3:
+        break
+for k, p in enumerate(sorted(picks)):
+    # the rain under it is the game's own rain bed: keep only the rumble
+    x = lowpass(segment(storm, max(0, p - int(0.6 * SR)), 6.0), 520, 6)
+    save(norm(fade(x, fade_in=0.08, tail=0.5, shape=2.0), 0.7), os.path.join(WO, 'thunder_%d.wav' % (k + 1)))
+# shooting far off: a burst, a lone pistol, a shotgun, a long exchange
+W = os.path.join(ROOT, 'audio', 'weapons')
+shots = {k: load(os.path.join(W, '%s_shot.wav' % k)) for k in ['akm', 'makarov', 'shotgun', 'sks']}
+def far(parts):
+    total = np.zeros(int(max(t for t, _ in parts) * SR) + 2 * SR)
+    for t, k in parts:
+        s = shots[k]
+        a = int(t * SR)
+        total[a:a + len(s)] += s
+    x = lowpass(total, 1100)
+    return norm(trim(echo(x, [0.21, 0.47, 0.83], [0.45, 0.25, 0.12]), 0.01, 0.3), 0.45)
+rng = np.random.default_rng(67)
+volleys = [
+    [(0.0, 'akm'), (0.1, 'akm'), (0.2, 'akm'), (1.4, 'akm'), (1.5, 'akm')],
+    [(0.0, 'makarov'), (0.9, 'makarov'), (1.3, 'makarov')],
+    [(0.0, 'shotgun'), (1.6, 'shotgun')],
+    [(0.0, 'akm'), (0.11, 'akm'), (0.5, 'sks'), (1.2, 'makarov'), (1.35, 'akm'), (1.46, 'akm'), (1.57, 'akm'), (2.6, 'sks')],
+]
+for i, v in enumerate(volleys):
+    save(far(v), os.path.join(WO, 'gunfire_far_%d.wav' % (i + 1)))
+# wind gusts: band-passed noise swelling and dying away
+for i in range(2):
+    T = 5.0 + i
+    t = np.arange(int(T * SR)) / SR
+    n = rng.standard_normal(len(t))
+    body = lowpass(highpass(n, 180 + 60 * i), 900 + 300 * i)
+    env = np.sin(np.pi * t / T) ** 2 * (0.75 + 0.25 * np.sin(2 * np.pi * t * (0.7 + 0.2 * i)))
+    whistle = np.sin(2 * np.pi * np.cumsum(520 + 90 * np.sin(2 * np.pi * t * 0.4)) / SR) * 0.03
+    save(norm((body + whistle) * env, 0.45), os.path.join(WO, 'wind_gust_%d.wav' % (i + 1)))

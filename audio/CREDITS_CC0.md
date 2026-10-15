@@ -88,3 +88,18 @@
 Синтезированным остался только звук самого плевка заражённого
 (`infected_spit`). Старые скрипты `tools/build_*_audio.py` перезаписали бы
 записи выше — пересобирать звук нужно через `tools/import_cc0_audio.py`.
+
+## Мир вокруг (dev67)
+
+Все исходники — CC0 (Public Domain), OpenGameArt; обработка в `tools/import_cc0_audio.py`.
+
+| Файлы | Источник | Автор |
+|---|---|---|
+| world/dog_bark_1..3.wav | Dog Barking (Mono) — https://opengameart.org/content/dog-barking-mono | HaelDB |
+| world/crow_1.wav | Crow Caw — https://opengameart.org/content/crow-caw | zeroisnotnull |
+| world/crow_2.wav | Crow — https://opengameart.org/content/crow | fvcalderan |
+| world/fire_loop.wav | Fireplace Sound Loop — https://opengameart.org/content/fireplace-sound-loop | PagDev |
+| world/generator_loop.wav | Generator Loop — https://opengameart.org/content/generator-loop | YCbCr |
+| world/thunder_1..3.wav | Rain Long Thunder — https://opengameart.org/content/rain-long-thunder | WuxiaScrub |
+| world/gunfire_far_1..4.wav | собраны из выстрелов The Free Firearm Sound Library (CC0), приглушены и с эхом | — |
+| world/wind_gust_1..2.wav | синтезированы скриптом импорта | — |
