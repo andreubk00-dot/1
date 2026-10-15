@@ -1108,3 +1108,48 @@ Found by a scripted play session from a fresh start:
   restocked from its table when the survivor comes back three or more days
   after emptying it. Authored sites keep their own refill cycles; bodies,
   world-event caches, test crates and the start sector never refill.
+
+## dev63 — marauders
+
+Living raiders, AI-driven (`world/marauder.gd`, `world/marauder_director.gd`).
+
+- **Look**: drawn on the survivor's rig with their own clothes
+  (`tools/survivor3d.py` outfits, sheets in `art/marauders/`): the district
+  gopnik (tracksuit with stripes, knitted hat, no pack), the bandit (black
+  leather, balaclava, small pack), the deserter (faded khaki, grey helmet,
+  black plate carrier). Each carries a PM, an AKM or a pump shotgun - the
+  same weapons the player finds - and has Idle / Walk / Run / Attack /
+  TakeDamage / Die clips in eight directions, plus bare-handed sheets for a
+  raider who threw the gun down. The survivor's own sheets are unchanged
+  pixel for pixel.
+- **Squads** of one to three walk routes along the road grid through four or
+  five sectors, in formation behind a leader, and stop to rifle containers
+  they pass (two items gone - "кто-то уже обыскал"). They come into the
+  loaded world out of sight, 470-900 units away, on clear ground, at most two
+  squads at a time, about one every three or four minutes (fewer at night),
+  never in the first four minutes of a game or after a respawn, never on a
+  high-risk floor, and they leave when the survivor is far away.
+- **Character**: about half are hostile; the rest are cowards (they
+  surrender when hurt, drop the gun and run) or neutral wanderers (they warn
+  «Иди своей дорогой», shout «Опусти ствол!» when a gun stays on them and
+  shoot after about five seconds of it, or at once if shot at).
+- **Senses**: sight with range by day/night (a lit flashlight gives the
+  player away), a narrow patrol view and all-round alert view, crouching
+  helps; they hear the game's AI sounds (shots draw them, sprinting too).
+- **Fighting**: they hold their weapon's range, flank (followers swing 70°
+  round the sides), strafe, fire bursts with an aim-in delay and accuracy
+  that settles over the first seconds (range, the player's motion,
+  crouching and the dark all spoil it), reload from behind cover they look
+  for, chase the last seen position, search, give up. Under 30 % health
+  they flee. Their shots draw infected, and infected that reach them maul
+  them; they shoot infected that close in. Speech bubbles («Вон он!»,
+  «Перезаряжаю!», «Обходи слева!», «Сеню завалили!»...) stay readable at
+  night; deserters and bandits carry a light after dark.
+- **Bodies**: a dead raider leaves «МАРОДЁР», a searchable body with the gun,
+  the rounds left in it, and outfit-specific finds (food, water, dressings,
+  a pack, a vest, a rig). Bodies are placed on clear floor (never on another
+  body or a container), saved with the world, and gone after three days or
+  when emptied (at most twelve kept).
+- Bullets, blades and the HUD threat logic treat them like infected; rest
+  is refused with a hostile raider within 420 units; first-run hint.
+- Test: `tests/test_marauders_dev63.gd` (32 checks).

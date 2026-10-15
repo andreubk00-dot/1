@@ -186,6 +186,10 @@ func _check_hints() -> void:
     var hour = int(float(game.world_minutes) / 60.0) % 24
     if hour >= 20 or hour < 6:
         hint("dark", "Темно. F — фонарь: светит далеко, но и вас видно издалека.")
+    for m in get_tree().get_nodes_in_group("marauders"):
+        if is_instance_valid(m) and m.global_position.distance_to(game.player.global_position) < 300.0:
+            hint("marauders", "Мародёры: люди с оружием. Одни стреляют сразу, другие предупреждают — не целься в них, и разойдётесь. С тел можно снять оружие и патроны.")
+            break
     for pump in get_tree().get_nodes_in_group("water_pumps"):
         if is_instance_valid(pump) and pump.global_position.distance_to(game.player.global_position) < 140.0:
             hint("pump", "Колонка: E — напиться вдоволь и наполнить флягу или канистру. Её отметят на карте.")

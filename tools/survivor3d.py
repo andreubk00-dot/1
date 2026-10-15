@@ -45,6 +45,49 @@ GOGGLE = (40, 44, 44)
 LENS = (84, 100, 98)
 NOSE = (176, 128, 96)
 
+# ---------------------------------------------------------------- outfits --
+# dev63: marauders are drawn on the same rig with their own clothes. An outfit
+# swaps the palette and a few gear switches; the survivor is OUTFITS['survivor'].
+HEADGEAR = 'helmet'      # helmet | cap | beanie | balaclava
+PACK_ON = True
+KNEEPADS = True
+STRIPES = None           # tracksuit stripe colour, or None
+VEST = None              # plate carrier colour, or None
+BEARD_ON = True
+CAPC = (40, 40, 42)
+
+OUTFITS = {
+    'survivor': {},
+    # a tracksuit, a knitted hat and nothing on the back: the district's own
+    'gopnik': dict(JACKET=(42, 46, 72), JACKET_D=(32, 35, 56), JEANS=(38, 40, 56), JEANS_D=(30, 32, 44),
+                   BOOTS=(40, 40, 42), SKIN=(196, 150, 116), BEARD=(70, 54, 40), HEADGEAR='beanie',
+                   CAPC=(34, 34, 36), PACK_ON=False, KNEEPADS=False, STRIPES=(206, 206, 196), BEARD_ON=False,
+                   GLOVE=(52, 46, 40), POUCH=(60, 58, 54), CANTEEN=(70, 72, 70)),
+    # a black leather jacket, brown work trousers, the face under a balaclava
+    'bandit': dict(JACKET=(48, 44, 42), JACKET_D=(34, 31, 30), JEANS=(84, 70, 54), JEANS_D=(66, 54, 42),
+                   BOOTS=(42, 32, 26), SKIN=(186, 140, 108), HEADGEAR='balaclava', CAPC=(30, 30, 32),
+                   PACK=(70, 66, 58), PACK_D=(54, 50, 44), ROLL=(60, 58, 52), KNEEPADS=False, BEARD_ON=False),
+    # an army deserter: faded flora camo, helmet and a plate carrier
+    'deserter': dict(JACKET=(104, 92, 64), JACKET_D=(82, 72, 50), JEANS=(66, 68, 50), JEANS_D=(52, 54, 40),
+                     BOOTS=(34, 30, 26), SKIN=(190, 146, 112), HELMET=(66, 70, 66), VEST=(40, 42, 40),
+                     PACK=(70, 72, 56), PACK_D=(54, 56, 44), ROLL=(84, 76, 56), BEARD=(64, 50, 38)),
+}
+_OUTFIT_DEFAULTS = {}
+
+
+def apply_outfit(name):
+    g = globals()
+    if not _OUTFIT_DEFAULTS:
+        for k in ('JACKET', 'JACKET_D', 'JEANS', 'JEANS_D', 'BOOTS', 'SKIN', 'BEARD', 'HELMET', 'PACK', 'PACK_D',
+                  'ROLL', 'GLOVE', 'POUCH', 'CANTEEN', 'HEADGEAR', 'PACK_ON', 'KNEEPADS', 'STRIPES', 'VEST',
+                  'BEARD_ON', 'CAPC'):
+            _OUTFIT_DEFAULTS[k] = g[k]
+    for k, v in _OUTFIT_DEFAULTS.items():
+        g[k] = v
+    for k, v in OUTFITS[name].items():
+        g[k] = v
+
+
 # gun palette
 GM = (64, 68, 72)
 GM_D = (44, 46, 50)
@@ -286,7 +329,10 @@ def build(pose):
         s.capsule(knee + shin_dir * 1.5 + back * 0.8, knee + shin_dir * 5.0 + back * 0.6, 1.9, 1.5, JEANS_S, bias=-0.3, edge=False)
         # knee pad on the front of the knee
         kfront = norm(P.f - norm(knee - hip) * np.dot(P.f, norm(knee - hip)))
-        s.ball(knee + kfront * 1.9 + V(0, 0, 0.2), 1.65, KNEEPAD, bias=0.6)
+        if KNEEPADS:
+            s.ball(knee + kfront * 1.9 + V(0, 0, 0.2), 1.65, KNEEPAD, bias=0.6)
+        if STRIPES:
+            s.capsule(hip + P.r * (2.3 * sg), ankle + P.r * (1.6 * sg) + V(0, 0, 1.0), 0.45, 0.4, STRIPES, edge=False)
         s.capsule(ankle + V(0, 0, 1.3), ankle + V(0, 0, 0.3), 2.05, 2.1, JEANS_D, bias=0.2, edge=False)
         pitch = P.foot_pitch[side]
         toe_dir = norm(rot_about(P.f, V(0, 0, 0), P.r, -pitch))
@@ -319,27 +365,37 @@ def build(pose):
         s.pixel(U(4.0, 2.9 * sg, 11.2), BRASS, bias=0.2)
         s.box(U(3.65, 3.1 * sg, 5.4), fU, rU, zU, 0.25, 1.8, 1.4, JACKET_D, edge=False)
         s.box(U(3.8, 3.1 * sg, 6.7), fU, rU, zU, 0.2, 1.9, 0.4, darker(JACKET, 1.12), edge=False)
-        s.box(U(3.9, 3.5 * sg, 12.9), fU, rU, zU, 0.2, 0.75, 1.3, PACK_D, edge=False)      # pack strap
-        s.pixel(U(4.1, 3.5 * sg, 12.0), BRASS, bias=0.2)                                  # strap buckle
+        if PACK_ON:
+            s.box(U(3.9, 3.5 * sg, 12.9), fU, rU, zU, 0.2, 0.75, 1.3, PACK_D, edge=False)      # pack strap
+            s.pixel(U(4.1, 3.5 * sg, 12.0), BRASS, bias=0.2)                                  # strap buckle
     s.box(U(0.0, 0, 4.5), fU, rU, zU, 3.55, 5.45, 0.55, JACKET_D, edge=False)           # hem
     # collar + neck gaiter
     s.box(U(0.3, 0, 14.5), fU, rU, zU, 2.8, 3.4, 0.95, JACKET_D, edge=False)
+    if VEST:
+        # plate carrier: front and back plates, a row of mag pouches
+        s.box(U(0.2, 0, 9.4), fU, rU, zU, 4.05, 5.0, 4.0, VEST)
+        for r in (-2.6, 0.0, 2.6):
+            s.box(U(4.15, r, 8.0), fU, rU, zU, 0.6, 1.1, 1.5, darker(VEST, 0.8))
+    if STRIPES:
+        for sg in (-1, 1):
+            s.box(U(3.7, 4.6 * sg, 9.0), fU, rU, zU, 0.15, 0.35, 4.6, STRIPES, edge=False)
     # backpack: body, lid, side pockets, front pocket, bedroll with straps
-    pf, pr, pzl = P.pack
+    if PACK_ON:
+        pf, pr, pzl = P.pack
 
-    def PK(f, r, z, k=1.0):
-        # the load hangs on the straps: lower parts swing further than the lid
-        return U(f + pf * k, r + pr * k, z + pzl * k)
-    s.box(PK(-6.1, 0, 8.6), fU, rU, zU, 2.7, 4.9, 5.9, PACK)
-    s.box(PK(-6.3, 0, 13.6, 0.7), fU, rU, zU, 2.9, 5.0, 1.3, darker(PACK, 1.1))
-    for sg in (-1, 1):
-        s.box(PK(-6.0, 5.5 * sg, 6.4, 1.2), fU, rU, zU, 1.8, 0.8, 2.8, PACK_D)
-    s.box(PK(-8.95, 0, 6.8, 1.2), fU, rU, zU, 0.5, 3.3, 2.9, PACK_D, edge=False)
-    s.box(PK(-9.25, 0, 8.6, 1.2), fU, rU, zU, 0.25, 3.4, 0.5, darker(PACK_D, 0.8), edge=False)
-    s.pixel(PK(-9.5, 0, 7.4, 1.2), BRASS, bias=0.3)
-    s.capsule(PK(-6.0, -5.8, 15.6, 1.4), PK(-6.0, 5.8, 15.6, 1.4), 1.8, 1.8, ROLL)
-    for sg in (-1, 1):
-        s.box(PK(-6.0, 3.6 * sg, 15.6, 1.4), fU, rU, zU, 1.9, 0.35, 1.9, BELT, edge=False)
+        def PK(f, r, z, k=1.0):
+            # the load hangs on the straps: lower parts swing further than the lid
+            return U(f + pf * k, r + pr * k, z + pzl * k)
+        s.box(PK(-6.1, 0, 8.6), fU, rU, zU, 2.7, 4.9, 5.9, PACK)
+        s.box(PK(-6.3, 0, 13.6, 0.7), fU, rU, zU, 2.9, 5.0, 1.3, darker(PACK, 1.1))
+        for sg in (-1, 1):
+            s.box(PK(-6.0, 5.5 * sg, 6.4, 1.2), fU, rU, zU, 1.8, 0.8, 2.8, PACK_D)
+        s.box(PK(-8.95, 0, 6.8, 1.2), fU, rU, zU, 0.5, 3.3, 2.9, PACK_D, edge=False)
+        s.box(PK(-9.25, 0, 8.6, 1.2), fU, rU, zU, 0.25, 3.4, 0.5, darker(PACK_D, 0.8), edge=False)
+        s.pixel(PK(-9.5, 0, 7.4, 1.2), BRASS, bias=0.3)
+        s.capsule(PK(-6.0, -5.8, 15.6, 1.4), PK(-6.0, 5.8, 15.6, 1.4), 1.8, 1.8, ROLL)
+        for sg in (-1, 1):
+            s.box(PK(-6.0, 3.6 * sg, 15.6, 1.4), fU, rU, zU, 1.9, 0.35, 1.9, BELT, edge=False)
     # head frame: it turns against the shoulders to keep the gaze steady
     fH = norm(rot_about(fU, V(0, 0, 0), zU, P.head_yaw)) if P.head_yaw else fU
     rH = norm(rot_about(rU, V(0, 0, 0), zU, P.head_yaw)) if P.head_yaw else rU
@@ -348,33 +404,52 @@ def build(pose):
     s.capsule(neck, head - zU * 3.2, 1.7, 1.6, SKIN, edge=False)
     s.capsule(neck + zU * 0.2, neck + zU * 1.5, 2.3, 2.1, GAITER, bias=0.1)
     # head: ears, face, nose, brows, beard, moustache
-    s.ball(head, 4.4, SKIN)
+    masked = HEADGEAR == 'balaclava'
+    s.ball(head, 4.4, CAPC if masked else SKIN)
     for sg in (-1, 1):
         ear = head + rH * (4.2 * sg) + zU * -0.6 - fH * 0.3
-        s.ball(ear, 1.0, darker(SKIN, 0.9), bias=-0.2 if np.dot(rH * sg, V(0, 1, 0.55)) < 0 else 0.3)
+        s.ball(ear, 1.0, darker(CAPC if masked else SKIN, 0.9), bias=-0.2 if np.dot(rH * sg, V(0, 1, 0.55)) < 0 else 0.3)
     face_vis = np.dot(fH, V(0, 1, 0.55)) + 0.35
     if face_vis > 0:
-        s.ball(head + fH * 2.7 + zU * -2.9, 2.3, BEARD, bias=0.8)
-        for sg in (-1, 1):
-            s.ball(head + fH * 2.2 + rH * 2.6 * sg + zU * -1.6, 1.3, BEARD, bias=0.7)   # jaw beard
-        s.box(head + fH * 3.9 + zU * -1.0, fH, rH, zU, 0.3, 1.3, 0.4, (104, 76, 54), edge=False)
-        s.box(head + fH * 4.2 + zU * 0.0, fH, rH, zU, 0.35, 0.45, 0.7, NOSE, edge=False)
+        if masked:
+            # the eye slit: a band of skin across the knitted mask
+            s.box(head + fH * 3.95 + zU * 0.7, fH, rH, zU, 0.3, 2.6, 0.75, SKIN, edge=False)
+        elif BEARD_ON:
+            s.ball(head + fH * 2.7 + zU * -2.9, 2.3, BEARD, bias=0.8)
+            for sg in (-1, 1):
+                s.ball(head + fH * 2.2 + rH * 2.6 * sg + zU * -1.6, 1.3, BEARD, bias=0.7)   # jaw beard
+            s.box(head + fH * 3.9 + zU * -1.0, fH, rH, zU, 0.3, 1.3, 0.4, (104, 76, 54), edge=False)
+        else:
+            s.box(head + fH * 3.95 + zU * -1.6, fH, rH, zU, 0.25, 1.1, 0.25, darker(SKIN, 0.72), edge=False)   # mouth
+        if not masked:
+            s.box(head + fH * 4.2 + zU * 0.0, fH, rH, zU, 0.35, 0.45, 0.7, NOSE, edge=False)
         for sg in (-1, 1):
             n = norm(fH * 0.9 + rH * 0.45 * sg)
             if np.dot(n, V(0, 1, 0.55)) > 0.05:
                 s.pixel(head + fH * 4.1 + rH * (1.6 * sg) + zU * 0.6, EYE, bias=1.2)
                 s.box(head + fH * 4.05 + rH * (1.7 * sg) + zU * 1.45, fH, rH, zU, 0.2, 0.8, 0.22, (70, 52, 38), edge=False)
-    # helmet: dome, band, brim, goggles, chin strap
     hc = head + zU * 1.9 - fH * 0.4
-    s.box(hc + zU * 0.6, fH, rH, zU, 4.6, 4.6, 1.9, HELMET)
-    s.ball(hc + zU * 1.9, 4.2, HELMET, bias=1.0)
-    s.box(hc + zU * -1.0 + fH * 0.4, fH, rH, zU, 5.0, 5.0, 0.45, (60, 66, 48), edge=False)
-    s.box(hc + zU * 0.1, fH, rH, zU, 4.75, 4.75, 0.35, darker(HELMET, 0.8), edge=False)  # cover band
-    s.box(hc + fH * 4.3 + zU * 1.0, fH, rH, zU, 0.5, 2.6, 0.75, GOGGLE, edge=False)
-    for sg in (-1, 1):
-        s.pixel(hc + fH * 4.9 + rH * 1.2 * sg + zU * 1.1, LENS, bias=0.4)
-        s.capsule(hc + rH * 4.3 * sg + zU * -1.2, head + rH * 3.2 * sg + fH * 1.2 + zU * -3.6, 0.35, 0.35,
-                  (52, 46, 36), bias=0.5, edge=False)
+    if HEADGEAR == 'helmet':
+        # helmet: dome, band, brim, goggles, chin strap
+        s.box(hc + zU * 0.6, fH, rH, zU, 4.6, 4.6, 1.9, HELMET)
+        s.ball(hc + zU * 1.9, 4.2, HELMET, bias=1.0)
+        s.box(hc + zU * -1.0 + fH * 0.4, fH, rH, zU, 5.0, 5.0, 0.45, (60, 66, 48), edge=False)
+        s.box(hc + zU * 0.1, fH, rH, zU, 4.75, 4.75, 0.35, darker(HELMET, 0.8), edge=False)  # cover band
+        s.box(hc + fH * 4.3 + zU * 1.0, fH, rH, zU, 0.5, 2.6, 0.75, GOGGLE, edge=False)
+        for sg in (-1, 1):
+            s.pixel(hc + fH * 4.9 + rH * 1.2 * sg + zU * 1.1, LENS, bias=0.4)
+            s.capsule(hc + rH * 4.3 * sg + zU * -1.2, head + rH * 3.2 * sg + fH * 1.2 + zU * -3.6, 0.35, 0.35,
+                      (52, 46, 36), bias=0.5, edge=False)
+    elif HEADGEAR == 'beanie':
+        # a knitted hat pulled low, the turned-up band
+        s.ball(head + zU * 1.5 - fH * 0.3, 4.35, CAPC, bias=0.6)
+        s.box(head + zU * 0.6 - fH * 0.2, fH, rH, zU, 4.45, 4.45, 0.7, darker(CAPC, 1.25), edge=False)
+    elif HEADGEAR == 'balaclava':
+        # the mask's crown and a seam down the back
+        s.ball(head + zU * 1.2 - fH * 0.4, 4.0, darker(CAPC, 1.1), bias=0.6)
+    elif HEADGEAR == 'cap':
+        s.ball(head + zU * 1.4 - fH * 0.2, 4.3, CAPC, bias=0.6)
+        s.box(head + zU * 1.0 + fH * 4.3, fH, rH, zU, 1.8, 3.2, 0.3, darker(CAPC, 0.8), edge=False)
 
     # arms: rounded sleeves, elbow patch, cuff, fingerless gloves
     for side, sg in (('L', -1), ('R', 1)):
@@ -383,6 +458,8 @@ def build(pose):
         s.capsule(sh[side], el, 2.35, 2.05, JK)
         s.ball(sh[side] + zU * 0.4, 2.3, JK, bias=0.1)                                     # shoulder cap
         s.capsule(el, wr, 2.0, 1.65, JK)
+        if STRIPES:
+            s.capsule(sh[side] + rU * (1.9 * sg), el + rU * (1.5 * sg), 0.4, 0.4, STRIPES, edge=False)
         s.ball(el, 1.45, JACKET_D, bias=0.2)                                               # elbow patch
         s.capsule(wr - norm(wr - el) * 1.4, wr - norm(wr - el) * 0.3, 1.8, 1.8, JACKET_D, bias=0.1, edge=False)
         hand = wr + norm(wr - el) * 0.9
@@ -721,6 +798,25 @@ def sheet(clip, w):
         for k in range(n):
             im.alpha_composite(render_frame(clip, w, d, k), (k * CELL, d * CELL))
     return im
+
+
+MARAUDER_OUTFITS = ('gopnik', 'bandit', 'deserter')
+MARAUDER_WEAPONS = ('makarov', 'akm', 'shotgun')
+MARAUDER_CLIPS = ('Idle', 'Walk', 'Run', 'Attack1', 'TakeDamage', 'Die')
+
+
+def build_marauders(project, outfits=MARAUDER_OUTFITS, weapons=MARAUDER_WEAPONS, clips=MARAUDER_CLIPS):
+    out = os.path.join(project, 'art', 'marauders')
+    os.makedirs(out, exist_ok=True)
+    for o in outfits:
+        apply_outfit(o)
+        for w in weapons:
+            for clip in clips:
+                save_png(sheet(clip, w), os.path.join(out, '%s_%s_%s.png' % (o, w, clip)))
+        # bare hands: a raider who threw the gun down to surrender
+        for clip in ('Idle', 'Walk', 'Run', 'Die'):
+            save_png(sheet(clip, None), os.path.join(out, '%s_none_%s.png' % (o, clip)))
+    apply_outfit('survivor')
 
 
 def build_all(project):

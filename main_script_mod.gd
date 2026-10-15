@@ -2835,6 +2835,8 @@ const PauseMenu = preload("res://world/pause_menu.gd")
 var pause_menu = null
 const FieldHints = preload("res://world/field_hints.gd")
 var field_hints = null
+const MarauderDirector = preload("res://world/marauder_director.gd")
+var marauder_director = null
 var field_hints_saved = {}
 var pixel_ui_font = null
 
@@ -2963,6 +2965,10 @@ func _ready():
     field_hints.game = self
     field_hints.load_state(field_hints_saved)
     add_child(field_hints)
+    marauder_director = MarauderDirector.new()
+    marauder_director.name = "MarauderDirector"
+    marauder_director.game = self
+    add_child(marauder_director)
     _ensure_shelter_threat_indicator()
     _create_weather_visuals()
     _create_day_night()
@@ -4385,7 +4391,7 @@ func _update_hud_focus(delta):
         _hud_focus_wake("EnvironmentPanel",7.0)
     # infected close by: everything a fight needs
     var threat = false
-    for e in get_tree().get_nodes_in_group("infected"):
+    for e in get_tree().get_nodes_in_group("infected") + get_tree().get_nodes_in_group("marauders"):
         if is_instance_valid(e) and e.global_position.distance_squared_to(player.global_position) < 340.0 * 340.0:
             threat = true
             break
@@ -7524,6 +7530,8 @@ func _respawn_player():
     # the old survivor is gone: everything they carried stays on the body,
     # the new one wakes up somewhere else with a bandage, a bottle and a knife
     var body_coord = _leave_player_body(player_death_pos if player_death_pos != Vector2.ZERO else player.global_position)
+    if marauder_director != null:
+        marauder_director.on_player_respawn()
     player_death_pos = Vector2.ZERO
     _fresh_spawn_kit()
     hunger = 72.0
@@ -7669,7 +7677,7 @@ func _perform_melee_attack():
     var stagger_time = float(melee.get("stagger",0.35))
     var hit_count = 0
 
-    for enemy in get_tree().get_nodes_in_group("infected"):
+    for enemy in get_tree().get_nodes_in_group("infected") + get_tree().get_nodes_in_group("marauders"):
         if hit_count >= max_targets:
             break
         if not is_instance_valid(enemy):
@@ -8479,6 +8487,11 @@ func _infected_pocket_drop(enemy):
 func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
     if not is_instance_valid(enemy):
         return
+    if enemy.has_method("marauder_take_damage"):
+        if hit_dir == Vector2.ZERO and player != null:
+            hit_dir = (enemy.global_position - player.global_position).normalized()
+        enemy.marauder_take_damage(float(amount),hit_dir)
+        return
     var hp = float(enemy.get_meta("hp", 70.0)) - amount
     enemy.set_meta("hp", hp)
     if hit_dir == Vector2.ZERO and player != null:
@@ -8704,6 +8717,9 @@ func _emit_ai_sound(origin,radius,kind = "generic",strength = 1.0,source_enemy =
         last_player_noise_radius = base_radius
         last_player_noise_kind = kind
         last_player_noise_time = 1.15
+
+    if marauder_director != null:
+        marauder_director.notify_sound(origin,base_radius * weather_mult,str(kind),source_enemy)
 
     for enemy in get_tree().get_nodes_in_group("infected"):
         if not is_instance_valid(enemy) or enemy == source_enemy:
@@ -17222,7 +17238,7 @@ func _close_inventory():
         _play_ui_sfx("close")
         if active_container_key != "":
             _play_world_sfx("container_close",-14.0,0.04)
-            if active_container_key.find(":container:body_") >= 0:
+            if active_container_key.find(":container:body_") >= 0 or active_container_key.find(":container:mbody_") >= 0:
                 var closing_key = active_container_key
                 active_container_key = ""
                 if container_states.get(closing_key,{}).get("items",[]).is_empty():
@@ -21323,13 +21339,85 @@ func _leave_player_body(pos:Vector2) -> Vector2i:
         "generated_day":world_day,"refresh_cycle":0,"poi_id":"","target_farm":false,"items":entries}
     var rec = {"coord":[coord.x,coord.y],"pos":[local.x,local.y],"id":body_id,"day":world_day,"dir":visual_aim_dir8}
     player_bodies.append(rec)
-    while player_bodies.size() > 3:
-        _remove_player_body(player_bodies[0])
+    var own = player_bodies.filter(func(b): return str(b.get("kind","player")) == "player")
+    while own.size() > 3:
+        _remove_player_body(own.pop_front())
     map_markers[_zone_chunk_key(coord)] = {"kind":"cache","label":"ВАШЕ ТЕЛО • день %d" % world_day}
     var chunk = loaded_chunks.get(coord,null)
     if chunk != null:
         _spawn_player_body(chunk,coord,rec)
     return coord
+
+const MARAUDER_BODY_DAYS = 3
+const MARAUDER_EXTRAS = {
+    "gopnik":[["bandage",0.4],["canned_meat",0.35],["water",0.3],["wool_hat",0.25],["painkillers",0.15]],
+    "bandit":[["bandage",0.45],["canned_meat",0.3],["water",0.35],["field_backpack",0.3],["tape",0.3],["painkillers",0.2]],
+    "deserter":[["bandage",0.5],["emergency_ration",0.45],["water",0.4],["police_vest",0.3],["field_rig",0.25],["sterile_bandage",0.2]],
+}
+
+func _leave_marauder_body(m):
+    # what the raider had on them, in one grid where they fell
+    var entries = []
+    if not m.weapon_dropped:
+        _grid_add(entries,m.weapon,1,CONTAINER_W,CONTAINER_H)
+    var ammo_id = str(weapon_defs.get(m.weapon,{}).get("ammo",""))
+    var rounds = clampi(m.mag + m.reserve,0,int(m.ARMS[m.weapon]["mag"]) + 6)
+    if ammo_id != "" and rounds > 0 and item_defs.has(ammo_id):
+        _grid_add(entries,ammo_id,rounds,CONTAINER_W,CONTAINER_H)
+    for row in MARAUDER_EXTRAS.get(m.outfit,[]):
+        if item_defs.has(str(row[0])) and randf() < float(row[1]):
+            _grid_add(entries,str(row[0]),1,CONTAINER_W,CONTAINER_H)
+    var pos = _free_body_spot(m.global_position)
+    var coord = _world_to_chunk(pos)
+    var local = pos - Vector2(coord) * CHUNK_SIZE
+    var body_id = "mbody_%d" % next_body_id
+    next_body_id += 1
+    var key = "%d:%d:container:%s" % [coord.x,coord.y,body_id]
+    container_states[key] = {"name":"МАРОДЁР","loot_table":"player_body","grid_w":CONTAINER_W,"grid_h":CONTAINER_H,
+        "generated_day":world_day,"refresh_cycle":0,"poi_id":"","target_farm":false,"items":entries}
+    var sheet = "res://art/marauders/%s_%s_Die.png" % [m.outfit,"none" if m.weapon_dropped else m.weapon]
+    var rec = {"coord":[coord.x,coord.y],"pos":[local.x,local.y],"id":body_id,"day":world_day,"dir":int(m.dir8),"kind":"marauder","name":"МАРОДЁР","sheet":sheet}
+    player_bodies.append(rec)
+    var others = player_bodies.filter(func(b): return str(b.get("kind","player")) == "marauder")
+    while others.size() > 12:
+        _remove_player_body(others.pop_front())
+    var chunk = loaded_chunks.get(coord,null)
+    if chunk != null:
+        _spawn_player_body(chunk,coord,rec)
+
+func _free_body_spot(at:Vector2) -> Vector2:
+    # a body never lies on another body, a container or in a wall: the
+    # nearest clear patch of floor within a short step
+    for r in [0.0,14.0,24.0,34.0]:
+        for k in range(8 if r > 0.0 else 1):
+            var c = at + Vector2.RIGHT.rotated(TAU * k / 8.0) * r
+            var clear = true
+            for n in get_tree().get_nodes_in_group("interactable"):
+                if is_instance_valid(n) and str(n.get_meta("interaction_type","")) in ["container","world_item"] and n.global_position.distance_to(c) < 20.0:
+                    clear = false
+                    break
+            if not clear:
+                continue
+            var q = PhysicsShapeQueryParameters2D.new()
+            var sh = CircleShape2D.new()
+            sh.radius = 8.0
+            q.shape = sh
+            q.transform = Transform2D(0,c)
+            q.collision_mask = LAYER_WORLD
+            if get_world_2d().direct_space_state.intersect_shape(q,1).is_empty():
+                return c
+    return at
+
+func _marauder_drop_weapon(m):
+    var pos = m.global_position + m.facing * 12.0
+    var coord = _world_to_chunk(pos)
+    if not loaded_chunks.has(coord) or not item_defs.has(m.weapon):
+        return
+    var record = {"drop_id":next_drop_id,"id":m.weapon,"qty":1,"x":pos.x,"y":pos.y}
+    next_drop_id += 1
+    dropped_items.append(record)
+    _spawn_world_item(loaded_chunks[coord],coord,m.weapon,1,pos - loaded_chunks[coord].global_position,"",int(record["drop_id"]),"")
+    _play_world_sfx("item_drop",-12.0,0.03)
 
 func _remove_player_body(rec:Dictionary):
     var coord = Vector2i(int(rec["coord"][0]),int(rec["coord"][1]))
@@ -21350,19 +21438,21 @@ func _expire_player_bodies():
         var coord = Vector2i(int(rec["coord"][0]),int(rec["coord"][1]))
         var key = "%d:%d:container:%s" % [coord.x,coord.y,str(rec.get("id",""))]
         var empty = container_states.get(key,{}).get("items",[]).is_empty()
-        if world_day - int(rec.get("day",world_day)) >= BODY_LIFETIME_DAYS or (empty and active_container_key != key):
+        var lifetime = BODY_LIFETIME_DAYS if str(rec.get("kind","player")) == "player" else MARAUDER_BODY_DAYS
+        if world_day - int(rec.get("day",world_day)) >= lifetime or (empty and active_container_key != key):
             _remove_player_body(rec)
 
 func _spawn_player_body(chunk,coord,rec:Dictionary):
     var local = Vector2(float(rec["pos"][0]),float(rec["pos"][1]))
-    var node = _create_container(chunk,coord,local,str(rec.get("id","body")),"player_body","ВАШЕ ТЕЛО",QA_ALL_ITEMS_CONTAINER_W,QA_ALL_ITEMS_CONTAINER_H)
+    var is_player = str(rec.get("kind","player")) == "player"
+    var node = _create_container(chunk,coord,local,str(rec.get("id","body")),"player_body",str(rec.get("name","ВАШЕ ТЕЛО")),QA_ALL_ITEMS_CONTAINER_W if is_player else CONTAINER_W,QA_ALL_ITEMS_CONTAINER_H if is_player else CONTAINER_H)
     if node == null:
         return
     node.add_to_group("player_bodies")
     for c in node.get_children():
         c.queue_free()
     # the survivor as they fell: the last frame of the death clip
-    var tex = load("res://survivor_Die.png")
+    var tex = load(str(rec.get("sheet","res://survivor_Die.png")))
     if tex != null:
         var at = AtlasTexture.new()
         at.atlas = tex
@@ -32140,6 +32230,9 @@ func _rest_source_quality_modifier(kind,sheltered):
 func _rest_danger_nearby():
     if player == null:
         return true
+    for m in get_tree().get_nodes_in_group("marauders"):
+        if is_instance_valid(m) and m.hostile_to_player and player.global_position.distance_to(m.global_position) <= 420.0:
+            return true
 
     for enemy in get_tree().get_nodes_in_group("infected"):
         if not is_instance_valid(enemy):
@@ -34305,7 +34398,12 @@ func _load_state():
     if typeof(raw_bodies) == TYPE_ARRAY:
         for b in raw_bodies:
             if typeof(b) == TYPE_DICTIONARY and typeof(b.get("coord")) == TYPE_ARRAY and typeof(b.get("pos")) == TYPE_ARRAY and b["coord"].size() == 2 and b["pos"].size() == 2:
-                player_bodies.append({"coord":[int(b["coord"][0]),int(b["coord"][1])],"pos":[float(b["pos"][0]),float(b["pos"][1])],"id":str(b.get("id","body")),"day":int(b.get("day",1)),"dir":int(b.get("dir",2))})
+                var clean_body = {"coord":[int(b["coord"][0]),int(b["coord"][1])],"pos":[float(b["pos"][0]),float(b["pos"][1])],"id":str(b.get("id","body")),"day":int(b.get("day",1)),"dir":int(b.get("dir",2))}
+                if str(b.get("kind","player")) == "marauder" and str(b.get("sheet","")).begins_with("res://art/marauders/"):
+                    clean_body["kind"] = "marauder"
+                    clean_body["name"] = "МАРОДЁР"
+                    clean_body["sheet"] = str(b["sheet"])
+                player_bodies.append(clean_body)
     next_body_id = max(1,int(parsed.get("next_body_id",player_bodies.size() + 1)))
     picked_world_items = parsed.get("picked_world_items",{})
     dropped_items = parsed.get("dropped_items",[])
