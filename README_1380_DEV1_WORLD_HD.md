@@ -1181,3 +1181,48 @@ Living raiders, AI-driven (`world/marauder.gd`, `world/marauder_director.gd`).
 - Sector loads: the forest edge gathered its obstacles per candidate (and the
   door test walked every door of every loaded sector) - 6 ms per woodland
   sector; it now collects them once (0.7 ms), same placement.
+
+## dev65 — the raiders' base «Чёрный двор»
+
+A fenced concrete plant east of the Mechanics' Artel, taken by Седой's men
+(region POI `marauder_base`, sectors x 11..13, y 0..2, one sector clear of
+any other site). Built on the settlement town grid, so every building stands
+in its block on its street line, every piece is placed or reported, and
+nothing overlaps.
+
+- **Layout** (9 sectors): garages and a repair yard, two workshop halls, the
+  boiler house with its chimney and fuel tanks, the west gate with the
+  guardhouse, a sandbagged checkpoint, staggered concrete blocks and a gate
+  tower; the warehouse «ОБЩАК» with the camp fire on the crossing; the rail
+  spur with boxcars, a tank wagon, a switch and a buffer stop; the barracks
+  and tents; the workshops with the **breach** knocked through the south
+  wall; the HQ with the armory, the radio room, an APC and the siren mast.
+  Concrete wall with wire round the outside, searchlight towers on the four
+  corners, painted warnings on the wall.
+- **Garrison** (`world/marauder_base.gd`): 17 men on posts - gate sentries,
+  five tower sentries who see 35% further, men at the fire, at the garage,
+  the shop and the rail yard, two bodyguards, the armory guard and the boss
+  Седой (260 hp, never runs) - and two patrols: one along the streets, one
+  along the south wall past the breach. Sentries fight from their posts
+  (leash); men on post look over their sector, turning slowly.
+- **Alarm**: whoever sees the survivor raises it - the siren on the HQ mast
+  wails (synthesised), everyone within 560 units comes to the spot of the
+  alarm (not to the survivor), and 22 s later the barracks send their reserve
+  (three men, once a day).
+- **Memory**: the dead stay dead for two days; once Седой is dead and 70% of
+  the garrison is down the base is cleared and stands empty for five days,
+  then new men take it back. Saved with the world.
+- **Loot**: `marauder_supply` (gate, yards, warehouse) and `marauder_stash`
+  (HQ, armory, общак, the boss' crate) - the stash refreshes as a target
+  farm every 5 days. Седой's body carries an extended AKM magazine, a trauma
+  kit, a vest and rounds.
+- **World**: the Artel offers the contract «ЧЁРНЫЙ ДВОР» (kill Седой, 180
+  tickets); settlements talk about the base and how it stands; its fall and
+  its return go into the chronicle; the map marks it as a danger; a hint on
+  the first approach names the towers, the reserve and the breach.
+- Balance (scripted runs): walking openly into the gate at noon is death in
+  ~15 s; crouching through the breach at night reaches the workshops
+  unseen. 
+- Test: `tests/test_marauder_base_dev65.gd` (391 checks: placement,
+  overlaps, passability, posts on free floor, garrison, alarm, reserve, boss,
+  clearing, save, reclaim, map, contract).

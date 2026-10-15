@@ -12,7 +12,11 @@ const SETTLEMENTS = {
     "settlement_perron":{"name":"ПОСЕЛЕНИЕ «ПЕРРОН»","kind":"faction_settlement","faction":"perron","ground":"settlement_civic","roles":["жилой север","водонапорная и огороды","складской двор","западный КПП","рынок и площадь","кухня и общежитие","ремесленный двор","радиоузел","южный КПП"],"signs":["БАРАКИ","ВОДА","СКЛАД","КПП","РЫНОК","КУХНЯ","МАСТЕРСКИЕ","РАДИО","КПП"]},
     "settlement_rubezh":{"name":"УКРЕПРАЙОН «РУБЕЖ»","kind":"faction_settlement","faction":"rubezh","ground":"settlement_military","roles":["казарменный сектор","медпункт гарнизона","склады снабжения","западный периметр","штаб и плац","оружейная и ремонт","автопарк","радио и наблюдение","восточный КПП"],"signs":["КАЗАРМА","МЕДПУНКТ","СКЛАД","ПЕРИМЕТР","ШТАБ","ОРУЖЕЙНАЯ","АВТОПАРК","СВЯЗЬ","КПП"]},
     "settlement_mechanics":{"name":"АРТЕЛЬ «МЕХАНИКИ»","kind":"faction_settlement","faction":"mechanics","ground":"settlement_industrial","roles":["разборочный двор","электроцех","склад металла","приёмка","главная мастерская","рембоксы","топливный двор","экспедиционный склад","грузовые ворота"],"signs":["РАЗБОР","ЭЛЕКТРОЦЕХ","МЕТАЛЛ","ПРИЁМКА","АРТЕЛЬ","РЕМЗОНА","ТОПЛИВО","СНАБЖЕНИЕ","ВОРОТА"]},
-    "settlement_lazaret":{"name":"ПОСЕЛЕНИЕ «ЛАЗАРЕТ»","kind":"faction_settlement","faction":"lazaret","ground":"settlement_medical","roles":["жилой корпус","аптечный склад","санитарный двор","приёмное отделение","клиника и площадь","диагностика","изоляционный корпус","лаборатория","служебный КПП"],"signs":["ЖИЛОЙ КОРПУС","АПТЕКА","САНДВОР","ПРИЁМ","КЛИНИКА","ДИАГНОСТИКА","ИЗОЛЯТОР","ЛАБОРАТОРИЯ","КПП"]}
+    "settlement_lazaret":{"name":"ПОСЕЛЕНИЕ «ЛАЗАРЕТ»","kind":"faction_settlement","faction":"lazaret","ground":"settlement_medical","roles":["жилой корпус","аптечный склад","санитарный двор","приёмное отделение","клиника и площадь","диагностика","изоляционный корпус","лаборатория","служебный КПП"],"signs":["ЖИЛОЙ КОРПУС","АПТЕКА","САНДВОР","ПРИЁМ","КЛИНИКА","ДИАГНОСТИКА","ИЗОЛЯТОР","ЛАБОРАТОРИЯ","КПП"]},
+    # dev65: the raiders' stronghold - a fenced concrete plant taken by force.
+    # Same town grid as the settlements, but nobody here trades: every building
+    # is searchable, the garrison (world/marauder_base.gd) holds the walls.
+    "marauder_base":{"name":"БАЗА «ЧЁРНЫЙ ДВОР»","kind":"marauder_base","faction":"raiders","ground":"settlement_industrial","hostile":true,"roles":["гаражи и ремзона","главный цех","котельная","западные ворота","общак и лагерь","ж/д ветка","казармы","мастерские и пролом","штаб"],"signs":["ГАРАЖИ","ЦЕХ","КОТЕЛЬНАЯ","КПП","ОБЩАК","ВЕТКА","КАЗАРМА","МАСТЕРСКИЕ","ШТАБ"]}
 }
 
 
@@ -145,18 +149,66 @@ const TOWNS = {
     ]
 }
 
+# dev65: the base. Gate faces west (toward the city and the Mechanics), a breach
+# in the south wall of the workshop sector, a rail spur in the east, the boss'
+# HQ in the far south-east corner. "loot" per building, "keep" = rail bed rects
+# no clutter may land on.
+# outer walls: the west gate is the only way in for a vehicle; the breach is a
+# gap knocked through the south wall of the workshop sector (x of its middle)
+const BASE_BREACH_X = 600.0
+const BASE_BREACH_HALF = 30.0
+const BASE_TOWN = [
+    {"b":{"nw":[["mech_garages","ГАРАЖИ",0,"garage"]],"sw":[["rubezh_hangar","РЕМЗОНА",0,"industrial"]]},
+     "y":{"ne":"repair_yard","se":"scrap_yard"},
+     "p":[["searchlight_tower",Vector2(80,92),0.9],["oil_drums",Vector2(250,92)]]},
+    {"b":{"nw":[["mech_hangar","ЦЕХ №1",0,"industrial"]],"ne":[["mech_workshop","ЦЕХ №2",0,"industrial"]]},
+     "y":{"sw":"pipe_yard","se":"crane_yard_s"}},
+    {"b":{"nw":[["mech_boiler","КОТЕЛЬНАЯ",-50,"industrial"]],"sw":[["mech_electro","ТРАНСФОРМАТОРНАЯ",0,"industrial"]]},
+     "y":{"ne":"tank_farm_base","se":"coal_yard"},
+     "p":[["poi:woodpile",Vector2(286,240)],["searchlight_tower",Vector2(690,92),0.9]]},
+    {"b":{"nw":[["rubezh_guardhouse","КПП",60,"marauder_supply"]],"ne":[["rubezh_barracks","КАРАУЛКА",0,"residential"]]},
+     "y":{"se":"barricade_yard","sw":"gate_yard"}},
+    {"b":{"nw":[["mech_hangar","ОБЩАК",0,"marauder_stash"]],"ne":[["mech_fuel","ВЕСОВАЯ",-66,"garage"]]},
+     "y":{"ne":"crates_side_ind","sw":"container_yard","se":"camp_yard"}},
+    {"b":{"nw":[["mech_garages","ПАКГАУЗ",0,"marauder_supply"]]},
+     "y":{"ne":"loading_yard"},
+     "p":[["poi:boxcar",Vector2(170,604)],["poi:boxcar",Vector2(560,604)],["poi:tank_wagon",Vector2(600,684)],["poi:rail_signal",Vector2(706,560)]],
+     "keep":[Rect2(36,588,700,36),Rect2(36,668,700,36)]},
+    {"b":{"nw":[["rubezh_barracks","КАЗАРМА",0,"residential"]],"sw":[["mech_containers","ЖИЛЬЁ",40,"residential"]]},
+     "y":{"ne":"shanty_yard","se":"tent_camp_base"},
+     "p":[["searchlight_tower",Vector2(74,690),0.9]]},
+    {"b":{"nw":[["mech_workshop","МАСТЕРСКИЕ",0,"industrial"]],"ne":[["mech_electro","ГЕНЕРАТОРНАЯ",0,"industrial"]],"sw":[["mech_garages","БОКСЫ",0,"garage"]]},
+     "y":{"se":"breach_yard"},
+     "keep":[Rect2(BASE_BREACH_X - 40.0,432,80,320)]},
+    {"b":{"nw":[["rubezh_hq","ШТАБ",0,"marauder_stash"]],"ne":[["rubezh_armory","ОРУЖЕЙНАЯ",0,"marauder_stash"]],"se":[["rubezh_comms","РАДИОРУБКА",-40,"marauder_supply"]]},
+     "y":{"sw":"hq_yard"},
+     "p":[["searchlight_tower",Vector2(690,690),0.9],["radio_mast",Vector2(684,560),0.9]]}
+]
+# loose stashes in the yards (sector index -> list); every spot sits on open
+# ground next to a yard piece, checked by tests/test_marauder_base_dev65.gd
+const BASE_STASHES = {
+    0:[{"id":"stash_0","pos":Vector2(520,600),"loot":"garage","name":"Ящик с запчастями"}],
+    3:[{"id":"stash_0","pos":Vector2(560,500),"loot":"marauder_supply","name":"Отобранное на воротах"}],
+    4:[{"id":"stash_0","pos":Vector2(520,700),"loot":"marauder_supply","name":"Котомка у костра"}],
+    5:[{"id":"stash_0","pos":Vector2(470,180),"loot":"marauder_supply","name":"Груз с поезда"}],
+    6:[{"id":"stash_0","pos":Vector2(600,560),"loot":"residential","name":"Пожитки в палатке"}],
+    8:[{"id":"stash_0","pos":Vector2(150,690),"loot":"marauder_stash","name":"Ящик главаря"}]
+}
+
 const CLUTTER = {
     "perron":["shanty","tarp_shelter","rain_tank","junk_pile","tire_wall","bonfire","swing_set","cart","firewood_rack"],
     "rubezh":["scrap_barricade","tire_wall","burnt_car","rubble_pile","warning_sign","dead_tree","oil_drums"],
     "mechanics":["burnt_car","junk_pile","tire_wall","rubble_pile","shanty","rain_tank","scrap_barricade","oil_drums"],
-    "lazaret":["rain_tank","tarp_shelter","junk_pile","dead_tree","warning_sign","graves","swing_set"]
+    "lazaret":["rain_tank","tarp_shelter","junk_pile","dead_tree","warning_sign","graves","swing_set"],
+    "raiders":["burnt_car","tire_wall","scrap_barricade","oil_drums","junk_pile","rubble_pile","warning_sign"]
 }
 
 const BACKYARD = {
     "perron":["garden_beds","firewood_rack","laundry_line","chicken_coop","dog_kennel","water_point","wheelbarrow","bicycle"],
     "rubezh":["prop:ammo_crate","poi:pallets_tarp","jersey_blocks","sandbag_nest","oil_drums","dog_kennel"],
     "mechanics":["scrap_heap","oil_drums","poi:cable_drum","poi:pipe_stack","car_on_blocks","bicycle","wheelbarrow"],
-    "lazaret":["herb_beds","laundry_line","street:bench","bicycle","street:planter","wheelbarrow"]
+    "lazaret":["herb_beds","laundry_line","street:bench","bicycle","street:planter","wheelbarrow"],
+    "raiders":["oil_drums","scrap_heap","poi:cable_drum","car_on_blocks","tire_wall","prop:ammo_crate"]
 }
 
 # Yard presets: pieces relative to the block centre (blocks are ~290 x 290).
@@ -234,6 +286,14 @@ const YARDS = {
                    ["rain_tank",Vector2(90,100)],["junk_pile",Vector2(-10,120)]],
     "barricade_yard":[["scrap_barricade",Vector2(-50,-60)],["tire_wall",Vector2(60,-40)],["burnt_car",Vector2(-40,50)],
                       ["warning_sign",Vector2(70,60)],["rubble_pile",Vector2(40,120)]],
+    "tank_farm_base":[["poi:h_tank",Vector2(-10,-50)],["poi:h_tank",Vector2(-10,40)],["jersey_blocks",Vector2(80,110)]],
+    "coal_yard":[["junk_pile",Vector2(-70,-50)],["junk_pile",Vector2(60,-60)],["poi:pipe_stack",Vector2(-60,60)],["fire_barrel",Vector2(70,60)]],
+    "gate_yard":[["searchlight_tower",Vector2(-80,20),0.9],["sandbag_nest",Vector2(40,-50)],["poi:hedgehogs",Vector2(60,60)],["tire_wall",Vector2(-60,110)]],
+    "camp_yard":[["bonfire",Vector2(-30,-10)],["long_table",Vector2(60,-60)],["tarp_shelter",Vector2(-80,-80)],["shanty",Vector2(80,60)],["oil_drums",Vector2(-80,80)],["fire_barrel",Vector2(30,110)]],
+    "loading_yard":[["poi:pallets_tarp",Vector2(-70,-60)],["poi:forklift",Vector2(50,-50)],["prop:supply_crate",Vector2(-70,40),0.62],["poi:cable_drum",Vector2(60,60)]],
+    "tent_camp_base":[["army_tent",Vector2(-80,-50)],["army_tent",Vector2(40,-50)],["army_tent",Vector2(-80,60)],["bonfire",Vector2(40,60)],["laundry_line",Vector2(0,124)]],
+    "breach_yard":[["rubble_pile",Vector2(-90,90)],["burnt_car",Vector2(-70,-50)],["scrap_barricade",Vector2(90,-60)],["tire_wall",Vector2(100,110)]],
+    "hq_yard":[["btr",Vector2(-60,-40),0.8],["fire_barrel",Vector2(80,-70)],["sandbag_nest",Vector2(70,40)],["poi:army_truck",Vector2(-40,90)]],
     "greenhouses_med":[["poi:greenhouse",Vector2(-72,-50)],["poi:greenhouse",Vector2(72,-50)],["poi:greenhouse",Vector2(-72,50)],["poi:greenhouse",Vector2(72,50)],["solar_rig",Vector2(0,130),0.5]]
 }
 
@@ -272,6 +332,23 @@ const PIECE_SOLIDS = {
     "poster_board":Vector2(40,4),"oil_drums":Vector2(40,12),"firewood_rack":Vector2(56,10),"cart":Vector2(40,12),
     "poi:hedgehogs":Vector2.ZERO,"poi:pipe_stack":Vector2(58,14),"poi:h_tank":Vector2(96,18),"poi:silo":Vector2(28,16)
 }
+
+static func is_base(poi_id:String) -> bool:
+    return bool(SETTLEMENTS.get(poi_id,{}).get("hostile",false))
+
+static func base_perimeter(offset:Vector2i) -> Dictionary:
+    # walls on the outer sides only; "gate" opens the west wall of the gate
+    # sector, the breach is a narrow gap off the middle of the south wall
+    var walls = {}
+    if offset.y == -1:
+        walls["n"] = false
+    if offset.y == 1:
+        walls["s"] = {"breach":BASE_BREACH_X,"half":BASE_BREACH_HALF} if offset.x == 0 else false
+    if offset.x == -1:
+        walls["w"] = offset.y == 0
+    if offset.x == 1:
+        walls["e"] = false
+    return walls
 
 static func has(poi_id:String) -> bool:
     return SETTLEMENTS.has(poi_id)
@@ -339,7 +416,8 @@ static func cell(poi_id:String,offset:Vector2i) -> Dictionary:
     var role = str(d["roles"][idx])
     var faction = str(d["faction"])
     var loot = "industrial" if faction == "mechanics" else ("military" if faction == "rubezh" else ("pharmacy" if faction == "lazaret" else "residential"))
-    var plan = TOWNS[faction][idx]
+    var base = is_base(poi_id)
+    var plan = BASE_TOWN[idx] if base else TOWNS[faction][idx]
     var buildings = []
     var slot_index = 0
     var blocks = {}
@@ -355,7 +433,7 @@ static func cell(poi_id:String,offset:Vector2i) -> Dictionary:
             buildings.append({
                 "id":"building_%d" % slot_index,"archetype":str(model.get("archetype","utility_house")),
                 "model":model_id,"pos":center,"size":size,"sign":str(raw[1]),
-                "container_id":"cache_%d" % slot_index,"loot":loot,"block":quad
+                "container_id":"cache_%d" % slot_index,"loot":str(raw[3]) if raw.size() > 3 else loot,"block":quad
             })
             used.append(Rect2(center - size * 0.5,size))
             slot_index += 1
@@ -393,6 +471,17 @@ static func cell(poi_id:String,offset:Vector2i) -> Dictionary:
             var x = rect.position.x + rect.size.x * (float(i) + 0.5) / float(count) + rng.randf_range(-14.0,14.0)
             pieces.append(_piece(str(back_kinds[rng.randi_range(0,back_kinds.size() - 1)]),Vector2(round(x),round(y))))
     var workbenches = [Vector2(520,548)] if faction == "mechanics" and offset in [Vector2i.ZERO,Vector2i(1,0)] else []
+    if base:
+        return {
+            "role":role,"ground":str(d["ground"]),"faction_id":faction,"safe_settlement":false,"marauder_base":true,
+            "settlement_style":"raiders","settlement_index":idx,"settlement_offset":offset,
+            "buildings":buildings,"blocks":blocks,
+            "loose_containers":BASE_STASHES.get(idx,[]).duplicate(true),
+            "fences":[],"perimeter":base_perimeter(offset),"set_pieces":pieces,"trees":[],"garlands":[],
+            "parade":Rect2(),"quarantine":Rect2(),"lamps":[],"workbenches":[Vector2(520,560)] if idx == 7 else [],
+            "props":[],"keep_clear":plan.get("keep",[]).duplicate(true),
+            "enemy_count":0,"enemy_mult":0.0,"tree_mult":0.0,"car_mult":0.0
+        }
     return {
         "role":role,"ground":str(d["ground"]),"faction_id":faction,"safe_settlement":true,
         "settlement_style":faction,"settlement_index":idx,"settlement_offset":offset,

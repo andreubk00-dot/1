@@ -414,6 +414,23 @@ const POIS = [
         "description":"Медицинское поселение с приёмным отделением, диагностикой, аптечным складом, изолятором, лабораторией и санитарным двором."
     },
     {
+        # dev65: the raiders' stronghold east of the Mechanics. Fenced concrete
+        # plant, garrisoned (world/marauder_base.gd), loot refreshes as a target farm.
+        "id":"marauder_base",
+        "coord":Vector2i(12,1),
+        "footprint":[Vector2i(-1,-1),Vector2i(0,-1),Vector2i(1,-1),Vector2i(-1,0),Vector2i(0,0),Vector2i(1,0),Vector2i(-1,1),Vector2i(0,1),Vector2i(1,1)],
+        "name":"БАЗА «ЧЁРНЫЙ ДВОР»",
+        "short_name":"ЧЁРНЫЙ ДВОР",
+        "kind":"marauder_base",
+        "district":"outer_industrial",
+        "risk":5,
+        "loot":"marauder_supply",
+        "farm_profile":"marauder_stash",
+        "refresh_days":5,
+        "status":"active_dev65",
+        "description":"Бывший завод ЖБИ за промзоной, захваченный мародёрами: бетонный забор, вышки, ворота с КПП, цеха, общак, ж/д ветка и штаб главаря."
+    },
+    {
         "id":"underground_object_vector",
         "coord":Vector2i(7,-7),
         "footprint":[Vector2i(0,0),Vector2i(1,0),Vector2i(0,1),Vector2i(1,1),Vector2i(0,2),Vector2i(1,2)],

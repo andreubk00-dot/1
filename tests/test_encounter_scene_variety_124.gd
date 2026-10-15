@@ -47,7 +47,8 @@ func run() -> void:
     check(int(event_counts.get("failed_evacuation",0)) == 4,"reference encounter population drifted: failed_evacuation")
     check(int(event_counts.get("repair_breakdown",0)) == 14,"reference encounter population drifted: repair_breakdown")
     check(int(event_counts.get("feeding_site",0)) == 24,"reference encounter population drifted: feeding_site")
-    check(int(event_counts.get("looted_convoy",0)) == 12,"reference encounter population drifted: looted_convoy")
+    # dev65: the raiders' base covers the convoy that stood at (11,1)
+    check(int(event_counts.get("looted_convoy",0)) == 11,"reference encounter population drifted: looted_convoy")
     for event_id in expected:
         check(variants.get(event_id,{}).size() == 3,event_id + " did not exercise all three cosmetic variants in reference world sample")
 

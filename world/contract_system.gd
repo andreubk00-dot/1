@@ -591,6 +591,8 @@ static func can_complete(contract:Dictionary,inventory_counts:Dictionary,discove
         return satisfied_requirement_index(contract,inventory_counts) >= 0
     if kind == "discover_poi":
         return bool(discovered_pois.get(str(contract.get("poi_id","")),false))
+    if kind == "clear_poi":
+        return bool(discovered_pois.get("cleared:" + str(contract.get("poi_id","")),false))
     return false
 
 static func _append_history(state:Dictionary,contract:Dictionary,world_day:int,status:String) -> void:
@@ -664,6 +666,8 @@ static func requirement_text(contract:Dictionary,item_names:Dictionary = {}) -> 
     var kind = str(contract.get("kind",""))
     if kind == "discover_poi":
         return "Разведка: %s" % str(contract.get("hint","Найти указанный объект."))
+    if kind == "clear_poi":
+        return "Зачистка: %s" % str(contract.get("hint","Выбить хозяев объекта."))
     var alternatives = contract.get("requirements",[])
     var option_texts = []
     if typeof(alternatives) == TYPE_ARRAY:
@@ -682,6 +686,9 @@ static func progress_text(contract:Dictionary,inventory_counts:Dictionary,discov
     if kind == "discover_poi":
         var known = bool(discovered_pois.get(str(contract.get("poi_id","")),false))
         return "ГОТОВО К СДАЧЕ" if known else "Объект ещё не разведан"
+    if kind == "clear_poi":
+        var done = bool(discovered_pois.get("cleared:" + str(contract.get("poi_id","")),false))
+        return "ГОТОВО К СДАЧЕ" if done else "Главарь жив, база держится"
     var alternatives = contract.get("requirements",[])
     var option_texts = []
     if typeof(alternatives) == TYPE_ARRAY:

@@ -259,6 +259,8 @@ const LOOT_PROFILE_RISK = {
     "hunting_secure":3,
     "industrial":4,
     "industrial_secure":4,
+    "marauder_supply":4,
+    "marauder_stash":5,
     "military":5,
     "military_secure":5,
     "quarantine_core":5,
@@ -275,6 +277,7 @@ const TARGET_FARM_REFRESH_DAYS = {
     "police_secure":6,
     "hunting_secure":6,
     "industrial_secure":7,
+    "marauder_stash":5,
     "military_secure":8,
     "quarantine_core":10,
     "arsenal_core":12,
@@ -2838,6 +2841,10 @@ var field_hints = null
 const MarauderDirector = preload("res://world/marauder_director.gd")
 var marauder_director = null
 var marauder_saved = []
+# dev65: the raiders' base garrison and its saved state
+const MarauderBase = preload("res://world/marauder_base.gd")
+var marauder_base = null
+var marauder_base_saved = {}
 var field_hints_saved = {}
 var pixel_ui_font = null
 
@@ -2972,6 +2979,11 @@ func _ready():
     add_child(marauder_director)
     if not marauder_saved.is_empty():
         marauder_director.call_deferred("restore",marauder_saved)
+    marauder_base = MarauderBase.new()
+    marauder_base.name = "MarauderBase"
+    marauder_base.game = self
+    marauder_base.load_state(marauder_base_saved)
+    add_child(marauder_base)
     _ensure_shelter_threat_indicator()
     _create_weather_visuals()
     _create_day_night()
@@ -5268,6 +5280,51 @@ func _fallback_loot():
             {"id":"shotgun_exttube","min":1,"max":1,"chance":0.28},
             {"id":"muzzle_brake","min":1,"max":1,"chance":0.24}
         ],
+        # dev65: what the raiders keep. Supply: their stores at the gate, the
+        # warehouse and the yards. Stash: the boss' share (HQ, armory, общак),
+        # refreshed as a target farm while the base stands.
+        "marauder_supply":[
+            {"id":"canned_meat","min":1,"max":3,"chance":0.62},
+            {"id":"water","min":1,"max":2,"chance":0.58},
+            {"id":"grain","min":1,"max":2,"chance":0.22},
+            {"id":"bandage","min":1,"max":2,"chance":0.40},
+            {"id":"painkillers","min":1,"max":1,"chance":0.18},
+            {"id":"tape","min":1,"max":2,"chance":0.34},
+            {"id":"cloth","min":1,"max":3,"chance":0.40},
+            {"id":"scrap","min":1,"max":4,"chance":0.36},
+            {"id":"ammo_9x18","min":6,"max":16,"chance":0.48},
+            {"id":"ammo_12g","min":4,"max":10,"chance":0.40},
+            {"id":"ammo_762","min":8,"max":20,"chance":0.32},
+            {"id":"flashlight","min":1,"max":1,"chance":0.16},
+            {"id":"cap","min":1,"max":1,"chance":0.14},
+            {"id":"field_backpack","min":1,"max":1,"chance":0.10},
+            {"id":"makarov","min":1,"max":1,"chance":0.08},
+            {"id":"shotgun","min":1,"max":1,"chance":0.05}
+        ],
+        "marauder_stash":[
+            {"id":"ammo_9x18","min":12,"max":28,"chance":0.80},
+            {"id":"ammo_762","min":20,"max":45,"chance":0.86},
+            {"id":"ammo_12g","min":8,"max":18,"chance":0.62},
+            {"id":"ammo_545","min":10,"max":30,"chance":0.32},
+            {"id":"canned_meat","min":2,"max":4,"chance":0.70},
+            {"id":"emergency_ration","min":1,"max":2,"chance":0.42},
+            {"id":"water","min":1,"max":3,"chance":0.64},
+            {"id":"bandage","min":1,"max":3,"chance":0.66},
+            {"id":"sterile_bandage","min":1,"max":2,"chance":0.34},
+            {"id":"antibiotics","min":1,"max":1,"chance":0.20},
+            {"id":"trauma_kit","min":1,"max":1,"chance":0.18},
+            {"id":"police_vest","min":1,"max":1,"chance":0.22},
+            {"id":"field_rig","min":1,"max":1,"chance":0.20},
+            {"id":"ballistic_helmet","min":1,"max":1,"chance":0.12},
+            {"id":"hiking_backpack","min":1,"max":1,"chance":0.14},
+            {"id":"akm_extmag","min":1,"max":1,"chance":0.22},
+            {"id":"muzzle_brake","min":1,"max":1,"chance":0.18},
+            {"id":"suppressor","min":1,"max":1,"chance":0.08},
+            {"id":"akm","min":1,"max":1,"chance":0.22},
+            {"id":"sks","min":1,"max":1,"chance":0.12},
+            {"id":"toz34","min":1,"max":1,"chance":0.10},
+            {"id":"tt33","min":1,"max":1,"chance":0.10}
+        ],
         "military":[
             {"id":"bandage","min":1,"max":3,"chance":0.70},
             {"id":"sterile_bandage","min":1,"max":2,"chance":0.48},
@@ -7535,6 +7592,8 @@ func _respawn_player():
     var body_coord = _leave_player_body(player_death_pos if player_death_pos != Vector2.ZERO else player.global_position)
     if marauder_director != null:
         marauder_director.on_player_respawn()
+    if marauder_base != null:
+        marauder_base.on_player_respawn()
     player_death_pos = Vector2.ZERO
     _fresh_spawn_kit()
     hunger = 72.0
@@ -8731,6 +8790,8 @@ func _emit_ai_sound(origin,radius,kind = "generic",strength = 1.0,source_enemy =
 
     if marauder_director != null:
         marauder_director.notify_sound(origin,base_radius * weather_mult,str(kind),source_enemy)
+    if marauder_base != null:
+        marauder_base.notify_sound(origin,base_radius * weather_mult,str(kind),source_enemy)
 
     for enemy in get_tree().get_nodes_in_group("infected"):
         if not is_instance_valid(enemy) or enemy == source_enemy:
@@ -11788,7 +11849,7 @@ func _sandbox_active_contract_objective() -> Dictionary:
     )
     var contract = rows[0]
     var title = str(contract.get("title","КОНТРАКТ")).to_upper()
-    var progress = ContractSystem.progress_text(contract,_contract_inventory_counts(),discovered_pois,_contract_item_names())
+    var progress = ContractSystem.progress_text(contract,_contract_inventory_counts(),_contract_known_sites(),_contract_item_names())
     progress = progress.replace("\n"," ")
     var deadline = int(contract.get("deadline_day",0))
     if deadline > 0:
@@ -12232,7 +12293,10 @@ func _region_map_snapshot():
             cells[coord] = record
             var poi = RegionCatalog.poi_for_chunk(coord)
             if not poi.is_empty() and bool(poi.get("is_anchor",false)) and discovered_pois.has(str(poi.get("id",""))):
-                pois.append({"coord":coord,"name":str(poi.get("short_name",poi.get("name","ОБЪЕКТ"))),"symbol":"medical" if str(poi.get("loot","")) == "pharmacy" else "cache"})
+                var symbol = "medical" if str(poi.get("loot","")) == "pharmacy" else "cache"
+                if str(poi.get("kind","")) == "marauder_base":
+                    symbol = "danger"
+                pois.append({"coord":coord,"name":str(poi.get("short_name",poi.get("name","ОБЪЕКТ"))),"symbol":symbol})
     var marks = []
     for key in map_markers:
         var parts = str(key).split(":")
@@ -21367,6 +21431,8 @@ func _leave_player_body(pos:Vector2) -> Vector2i:
     return coord
 
 const MARAUDER_BODY_DAYS = 3
+# dev65: a cleared base leaves a yard of bodies; keep them all for the search
+const MARAUDER_BODY_CAP = 28
 const MARAUDER_EXTRAS = {
     "gopnik":[["bandage",0.4],["canned_meat",0.35],["water",0.3],["wool_hat",0.25],["painkillers",0.15]],
     "bandit":[["bandage",0.45],["canned_meat",0.3],["water",0.35],["field_backpack",0.3],["tape",0.3],["painkillers",0.2]],
@@ -21413,19 +21479,24 @@ func _leave_marauder_body(m):
     for row in MARAUDER_EXTRAS.get(m.outfit,[]):
         if item_defs.has(str(row[0])) and randf() < float(row[1]):
             _grid_add(entries,str(row[0]),1,CONTAINER_W,CONTAINER_H)
+    # the base boss carries his own (dev65)
+    for row in m.get_meta("body_extra",[]):
+        if item_defs.has(str(row[0])):
+            _grid_add(entries,str(row[0]),int(row[1]),CONTAINER_W,CONTAINER_H)
+    var body_name = str(m.get_meta("body_name","МАРОДЁР"))
     var pos = _free_body_spot(m.global_position)
     var coord = _world_to_chunk(pos)
     var local = pos - Vector2(coord) * CHUNK_SIZE
     var body_id = "mbody_%d" % next_body_id
     next_body_id += 1
     var key = "%d:%d:container:%s" % [coord.x,coord.y,body_id]
-    container_states[key] = {"name":"МАРОДЁР","loot_table":"player_body","grid_w":CONTAINER_W,"grid_h":CONTAINER_H,
+    container_states[key] = {"name":body_name,"loot_table":"player_body","grid_w":CONTAINER_W,"grid_h":CONTAINER_H,
         "generated_day":world_day,"refresh_cycle":0,"poi_id":"","target_farm":false,"items":entries}
     var sheet = "res://art/marauders/%s_%s_Die.png" % [m.outfit,"none" if m.weapon_dropped else m.weapon]
-    var rec = {"coord":[coord.x,coord.y],"pos":[local.x,local.y],"id":body_id,"day":world_day,"dir":int(m.dir8),"kind":"marauder","name":"МАРОДЁР","sheet":sheet}
+    var rec = {"coord":[coord.x,coord.y],"pos":[local.x,local.y],"id":body_id,"day":world_day,"dir":int(m.dir8),"kind":"marauder","name":body_name,"sheet":sheet}
     player_bodies.append(rec)
     var others = player_bodies.filter(func(b): return str(b.get("kind","player")) == "marauder")
-    while others.size() > 12:
+    while others.size() > MARAUDER_BODY_CAP:
         _remove_player_body(others.pop_front())
     var chunk = loaded_chunks.get(coord,null)
     if chunk != null:
@@ -22736,10 +22807,10 @@ func _talk_faction_npc(node):
     var line = "Держись ближе к освещённым улицам. За стенами сейчас неспокойно."
     match npc_id:
         "perron_steward": line = "Если привезёшь припасы, это почувствует весь Перрон, не только рынок."
-        "perron_radio": line = "По радио снова говорят о проблемах на дальних маршрутах."
+        "perron_radio": line = "По радио снова говорят о проблемах на дальних маршрутах. " + _marauder_base_rumor()
         "rubezh_commander": line = "Дороги важнее трофеев. Без маршрутов поселения начинают голодать."
-        "rubezh_dispatch": line = "Патрули отмечают опасные участки, но людей на всё не хватает."
-        "mechanics_electrician": line = "Хорошая электроника сейчас ценнее блестящей безделушки."
+        "rubezh_dispatch": line = "Патрули отмечают опасные участки, но людей на всё не хватает. " + _marauder_base_rumor()
+        "mechanics_electrician": line = "Хорошая электроника сейчас ценнее блестящей безделушки. " + _marauder_base_rumor()
         "mechanics_storekeeper": line = "Склад не резиновый. Завалишь нас одним товаром — цена просядет."
         "lazaret_doctor": line = "Тяжёлые случаи лечатся запасами, а запасы сами себя не пополняют."
         "lazaret_researcher": line = "Образцы и реагенты интересуют нас больше оружия."
@@ -22808,7 +22879,7 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
 
     var poi_name = str(poi.get("short_name",poi.get("name","ОБЪЕКТ")))
     # settlements: the sector name sits on the street corner, not behind a facade
-    var label_origin = Vector2(344,462) if safe_settlement else Vector2(292,272)
+    var label_origin = Vector2(344,462) if safe_settlement or cell_data.has("settlement_style") else Vector2(292,272)
     _create_world_label(chunk,label_origin,poi_name,8,Color("c4b77f"))
     _create_world_label(chunk,label_origin + Vector2(0,14),role.to_upper(),6,Color("8f9686"))
     for access in cell_data.get("access_points",[]):
@@ -22895,7 +22966,7 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
     if not poi_story_clue.is_empty():
         _create_environmental_story_clue(chunk,poi_story_clue)
     if cell_data.has("settlement_style"):
-        _dress_faction_settlement(chunk,coord,cell_data,str(poi.get("name",poi_name)))
+        _dress_faction_settlement(chunk,coord,cell_data,"ЧЁРНЫЙ ДВОР" if bool(cell_data.get("marauder_base",false)) else str(poi.get("name",poi_name)))
     _spawn_faction_npcs(chunk,poi_id,cell_offset)
     var vertical_entry = HighRiskFloorCatalog.ground_entry(poi_id,cell_offset)
     if not vertical_entry.is_empty():
@@ -23110,15 +23181,21 @@ func _settlement_accent(style:String) -> Color:
         "rubezh": return Color("5c6a42")
         "mechanics": return Color("c9a13a")
         "lazaret": return Color("b8433a")
+        "raiders": return Color("2a1a18")
     return Color("8b7651")
 
 func _dress_faction_settlement(chunk,coord,cell_data:Dictionary,settlement_name:String):
     var style = str(cell_data.get("settlement_style","perron"))
     chunk.set_meta("faction_settlement",style)
-    _settlement_ground(chunk,coord,cell_data,style)
+    # dev65: the raiders' base is a taken industrial site - the Mechanics'
+    # floors and streets, the Rubezh's concrete wall, its own dressing on top
+    var look = "mechanics" if style == "raiders" else style
+    if cell_data.has("keep_clear"):
+        chunk.set_meta("settlement_keep_clear",cell_data["keep_clear"])
+    _settlement_ground(chunk,coord,cell_data,look)
     _settlement_perimeter(chunk,style,cell_data.get("perimeter",{}),settlement_name)
-    _settlement_yard_fences(chunk,cell_data,style)
-    _settlement_streets(chunk,coord,cell_data,style)
+    _settlement_yard_fences(chunk,cell_data,look)
+    _settlement_streets(chunk,coord,cell_data,look)
     var placed = 0
     var skipped = []
     for piece in cell_data.get("set_pieces",[]):
@@ -23138,9 +23215,101 @@ func _dress_faction_settlement(chunk,coord,cell_data:Dictionary,settlement_name:
     var quarantine = cell_data.get("quarantine",Rect2())
     if typeof(quarantine) == TYPE_RECT2 and quarantine.size != Vector2.ZERO:
         _settlement_quarantine_pen(chunk,quarantine)
-    _settlement_utilities(chunk,cell_data,style)
-    _settlement_street_life(chunk,coord,cell_data,style)
+    _settlement_utilities(chunk,cell_data,look)
+    _settlement_street_life(chunk,coord,cell_data,"rubezh" if style == "raiders" else style)
     _settlement_clutter(chunk,coord,cell_data,style)
+    if style == "raiders":
+        _dress_marauder_base(chunk,coord,cell_data)
+
+# ---------------------------------------------------------- dev65: the base --
+# Painted words on the outer face of the south wall (the face you see from
+# outside), the rail spur, a fire pit on the crossing, spent cases and old blood
+# at the gate. Visual only; everything solid comes from the catalog.
+const BASE_GRAFFITI = {
+    6:[[Vector2(120,722),"ЧЁРНЫЙ ДВОР"],[Vector2(470,724),"НЕ ПОДХОДИ"]],
+    7:[[Vector2(110,724),"ПРИСТРЕЛИМ"],[Vector2(650,722),"ЗАЛАТАТЬ!"]],
+    8:[[Vector2(300,722),"СВОИХ НЕ БРОСАЕМ"]],
+    2:[[Vector2(470,10),"ЧЁРНЫЙ ДВОР"]]
+}
+
+func _dress_marauder_base(chunk,coord,cell_data:Dictionary):
+    chunk.set_meta("marauder_base",true)
+    var idx = int(cell_data.get("settlement_index",4))
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 70913 + coord.y * 15511 + 65)) + 9
+    for g in BASE_GRAFFITI.get(idx,[]):
+        var label = _create_world_label(chunk,g[0],str(g[1]),8,Color(0.62,0.10,0.08,0.78))
+        label.z_as_relative = false
+        label.z_index = 7
+        label.rotation = rng.randf_range(-0.04,0.04)
+        label.set_meta("base_graffiti",true)
+    var floor_layer = Node2D.new()
+    floor_layer.name = "BaseFloor"
+    floor_layer.z_index = -6
+    chunk.add_child(floor_layer)
+    if idx == 5:
+        _marauder_base_rails(floor_layer)
+    if idx == 4:
+        # a scorched fire pit on the crossing where the raiders gather
+        _ellipse(Vector2(384,390),30,12,Color(0.05,0.04,0.035,0.45),floor_layer)
+        _ellipse(Vector2(384,390),18,7,Color(0.10,0.07,0.05,0.6),floor_layer)
+    if idx == 3:
+        # the gate saw fighting: spent cases and old stains in the opening
+        for i in range(10):
+            var p = Vector2(rng.randf_range(30,150),rng.randf_range(340,430))
+            _rect(p,Vector2(2,1),Color(0.72,0.58,0.26,0.85),floor_layer)
+        for i in range(2):
+            _ellipse(Vector2(rng.randf_range(60,140),rng.randf_range(350,420)),rng.randf_range(6,10),rng.randf_range(3,5),Color(0.24,0.05,0.04,0.42),floor_layer)
+
+func _marauder_base_rails(layer):
+    # the plant's spur: it once ran on east through the wall; the raiders shut it
+    var tie = Color(0.30,0.22,0.15,1.0)
+    var steel = Color(0.52,0.50,0.46,1.0)
+    for track in [[44.0,600.0],[268.0,680.0]]:
+        var x0 = float(track[0])
+        var y = float(track[1])
+        _rect(Vector2((x0 + CHUNK_SIZE) * 0.5,y),Vector2(CHUNK_SIZE - x0,26),Color(0.20,0.18,0.15,0.95),layer)
+        var x = x0 + 4.0
+        while x < CHUNK_SIZE:
+            _rect(Vector2(x,y),Vector2(7,24),tie,layer)
+            x += 20.0
+        for off in [-6.0,6.0]:
+            _rect(Vector2((x0 + CHUNK_SIZE) * 0.5,y + off),Vector2(CHUNK_SIZE - x0,2),steel,layer)
+            _rect(Vector2((x0 + CHUNK_SIZE) * 0.5,y + off + 1.0),Vector2(CHUNK_SIZE - x0,1),Color(0.20,0.19,0.18,1.0),layer)
+    # the switch: the second track leaves the first one
+    for off in [-6.0,6.0]:
+        var line = Line2D.new()
+        line.width = 2.0
+        line.default_color = steel
+        line.add_point(Vector2(196,600 + off))
+        line.add_point(Vector2(270,680 + off))
+        layer.add_child(line)
+    # buffer stop at the dead end
+    _rect(Vector2(40,600),Vector2(6,30),Color(0.62,0.16,0.12,1.0),layer)
+    for k in range(3):
+        _rect(Vector2(40,590 + k * 10),Vector2(6,4),Color(0.86,0.84,0.78,1.0),layer)
+
+func _marauder_base_breach(chunk,at:Vector2,half:float):
+    # the gap: broken wall ends, slabs and rubble kicked out to both sides
+    var root = Node2D.new()
+    root.z_index = 6
+    root.z_as_relative = false
+    root.set_meta("base_breach",true)
+    chunk.add_child(root)
+    for sgn in [-1.0,1.0]:
+        var end = at + Vector2(sgn * half,0)
+        _poly(PackedVector2Array([end + Vector2(0,-30),end + Vector2(sgn * 6,-22),end + Vector2(sgn * 3,-12),end + Vector2(sgn * 8,-4),end]),Color(0.30,0.30,0.28,1.0),root)
+        _ellipse(end + Vector2(sgn * 4,6),10,4,Color(0.38,0.37,0.34,0.95),root)
+    var debris = Node2D.new()
+    debris.z_index = -5
+    chunk.add_child(debris)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(at.x * 13.0 + at.y) + 4
+    for i in range(16):
+        var p = at + Vector2(rng.randf_range(-half - 24,half + 24),rng.randf_range(-26,22))
+        _rect(p,Vector2(rng.randf_range(2,6),rng.randf_range(2,4)),Color(0.42,0.41,0.38,rng.randf_range(0.6,0.95)),debris)
+    for sgn in [-1.0,1.0]:
+        _settlement_piece(chunk,FactionSettlementCatalog._piece("rubble_pile",at + Vector2(sgn * (half + 44.0),22.0),0.5))
 
 func _settlement_spot_clear(chunk,pos,radius:float) -> bool:
     # Settlement pieces are authored, but a building archetype can still grow a
@@ -23179,6 +23348,7 @@ func _settlement_piece(chunk,piece:Dictionary):
             shared = _street_furniture_sprite(kind.trim_prefix("street:"),chunk,pos,5)
         if shared != null:
             shared.set_meta("settlement_piece_kind",kind)
+            shared.set_meta("settlement_piece_solid",solid)
         return shared
     if kind.begins_with("prop:"):
         var prop = _world_prop_sprite(kind.trim_prefix("prop:"),chunk,pos,5,float(piece.get("scale",0.5)))
@@ -23215,6 +23385,7 @@ func _settlement_piece(chunk,piece:Dictionary):
     node.add_to_group("settlement_pieces")
     node.set_meta("poi_piece_kind",kind)
     node.set_meta("settlement_piece_kind",kind)
+    node.set_meta("settlement_piece_solid",solid)
     chunk.add_child(node)
     var shadow_w = max(10.0,solid.x * 0.62) if solid != Vector2.ZERO else 26.0 * piece_scale * 2.0
     _ellipse(Vector2(5,1),shadow_w,4.0,Color(0.01,0.012,0.012,0.26),node)
@@ -23409,11 +23580,23 @@ const SETTLEMENT_LITTER = ["street_debris","newspapers_wide","scattered_bottles"
 func _settlement_clutter_spot(chunk,pos:Vector2,radius:float,allow_street:bool = false) -> bool:
     if not allow_street and (abs(pos.x - 384.0) < 50.0 + radius or abs(pos.y - 384.0) < 50.0 + radius):
         return false
+    for r in chunk.get_meta("settlement_keep_clear",[]):
+        if r.grow(radius).has_point(pos):
+            return false
     if not _settlement_spot_clear(chunk,pos,radius):
         return false
     var gp = chunk.global_position + pos
     for n in get_tree().get_nodes_in_group("poi_set_pieces"):
-        if is_instance_valid(n) and n.global_position.distance_to(gp) < radius + 22.0:
+        if not is_instance_valid(n):
+            continue
+        # wide pieces (a tank, a scrap heap) keep clutter off their whole length
+        var half = 22.0
+        var solid = n.get_meta("settlement_piece_solid",Vector2.ZERO)
+        if typeof(solid) == TYPE_VECTOR2 and solid.x * 0.5 + 8.0 > half:
+            var d = (gp - n.global_position).abs()
+            if d.x < radius + solid.x * 0.5 + 8.0 and d.y < radius + 22.0:
+                return false
+        elif n.global_position.distance_to(gp) < radius + half:
             return false
     for n in get_tree().get_nodes_in_group("settlement_garland_posts"):
         if not is_instance_valid(n) or n.get_parent() != chunk:
@@ -23480,7 +23663,7 @@ func _settlement_clutter(chunk,coord,cell_data:Dictionary,style:String):
                 var p = Vector2(rng.randf_range(r.position.x + 20,r.end.x - 20),rng.randf_range(r.position.y + 24,r.end.y - 20))
                 if _settlement_clutter_spot(chunk,p,14.0):
                     var kind = [0,1,2,7,4][rng.randi_range(0,4)]
-                    if style == "rubezh" or style == "mechanics":
+                    if style == "rubezh" or style == "mechanics" or style == "raiders":
                         kind = [7,3,4,2][rng.randi_range(0,3)]
                     var bush = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(kind * 64,0,64,64),p,0.5)
                     _vegetation_sway(bush,kind)
@@ -23524,14 +23707,21 @@ func _settlement_clutter(chunk,coord,cell_data:Dictionary,style:String):
 
 # ---------------------------------------------------------------- perimeter --
 func _settlement_perimeter(chunk,style:String,walls:Dictionary,settlement_name:String):
-    var row = max(0,SETTLEMENT_STYLES.find(style))
+    var row = max(0,SETTLEMENT_STYLES.find("rubezh" if style == "raiders" else style))
     for side in walls.keys():
-        var gate = bool(walls[side])
+        # dev65: {"breach": x, "half": h} - a gap knocked through the wall
+        var breach = walls[side] if typeof(walls[side]) == TYPE_DICTIONARY else {}
+        var gate = false if not breach.is_empty() else bool(walls[side])
         # corner sectors: trim each run to the perpendicular wall so corners close cleanly
         var x_from = SETTLEMENT_WALL_X_W if walls.has("w") else 0.0
         var x_to = SETTLEMENT_WALL_X_E if walls.has("e") else float(CHUNK_SIZE)
         var y_from = SETTLEMENT_WALL_Y_N if walls.has("n") else 0.0
         var y_to = SETTLEMENT_WALL_Y_S if walls.has("s") else float(CHUNK_SIZE)
+        if not breach.is_empty():
+            var y_wall = SETTLEMENT_WALL_Y_N if str(side) == "n" else SETTLEMENT_WALL_Y_S
+            _settlement_wall_h(chunk,row,y_wall,true,x_from,x_to,float(breach.get("breach",384.0)),float(breach.get("half",30.0)))
+            _marauder_base_breach(chunk,Vector2(float(breach.get("breach",384.0)),y_wall),float(breach.get("half",30.0)))
+            continue
         match str(side):
             "n": _settlement_wall_h(chunk,row,SETTLEMENT_WALL_Y_N,gate,x_from,x_to)
             "s": _settlement_wall_h(chunk,row,SETTLEMENT_WALL_Y_S,gate,x_from,x_to)
@@ -23541,10 +23731,10 @@ func _settlement_perimeter(chunk,style:String,walls:Dictionary,settlement_name:S
             _settlement_gate(chunk,style,str(side),settlement_name)
     chunk.set_meta("settlement_walls",walls.keys())
 
-func _settlement_wall_h(chunk,row:int,y:float,gate:bool,x_from:float = 0.0,x_to:float = CHUNK_SIZE):
+func _settlement_wall_h(chunk,row:int,y:float,gate:bool,x_from:float = 0.0,x_to:float = CHUNK_SIZE,gap_x:float = 384.0,gap_half:float = SETTLEMENT_GATE_HALF):
     var spans = [[x_from,x_to]]
     if gate:
-        spans = [[x_from,384.0 - SETTLEMENT_GATE_HALF],[384.0 + SETTLEMENT_GATE_HALF,x_to]]
+        spans = [[x_from,gap_x - gap_half],[gap_x + gap_half,x_to]]
     var root = Node2D.new()
     root.z_index = 6
     root.z_as_relative = false
@@ -23715,6 +23905,15 @@ func _settlement_gate(chunk,style:String,side:String,settlement_name:String):
                 var t = (float(i) + 0.5) / 8.0
                 var p = a.lerp(b,t) + inward * 10.0
                 _rect(p,Vector2(8,6) if horizontal else Vector2(6,8),Color(0.78,0.62,0.18,0.55) if i % 2 == 0 else Color(0.08,0.08,0.07,0.45),bar)
+        "raiders":
+            # a sandbagged checkpoint with a wrecked-car chicane and a barrier
+            _settlement_piece(chunk,{"kind":"sandbag_nest","pos":post_a,"scale":0.45,"solid":Vector2(40,10)})
+            _settlement_piece(chunk,{"kind":"fire_barrel","pos":post_b,"scale":0.5,"solid":Vector2(10,6)})
+            _settlement_piece(chunk,{"kind":"warning_sign","pos":mid - inward * 34.0 + (Vector2(0,SETTLEMENT_GATE_HALF + 22.0) if not horizontal else Vector2(SETTLEMENT_GATE_HALF + 22.0,0)),"scale":0.5,"solid":Vector2.ZERO})
+            # staggered concrete blocks: walk round them, drive at a crawl
+            var along = Vector2(0,1) if not horizontal else Vector2(1,0)
+            _settlement_piece(chunk,FactionSettlementCatalog._piece("jersey_blocks",mid + inward * 100.0 + along * 40.0))
+            _settlement_piece(chunk,FactionSettlementCatalog._piece("jersey_blocks",mid + inward * 162.0 - along * 40.0))
         "lazaret":
             _settlement_piece(chunk,{"kind":"warning_sign","pos":post_a + (Vector2(0,-40) if horizontal else Vector2(-40,0)) * (1.0 if side in ["s","e"] else -1.0),"scale":0.5,"solid":Vector2.ZERO})
             _settlement_piece(chunk,{"kind":"wash_station","pos":post_a,"scale":0.45,"solid":Vector2(30,8)})
@@ -23782,16 +23981,17 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
     var y0 = SETTLEMENT_WALL_Y_N if walls.has("n") else 0.0
     var y1 = SETTLEMENT_WALL_Y_S if walls.has("s") else float(CHUNK_SIZE)
     _settlement_tex(layer,mats[1],Rect2(x0,y0,x1 - x0,y1 - y0),origin)
-    var sy0 = y0 if walls.has("n") and not bool(walls["n"]) else 0.0
-    var sy1 = y1 if walls.has("s") and not bool(walls["s"]) else float(CHUNK_SIZE)
-    var sx0 = x0 if walls.has("w") and not bool(walls["w"]) else 0.0
-    var sx1 = x1 if walls.has("e") and not bool(walls["e"]) else float(CHUNK_SIZE)
+    var sy0 = y0 if walls.has("n") and not (walls["n"] is bool and walls["n"]) else 0.0
+    var sy1 = y1 if walls.has("s") and not (walls["s"] is bool and walls["s"]) else float(CHUNK_SIZE)
+    var sx0 = x0 if walls.has("w") and not (walls["w"] is bool and walls["w"]) else 0.0
+    var sx1 = x1 if walls.has("e") and not (walls["e"] is bool and walls["e"]) else float(CHUNK_SIZE)
     _settlement_tex(layer,mats[0],Rect2(336,sy0,96,sy1 - sy0),origin,true)
     _settlement_tex(layer,mats[0],Rect2(sx0,336,sx1 - sx0,96),origin)
     _settlement_street_marks(layer,style,rng,idx)
     _settlement_road_decals(layer,cell_data,style,rng)
-    # town square on the central crossing
-    if idx == 4:
+    # town square on the central crossing (the raiders keep a fire pit instead)
+    var base_cell = bool(cell_data.get("marauder_base",false))
+    if idx == 4 and not base_cell:
         var sq = Rect2(300,300,168,168)
         _settlement_tex(layer,"pavement",sq,chunk.global_position)
     var blocks = cell_data.get("blocks",{})
@@ -23824,7 +24024,7 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
         # pavement in front of the buildings (the street line)
         for rect in block.get("buildings",[]):
             _rect(Vector2(rect.get_center().x,rect.end.y + 4.0),Vector2(rect.size.x + 16.0,10.0),pal[2].darkened(0.06),layer)
-    if idx == 4:
+    if idx == 4 and not base_cell:
         var sq = Rect2(300,300,168,168)
         _ellipse(sq.get_center() + Vector2(0,40),26,12,pal[4].darkened(0.2),layer)
         _ellipse(sq.get_center() + Vector2(0,40),22,9,Color(0.26,0.36,0.20),layer)
@@ -32856,6 +33056,31 @@ func _close_base_build():
         base_build_panel.visible = false
 
 
+# dev65: the base in the world's news (the chronicle, the settlements' talk)
+const MARAUDER_BASE_NEWS = {
+    "boss":"На «Чёрном дворе» убит Седой, главарь мародёров. Говорят, его люди грызутся за общак.",
+    "cleared":"«Чёрный двор» зачищен: гарнизон мародёров перебит, ворота стоят открытыми. Артель надеется вернуть завод.",
+    "reclaimed":"На «Чёрный двор» пришли новые люди. Над воротами снова горят бочки — база мародёров ожила."
+}
+
+func _marauder_base_news(kind:String):
+    var text = str(MARAUDER_BASE_NEWS.get(kind,""))
+    if text == "":
+        return
+    _record_world_news("danger" if kind == "reclaimed" else "world","mechanics",text,world_day,int(world_minutes),kind != "reclaimed")
+    if kind == "cleared" or kind == "boss":
+        discovered_pois["marauder_base"] = true
+
+func _marauder_base_rumor() -> String:
+    # what the settlements say about the base, depending on how it stands
+    if marauder_base == null:
+        return ""
+    if marauder_base.is_cleared():
+        return "На «Чёрном дворе» тихо — пока туда не вернулись новые."
+    if int(marauder_base.state.get("boss_dead_day",-1)) >= 0:
+        return "Седого на «Чёрном дворе» больше нет, но его люди ещё держат забор."
+    return "Восточнее Артели, на старом заводе ЖБИ, засели мародёры Седого — «Чёрный двор». Туда без нужды не ходят."
+
 func _record_world_news(kind:String,faction_id:String,text:String,event_day:int = -1,event_minute:int = -1,announce:bool = false) -> Dictionary:
     var day = world_day if event_day < 1 else event_day
     var minute = int(world_minutes) if event_minute < 0 and day == world_day else max(0,event_minute)
@@ -33880,7 +34105,14 @@ func _refresh_settlement_project_ui():
     contract_project_button.visible = false
 
 func _contract_is_ready(contract:Dictionary) -> bool:
-    return ContractSystem.can_complete(contract,_contract_inventory_counts(),discovered_pois)
+    return ContractSystem.can_complete(contract,_contract_inventory_counts(),_contract_known_sites())
+
+func _contract_known_sites() -> Dictionary:
+    # discovered sites, plus "cleared:<poi>" for a raiders' base that fell (dev65)
+    var known = discovered_pois.duplicate()
+    if marauder_base != null and (marauder_base.is_cleared() or int(marauder_base.state.get("boss_dead_day",-1)) >= 0):
+        known["cleared:marauder_base"] = true
+    return known
 
 func _refresh_contract_ui():
     if contract_panel == null:
@@ -33932,7 +34164,9 @@ func _refresh_contract_ui():
         for contract in offers:
             var offer_prefix = "[ЛИЧНО]"
             if str(contract.get("owner_npc_id","")) == "":
-                if str(contract.get("kind","")) == "discover_poi":
+                if str(contract.get("kind","")) == "clear_poi":
+                    offer_prefix = "[ЗАЧИСТКА • РИСК 5]"
+                elif str(contract.get("kind","")) == "discover_poi":
                     var route_poi = RegionCatalog.poi_by_id(str(contract.get("poi_id","")))
                     var route_risk = clampi(int(route_poi.get("risk",0)),0,5)
                     offer_prefix = "[РАЗВЕДКА • РИСК %d]" % route_risk if route_risk > 0 else "[РАЗВЕДКА]"
@@ -33975,7 +34209,7 @@ func _refresh_contract_selection_status():
         return
     var names = _contract_item_names()
     var requirement = ContractSystem.requirement_text(contract,names)
-    var progress = ContractSystem.progress_text(contract,_contract_inventory_counts(),discovered_pois,names)
+    var progress = ContractSystem.progress_text(contract,_contract_inventory_counts(),_contract_known_sites(),names)
     var reward = contract.get("reward",{})
     contract_status.text = "%s\n%s\nУсловие: %s\nПрогресс: %s\nНаграда: %d тал. • +%d реп." % [
         str(contract.get("description","")),str(contract.get("hint","")),requirement,progress,
@@ -34095,8 +34329,8 @@ func _contract_complete_selected():
         contract_status.text = "Активный контракт не найден."
         return false
     var counts = _contract_inventory_counts()
-    if not ContractSystem.can_complete(contract,counts,discovered_pois):
-        contract_status.text = "Условия пока не выполнены.\n" + ContractSystem.progress_text(contract,counts,discovered_pois,_contract_item_names())
+    if not ContractSystem.can_complete(contract,counts,_contract_known_sites()):
+        contract_status.text = "Условия пока не выполнены.\n" + ContractSystem.progress_text(contract,counts,_contract_known_sites(),_contract_item_names())
         return false
     if str(contract.get("kind","")) == "delivery":
         var requirements = ContractSystem.requirements_for_completion(contract,counts)
@@ -34247,6 +34481,7 @@ func _save_state():
         "map_markers":map_markers,
         "player_bodies":player_bodies,
         "marauder_squads":marauder_director.serialize() if marauder_director != null else [],
+        "marauder_base":marauder_base.serialize() if marauder_base != null else {},
         "next_body_id":next_body_id,
         "picked_world_items":picked_world_items,
         "dropped_items":dropped_items,
@@ -34490,11 +34725,14 @@ func _load_state():
                 var clean_body = {"coord":[int(b["coord"][0]),int(b["coord"][1])],"pos":[float(b["pos"][0]),float(b["pos"][1])],"id":str(b.get("id","body")),"day":int(b.get("day",1)),"dir":int(b.get("dir",2))}
                 if str(b.get("kind","player")) == "marauder" and str(b.get("sheet","")).begins_with("res://art/marauders/"):
                     clean_body["kind"] = "marauder"
-                    clean_body["name"] = "МАРОДЁР"
+                    clean_body["name"] = "ГЛАВАРЬ «СЕДОЙ»" if str(b.get("name","")) == "ГЛАВАРЬ «СЕДОЙ»" else "МАРОДЁР"
                     clean_body["sheet"] = str(b["sheet"])
                 player_bodies.append(clean_body)
     next_body_id = max(1,int(parsed.get("next_body_id",player_bodies.size() + 1)))
     marauder_saved = parsed.get("marauder_squads",[]) if typeof(parsed.get("marauder_squads",[])) == TYPE_ARRAY else []
+    marauder_base_saved = parsed.get("marauder_base",{}) if typeof(parsed.get("marauder_base",{})) == TYPE_DICTIONARY else {}
+    if marauder_base != null:
+        marauder_base.load_state(marauder_base_saved)
     picked_world_items = parsed.get("picked_world_items",{})
     dropped_items = parsed.get("dropped_items",[])
     next_drop_id = int(parsed.get("next_drop_id",1))

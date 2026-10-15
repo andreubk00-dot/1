@@ -85,6 +85,15 @@ const TEMPLATES = {
         "reward":{"tickets":132,"reputation":14,"resources":{"technical":18.0},"route":{"id":"route_mechanics_factory","beneficiaries":["mechanics"],"daily_resources":{"technical":0.65}}}
     },
 
+    # dev65: the raiders' base east of the Artel. Done when the boss is dead.
+    "mechanics_black_yard":{
+        "faction":"mechanics","title":"ЧЁРНЫЙ ДВОР","kind":"clear_poi","need_key":"security","min_rep":20,
+        "description":"Люди Седого с завода ЖБИ грабят наши обозы на восточной дороге. Саныч хочет, чтобы этой базы не стало.",
+        "hint":"База мародёров «Чёрный двор» — бывший завод ЖБИ восточнее Артели. Убей главаря Седого. Ворота с запада под охраной; говорят, в южной стене есть пролом.",
+        "poi_id":"marauder_base",
+        "reward":{"tickets":180,"reputation":16,"resources":{"security":20.0,"technical":8.0}}
+    },
+
     "lazaret_dressing_supply":{
         "faction":"lazaret","title":"ПЕРЕВЯЗОЧНАЯ","kind":"delivery","need_key":"medicine","min_rep":0,
         "description":"Лазарету нужны материалы для ежедневной перевязочной работы.",

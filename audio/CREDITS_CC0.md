@@ -66,6 +66,7 @@
 - v0-v3_hurt / v0-v3_shout — https://opengameart.org/content/male-gruntyelling-sounds (HaelDB; двойная лицензия OGA-BY 3.0 / CC0 — используется вариант CC0)
 - death_1-6 — https://opengameart.org/content/grunts-male-death-and-pain (thebardofblasphemy)
 - `audio/world/bullet_flyby_*.wav` — синтезированы скриптом импорта (без внешних источников)
+- `audio/world/base_siren.wav` — сирена базы мародёров, синтезирована скриптом импорта (без внешних источников)
 
 ## Фон — `audio/ambience/` (петли по 4 с)
 - rain — https://opengameart.org/content/amb-rain-loop-1 (Kresiek The Furry)

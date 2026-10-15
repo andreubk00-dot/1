@@ -103,6 +103,11 @@ var stagger_t = 0.0
 var knock = Vector2.ZERO
 var flinch_t = 0.0
 var door_t = 0.0
+# dev65: base garrison - posts keep their men on a leash, towers see further
+var leash_pos = Vector2(INF, INF)
+var leash = 0.0
+var sight_mult = 1.0
+var post_id = ""
 
 
 func setup(p_game, p_outfit: String, p_weapon: String, p_personality: String) -> void:
@@ -245,6 +250,7 @@ func _player_visible() -> bool:
     var reach = lerp(330.0, 170.0, night)
     if game.flashlight_on and night > 0.3:
         reach = max(reach, 320.0)
+    reach *= sight_mult
     if game.is_crouching:
         reach *= 0.7
     if d > reach:
@@ -422,6 +428,8 @@ func _patrol_move(delta: float, speed: float) -> Vector2:
         return Vector2.ZERO
     var goal = squad.slot_target(self)
     if global_position.distance_to(goal) < 8.0:
+        if squad.has_method("idle_look"):
+            squad.idle_look(self, delta)
         return Vector2.ZERO
     var s = speed * (1.25 if slot > 0 and global_position.distance_to(goal) > 40.0 else 1.0)
     return _go_to(goal, s, delta)
@@ -552,6 +560,9 @@ func _free_step(v: Vector2) -> bool:
 
 
 func _go_to(goal: Vector2, speed: float, delta: float) -> Vector2:
+    if leash > 0.0 and goal.distance_to(leash_pos) > leash:
+        # a sentry fights from his post, he does not leave it
+        goal = leash_pos + (goal - leash_pos).limit_length(leash)
     var to = goal - global_position
     if to.length() < 4.0:
         return Vector2.ZERO

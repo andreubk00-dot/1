@@ -368,3 +368,20 @@ for i in range(3):
     x = highpass(noise * 0.6 + sweep * 0.25, 900 + i * 250) * env
     x[:int(0.006 * SR)] += rng.standard_normal(int(0.006 * SR)) * np.linspace(1, 0, int(0.006 * SR)) * 0.9
     save(norm(x, 0.42), os.path.join(ROOT, 'audio', 'world', 'bullet_flyby_%d.wav' % (i + 1)))
+
+# --- dev65: the siren on the raiders' base -----------------------------------
+# A motor siren wailing up and down three times: the pitch climbs fast and
+# sinks slowly, a rotor buzz rides on top, the far field is band-limited.
+T = 9.0
+t = np.arange(int(T * SR)) / SR
+cycle = (t % 3.0) / 3.0
+rise = np.clip(cycle / 0.42, 0.0, 1.0)
+fall = np.clip((cycle - 0.55) / 0.45, 0.0, 1.0)
+pitch = 210.0 + 470.0 * (np.sin(rise * np.pi / 2) ** 1.4) * (1.0 - fall ** 1.6)
+phase = 2 * np.pi * np.cumsum(pitch) / SR
+tone = np.sin(phase) + 0.42 * np.sin(2 * phase + 0.3) + 0.22 * np.sin(3 * phase + 0.7) + 0.1 * np.sin(5 * phase)
+buzz = 1.0 + 0.10 * np.sin(2 * np.pi * 38.0 * t)
+level = 0.35 + 0.65 * np.sin(rise * np.pi / 2) * (1.0 - fall)
+x = highpass(tone * buzz * level, 160)
+x *= np.minimum(1.0, t / 0.25) * np.minimum(1.0, (T - t) / 0.6)
+save(norm(x, 0.5), os.path.join(ROOT, 'audio', 'world', 'base_siren.wav'))
