@@ -55,7 +55,8 @@ func run() -> void:
         check(trade_npcs == 2,settlement_id + " must expose two physical traders")
 
     var state = FactionEconomy.default_state()
-    check(state.get("traders",{}).size() == 8,"default faction state must persist all trader states")
+    # dev66: eight town traders + the wandering trader on the road
+    check(state.get("traders",{}).size() == 9,"default faction state must persist all trader states")
 
     # Finite stock + actual ticket transfer.
     FactionEconomy.add_tickets(state,1000)

@@ -117,11 +117,39 @@ const TRADERS = {
     }
 }
 
+# dev66: traders on the road. Not part of any settlement (ids() keeps the eight
+# town traders); they walk with a guard among the roaming squads, sell at road
+# prices (no settlement behind them) and bring fresh goods every time they come.
+const WANDERERS = {
+    "wanderer_kuzmich":{
+        "name":"Кузьмич","npc_id":"","faction":"","wanderer":true,
+        "role":"бродячий торговец","restock_days":999,"ticket_reserve":280,
+        "accepted_categories":["food","water","medicine","ammo","weapon","armor","parts","household","tools","technical","electronics"],
+        "stock":[
+            {"id":"ammo_9x18","qty":30,"tier":"outsider"},{"id":"ammo_12g","qty":16,"tier":"outsider"},
+            {"id":"ammo_762","qty":30,"tier":"outsider"},{"id":"ammo_762x25","qty":16,"tier":"outsider"},
+            {"id":"bandage","qty":4,"tier":"outsider"},{"id":"painkillers","qty":2,"tier":"outsider"},
+            {"id":"antiseptic","qty":1,"tier":"outsider"},{"id":"canned_meat","qty":3,"tier":"outsider"},
+            {"id":"water","qty":3,"tier":"outsider"},{"id":"tape","qty":3,"tier":"outsider"},
+            {"id":"flashlight","qty":1,"tier":"outsider"},{"id":"makarov_extmag","qty":1,"tier":"outsider"}
+        ]
+    }
+}
+
 static func ids() -> Array:
     return TRADERS.keys()
 
+static func all_ids() -> Array:
+    return TRADERS.keys() + WANDERERS.keys()
+
+static func _data(trader_id:String) -> Dictionary:
+    return TRADERS.get(trader_id,WANDERERS.get(trader_id,{}))
+
+static func is_wanderer(trader_id:String) -> bool:
+    return WANDERERS.has(trader_id)
+
 static func trader(trader_id:String) -> Dictionary:
-    return TRADERS.get(trader_id,{}).duplicate(true)
+    return _data(trader_id).duplicate(true)
 
 static func trader_for_npc(npc_id:String) -> String:
     for trader_id in TRADERS.keys():
@@ -144,14 +172,14 @@ static func required_rep(trader_id:String,item_id:String) -> int:
     return int(REP_MIN.get(str(spec.get("tier","outsider")),-9999))
 
 static func stock_spec(trader_id:String,item_id:String) -> Dictionary:
-    var data = TRADERS.get(trader_id,{})
+    var data = _data(trader_id)
     for raw in data.get("stock",[]):
         if str(raw.get("id","")) == item_id:
             return raw.duplicate(true)
     return {}
 
 static func accepts_item(trader_id:String,item_id:String) -> bool:
-    var data = TRADERS.get(trader_id,{})
+    var data = _data(trader_id)
     if data.is_empty() or not BASE_VALUES.has(item_id):
         return false
     var category = FactionCatalog.item_category(item_id)
@@ -159,8 +187,8 @@ static func accepts_item(trader_id:String,item_id:String) -> bool:
 
 static func default_trader_states(day:int = 1) -> Dictionary:
     var result = {}
-    for trader_id in TRADERS.keys():
-        var data = TRADERS[trader_id]
+    for trader_id in all_ids():
+        var data = _data(trader_id)
         var stock = {}
         for raw in data.get("stock",[]):
             stock[str(raw.get("id",""))] = max(0,int(raw.get("qty",0)))
@@ -175,7 +203,7 @@ static func sanitize_trader_states(raw,day:int = 1) -> Dictionary:
     var clean = default_trader_states(day)
     if typeof(raw) != TYPE_DICTIONARY:
         return clean
-    for trader_id in TRADERS.keys():
+    for trader_id in all_ids():
         var src = raw.get(trader_id,{})
         if typeof(src) != TYPE_DICTIONARY:
             continue
@@ -190,7 +218,7 @@ static func sanitize_trader_states(raw,day:int = 1) -> Dictionary:
                 var item_id = str(raw_id)
                 if BASE_VALUES.has(item_id) and accepts_item(trader_id,item_id):
                     stock[item_id] = clamp(int(incoming_stock[raw_id]),0,999)
-            for spec in TRADERS[trader_id].get("stock",[]):
+            for spec in _data(trader_id).get("stock",[]):
                 var configured_id = str(spec.get("id",""))
                 if not stock.has(configured_id):
                     stock[configured_id] = 0

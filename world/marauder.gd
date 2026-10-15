@@ -203,10 +203,15 @@ func _ready() -> void:
     last_pos = global_position
     _set_clip("Idle", 0)
     if personality == "neutral":
-        # a wanderer who means no harm can be talked to (main: _talk_marauder)
+        # a wanderer who means no harm can be talked to (main: _talk_marauder);
+        # the road trader opens his stall instead
         add_to_group("interactable")
-        set_meta("interaction_type", "marauder_talk")
-        set_meta("display_name", "ГОВОРИТЬ")
+        if has_meta("trader_id"):
+            set_meta("interaction_type", "trader")
+            set_meta("display_name", "ТОРГОВАТЬ")
+        else:
+            set_meta("interaction_type", "marauder_talk")
+            set_meta("display_name", "ГОВОРИТЬ")
         set_meta("interaction_radius", 56.0)
 
 
@@ -368,7 +373,7 @@ func become_hostile() -> void:
         return
     hostile_to_player = true
     personality = "hostile"
-    if str(get_meta("interaction_type", "")) == "marauder_talk":
+    if str(get_meta("interaction_type", "")) in ["marauder_talk", "trader"]:
         remove_from_group("interactable")
     _enter_combat(true)
     if squad != null:

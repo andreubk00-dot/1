@@ -33667,9 +33667,29 @@ func _open_trader(trader_id:String):
     trader_selected_stock_item = ""
     trader_selected_inventory_index = -1
     TradingMarket.ensure_state(faction_state,world_day)
-    TradingMarket.restock(faction_state,trader_id,world_day,false)
+    if not TraderCatalog.is_wanderer(trader_id):
+        TradingMarket.restock(faction_state,trader_id,world_day,false)
     _record_named_npc_interaction(trader_npc_id,"trade_open","Разговор у торгового прилавка.",0)
     _refresh_trader_ui()
+
+# dev66: the road trader brings a fresh pack every time he turns up: his
+# configured goods, give or take, and a few talons to buy with
+func _restock_wanderer(trader_id:String):
+    var data = TraderCatalog.trader(trader_id)
+    if data.is_empty():
+        return
+    TradingMarket.ensure_state(faction_state,world_day)
+    var traders = faction_state["traders"]
+    var record = traders.get(trader_id,{"stock":{},"ticket_reserve":0,"last_restock_day":world_day})
+    var stock = {}
+    for spec in data.get("stock",[]):
+        var qty = int(spec.get("qty",1))
+        stock[str(spec["id"])] = max(0,int(round(qty * randf_range(0.6,1.2)))) if qty > 1 else (1 if randf() < 0.6 else 0)
+    record["stock"] = stock
+    record["ticket_reserve"] = int(data.get("ticket_reserve",280))
+    record["last_restock_day"] = world_day
+    traders[trader_id] = record
+    faction_state["traders"] = traders
 
 func _close_trader():
     if trader_open:
@@ -33700,7 +33720,10 @@ func _refresh_trader_ui():
     var condition = FactionEconomy.settlement_condition(faction_state,faction_id)
     var reserve = TradingMarket.reserve(faction_state,active_trader_id)
     trader_title.text = "%s  •  %s" % [str(data.get("name","ТОРГОВЕЦ")).to_upper(),str(data.get("role","рынок")).to_upper()]
-    trader_subtitle.text = "%s  |  Репутация: %s (%d)  |  Талоны: %d  |  Резерв торговца: %d  |  Снабжение: %d%%  |  %s  |  %s" % [
+    if bool(data.get("wanderer",false)):
+        trader_subtitle.text = "На дороге  |  Талоны: %d  |  Резерв торговца: %d  |  Цены дорожные — за доставку до тебя" % [int(faction_state.get("currency_tickets",0)),reserve]
+    else:
+        trader_subtitle.text = "%s  |  Репутация: %s (%d)  |  Талоны: %d  |  Резерв торговца: %d  |  Снабжение: %d%%  |  %s  |  %s" % [
         str(faction_data.get("name",faction_id)),str(tier.get("name","ЧУЖОЙ")),rep,
         int(faction_state.get("currency_tickets",0)),reserve,int(round(condition)),
         SettlementCrisis.summary(faction_state,faction_id,world_day),

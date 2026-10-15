@@ -47,7 +47,8 @@ func run() -> void:
     check(FactionCatalog.ids().size() == 4,"stable faction catalog must contain four factions")
     check(TraderCatalog.ids().size() == 8,"stable trader catalog must contain eight traders")
     check(game.faction_state.get("factions",{}).size() == 4,"production startup lost faction state")
-    check(game.faction_state.get("traders",{}).size() == 8,"production startup lost trader state")
+    # dev66: eight town traders + the wandering trader on the road
+    check(game.faction_state.get("traders",{}).size() == 9,"production startup lost trader state")
     check(game.faction_state.has("relations") and game.faction_state.has("world_influence"),"stable startup missing faction relations state")
     check(game.faction_state.has("supply_events"),"stable startup missing supply-event state")
     check(game.faction_state.has("faction_endgame"),"stable startup missing endgame state")

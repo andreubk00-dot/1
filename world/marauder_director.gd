@@ -20,7 +20,12 @@ const SQUAD_TYPES = [
     {"outfit": "bandit", "size": [1, 1], "weapons": ["shotgun"], "personality": "neutral", "w": 3},
     {"outfit": "deserter", "size": [2, 3], "weapons": ["akm", "akm", "shotgun"], "personality": "hostile", "w": 2},
     {"outfit": "deserter", "size": [1, 1], "weapons": ["akm"], "personality": "neutral", "w": 2},
+    # dev66: Кузьмич the road trader with his guard (index 6)
+    {"outfit": "bandit", "size": [2, 2], "weapons": ["shotgun", "akm"], "personality": "neutral", "trader": "wanderer_kuzmich", "w": 2},
 ]
+const TRADER_TYPE = 6
+const TRADER_STOP = 130.0       # the caravan halts for a customer this close
+const TRADER_FAR = 170.0        # walk further off and the stall closes
 const FORMATION = [Vector2.ZERO, Vector2(-26, 20), Vector2(-26, -20)]
 
 
@@ -32,6 +37,7 @@ class Squad:
     var bark_t = 0.0
     var looted = {}
     var kind = {}
+    var hold = false
 
     func leader():
         for m in members:
@@ -69,7 +75,7 @@ class Squad:
         if lead == null:
             return m.global_position
         if m == lead:
-            if leg >= route.size():
+            if hold or leg >= route.size():
                 return m.global_position
             var goal: Vector2 = route[leg]
             if m.global_position.distance_to(goal) < 18.0:
@@ -128,6 +134,8 @@ func _tick_squad(sq) -> void:
         _remove(sq)
         return
     var lead = sq.leader()
+    if str(sq.kind.get("trader", "")) != "":
+        _tick_trader(sq)
     # at a town's walls they turn back; a fight does not follow the survivor in
     if lead != null and safe_chunk(game._world_to_chunk(lead.global_position)):
         for m in alive:
@@ -223,6 +231,31 @@ func safe_chunk(coord: Vector2i) -> bool:
     return bool(game.RegionCatalog.poi_for_chunk(coord).get("safe_settlement", false))
 
 
+func _tick_trader(sq) -> void:
+    var trader = null
+    for m in sq.alive():
+        if m.has_meta("trader_id"):
+            trader = m
+    var tid = str(sq.kind.get("trader", ""))
+    if trader == null or trader.hostile_to_player:
+        # robbed or turned on: no more trade with this caravan
+        if game.trader_open and game.active_trader_id == tid:
+            game._close_trader()
+        if trader != null and trader.is_in_group("interactable"):
+            trader.remove_from_group("interactable")
+        sq.hold = false
+        return
+    var d = trader.global_position.distance_to(game.player.global_position)
+    sq.hold = d < TRADER_STOP
+    if sq.hold:
+        trader.facing = trader.facing.lerp((game.player.global_position - trader.global_position).normalized(), 0.2).normalized()
+        if not sq.has_meta("greeted"):
+            sq.set_meta("greeted", true)
+            trader.say_line("Стой-стой, не стреляй! Торговлю ведём? Патроны, бинты, мелочь.", 4.0)
+    if game.trader_open and game.active_trader_id == tid and d > TRADER_FAR:
+        game._close_trader()
+
+
 func on_player_respawn() -> void:
     # a fresh survivor with a knife gets a few quiet minutes again
     age = 0.0
@@ -305,6 +338,8 @@ func spawn_squad(force_type: Dictionary = {}, at: Vector2 = Vector2(INF, INF)):
         m.setup(game, str(t["outfit"]), str(weapons[i % weapons.size()]), str(t["personality"]))
         m.squad = sq
         m.slot = i
+        if i == 0 and str(t.get("trader", "")) != "":
+            _make_trader(m, str(t["trader"]))
         var p = spot + FORMATION[i].rotated(randf() * TAU)
         m.position = p if _free_at(p) else spot
         game.add_child(m)
@@ -312,6 +347,13 @@ func spawn_squad(force_type: Dictionary = {}, at: Vector2 = Vector2(INF, INF)):
     squads.append(sq)
     spawned_total += 1
     return sq
+
+
+func _make_trader(m, trader_id: String) -> void:
+    m.nick = str(game.TraderCatalog.trader(trader_id).get("name", "Торговец"))
+    m.set_meta("trader_id", trader_id)
+    # the stall opens with fresh goods each time the caravan comes by
+    game._restock_wanderer(trader_id)
 
 
 func _pick_type() -> Dictionary:
@@ -422,7 +464,7 @@ func serialize() -> Array:
         var route = []
         for p in sq.route:
             route.append([p.x, p.y])
-        out.append({"members": members, "route": route, "leg": sq.leg})
+        out.append({"members": members, "route": route, "leg": sq.leg, "trader": str(sq.kind.get("trader", ""))})
     return out
 
 
@@ -432,6 +474,9 @@ func restore(data: Array) -> void:
             continue
         var sq = Squad.new()
         sq.director = self
+        var tid = str(raw.get("trader", ""))
+        if tid != "" and game.TraderCatalog.is_wanderer(tid):
+            sq.kind = SQUAD_TYPES[TRADER_TYPE]
         for p in raw.get("route", []):
             if typeof(p) == TYPE_ARRAY and p.size() == 2:
                 sq.route.append(Vector2(float(p[0]), float(p[1])))
@@ -464,6 +509,9 @@ func restore(data: Array) -> void:
             m.surrendered = bool(md.get("surrendered", false))
             m.weapon_dropped = bool(md.get("dropped", false))
             m.squad = sq
+            if m.slot == 0 and str(sq.kind.get("trader", "")) != "" and not m.surrendered:
+                m.nick = str(game.TraderCatalog.trader(tid).get("name", "Торговец"))
+                m.set_meta("trader_id", tid)
             var p = Vector2(float(md.get("x", 0.0)), float(md.get("y", 0.0)))
             m.position = p if _free_at(p) else p + Vector2(12, 0)
             game.add_child(m)

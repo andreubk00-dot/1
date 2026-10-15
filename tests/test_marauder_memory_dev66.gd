@@ -141,5 +141,55 @@ func run():
     game.world_day += 7
     check(not dir.no_mercy(), "the rumour of executions never fades")
 
+    # the road trader: a guarded caravan that halts for a customer and sells
+    game.faction_state["currency_tickets"] = 300
+    var tq = dir.spawn_squad(dir.SQUAD_TYPES[dir.TRADER_TYPE], _open_spot(game, game.player.global_position, 100.0))
+    check(tq != null and tq.members.size() == 2, "the trader caravan did not spawn with its guard")
+    var kuz = tq.members[0]
+    check(kuz.has_meta("trader_id") and str(kuz.get_meta("interaction_type", "")) == "trader" and kuz.nick == "Кузьмич", "the trader cannot be traded with")
+    check(str(tq.members[1].get_meta("interaction_type", "")) == "marauder_talk", "the trader's guard is not just a guard")
+    var tid = str(kuz.get_meta("trader_id"))
+    var stock = game.faction_state["traders"][tid]["stock"]
+    var have = 0
+    for k in stock.keys():
+        have += int(stock[k])
+    check(have > 20, "the trader came with an empty pack")
+    await frames(40)
+    check(tq.hold, "the caravan does not halt for a customer")
+    var lead_pos = kuz.global_position
+    await frames(60)
+    check(kuz.global_position.distance_to(lead_pos) < 6.0, "the trader walks off while the survivor is near")
+    game._open_trader(tid)
+    check(game.trader_open and game.trader_subtitle.text.begins_with("На дороге"), "the road stall did not open")
+    var item = ""
+    for k in stock.keys():
+        if int(stock[k]) > 0 and game.TradingMarket.buy_quote(game.faction_state, tid, k, 1).get("ok", false):
+            item = k
+            break
+    check(item != "", "nothing at the road stall can be bought")
+    if item != "":
+        var before = game._inventory_count(item)
+        var town_price = game.TradingMarket.buy_price(game.faction_state, "perron_general", "water")
+        var road_price = game.TradingMarket.buy_price(game.faction_state, tid, "water")
+        check(road_price >= town_price, "the road is cheaper than the town")
+        for i in range(game.trader_stock_list.item_count):
+            if str(game.trader_stock_list.get_item_metadata(i)) == item:
+                game.trader_stock_list.select(i)
+                game._trader_stock_selected(i)
+        game._trade_buy_selected()
+        check(game._inventory_count(item) > before, "buying at the road stall failed")
+    # walk away: the stall closes, the caravan goes on
+    game.player.global_position += Vector2(400, 0)
+    await frames(30)
+    check(not game.trader_open, "the stall stayed open after the survivor walked off")
+    check(not tq.hold, "the caravan stays halted with nobody near")
+    # turn on him: no more trade
+    game.player.global_position -= Vector2(400, 0)
+    kuz.become_hostile()
+    await frames(5)
+    check(not kuz.is_in_group("interactable"), "a trader who was attacked still trades")
+    for s in dir.squads.duplicate():
+        dir._remove(s)
+
     print("MARAUDER MEMORY dev66: ", checks, " checks, ", failures, " failures")
     quit(1 if failures else 0)
