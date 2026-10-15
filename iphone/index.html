@@ -1219,6 +1219,10 @@ canvas { touch-action:none; }
   scrollbar-gutter:stable;
 }
 
+
+/* Transient status messages must not intercept result/reward buttons. */
+#toast{pointer-events:none}
+
 </style>
   <!-- Yandex Games SDK. In local preview /sdk.js may be unavailable; the game falls back to local mode. -->
   <!-- standalone build: Yandex SDK omitted; local mode fallback is used -->
