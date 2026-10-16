@@ -17,7 +17,7 @@ const BASE_VALUES = {
     "canteen":18,"water_canister":34,"field_rig":72,"assault_rig":128,"military_vest":190,
     "hiking_backpack":92,"expedition_pack":155,"trauma_kit":42,"emergency_ration":14,
     "makarov_extmag":36,"shotgun_exttube":42,"akm_extmag":60,"muzzle_brake":48,"suppressor":72,
-    "sterile_bandage":10,"antiseptic":18,"painkillers":14,"antibiotics":26,
+    "sterile_bandage":10,"splint":9,"antiseptic":18,"painkillers":14,"antibiotics":26,
     "firewood":3,"dirty_water":1,"grain":5,"herbs":4,"hot_meal":10,"herbal_tea":8
 }
 
@@ -102,7 +102,7 @@ const TRADERS = {
             {"id":"bandage","qty":16,"tier":"outsider"},{"id":"sterile_bandage","qty":10,"tier":"known"},
             {"id":"antiseptic","qty":8,"tier":"known"},{"id":"painkillers","qty":8,"tier":"known"},
             {"id":"antibiotics","qty":5,"tier":"reliable"},{"id":"trauma_kit","qty":2,"tier":"reliable"},
-            {"id":"water","qty":12,"tier":"outsider"}
+            {"id":"water","qty":12,"tier":"outsider"},{"id":"splint","qty":3,"tier":"outsider"}
         ]
     },
     "lazaret_medic":{

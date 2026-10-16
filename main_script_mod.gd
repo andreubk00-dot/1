@@ -220,7 +220,7 @@ const ITEM_RARITY = {
     "wool_hat":"common","ballistic_helmet":"rare","rain_jacket":"scarce","military_vest":"specialized",
     "insulated_parka":"rare","storm_poncho":"scarce","bedroll":"scarce","canteen":"scarce","water_canister":"scarce",
     "field_rig":"scarce","assault_rig":"rare",
-    "hiking_backpack":"scarce","expedition_pack":"specialized","trauma_kit":"rare","emergency_ration":"scarce",
+    "hiking_backpack":"scarce","expedition_pack":"specialized","trauma_kit":"rare","emergency_ration":"scarce","splint":"scarce",
     "makarov_extmag":"scarce","shotgun_exttube":"rare","akm_extmag":"specialized",
     "muzzle_brake":"rare","suppressor":"rare",
     "sterile_bandage":"scarce","antiseptic":"scarce","painkillers":"scarce","antibiotics":"rare",
@@ -347,6 +347,10 @@ var wound_contamination = 0.0
 var wound_infection = 0.0
 var painkiller_time = 0.0
 var antibiotic_time = 0.0
+# dev67: broken bones. 0 sound, 1 broken, 2 splinted (healing); the heal timer
+# counts game minutes while splinted
+var fractures = {"arms":0,"legs":0}
+var fracture_heal = {"arms":0.0,"legs":0.0}
 var medical_tick_accumulator = 0.0
 var well_fed_time = 0.0
 var warm_drink_time = 0.0
@@ -579,6 +583,7 @@ var inventory_icon_regions = {
     "hiking_backpack":Rect2i(142,224,44,44),
     "expedition_pack":Rect2i(188,224,44,44),
     "trauma_kit":Rect2i(0,272,30,20),
+    "splint":Rect2i(100,483,46,14),
     "emergency_ration":Rect2i(35,272,22,18)
 }
 
@@ -590,6 +595,7 @@ var melee_icon_regions = {
 
 
 var loot_icon_cells = {
+    "splint":Vector2i(2,9),
     "bandage":Vector2i(0,0),
     "water":Vector2i(1,0),
     "canned_meat":Vector2i(2,0),
@@ -1165,7 +1171,7 @@ func _run_static_self_tests():
     _record_test(not _melee_point_in_arc(Vector2.ZERO,Vector2.RIGHT,Vector2(50,0),35.0,0.8),"Дальняя цель попала в melee range")
     _record_test(_make_item_icon("combat_knife") != null,"Не создаётся иконка ножа")
 
-    _record_test(inventory_icon_regions.size() == 59,"Должно быть 59 non-melee inventory icons")
+    _record_test(inventory_icon_regions.size() == 60,"Должно быть 60 non-melee inventory icons (dev67: + шина)")
     _record_test(melee_icon_regions.size() == 3,"Должно быть 3 melee inventory icons")
     _record_test(item_defs.has("sterile_bandage"),"Нет стерильной повязки")
     _record_test(item_defs.has("antiseptic"),"Нет антисептика")
@@ -3181,6 +3187,7 @@ func _qa_prepare_visual_state():
     antibiotic_time = 0.0
     for zone in ["head","torso","arms","legs"]:
         body_condition[zone] = 100.0
+    _clear_fractures()
 
 func _qa_force_daylight():
     world_minutes = 12.0 * 60.0
@@ -3905,6 +3912,7 @@ func _developer_apply_invulnerability() -> void:
     infected_spit_slow_mult = 1.0
     for zone in ["head","torso","arms","legs"]:
         body_condition[zone] = 100.0
+    _clear_fractures()
 
 func _developer_set_invulnerable(enabled:bool) -> void:
     developer_invulnerable = enabled and _developer_tools_available()
@@ -4883,6 +4891,7 @@ func _fallback_items():
         "military_vest":{"name":"Армейский бронежилет","short":"БРН+","w":2,"h":2,"stack":1,"weight":5.6,"category":"gear","use":"gear","slot":"body","armor":0.55,"armor_torso":0.55,"armor_arms":0.08,"armor_legs":0.0,"bleed_resist":0.35,"warmth":1.0,"rain_protect":0.10,"move_mult":0.94,"color":"#4f5841"},
         "hiking_backpack":{"name":"Туристический рюкзак","short":"ТУР","w":2,"h":2,"stack":1,"weight":1.9,"category":"gear","use":"gear","slot":"backpack","carry_bonus":18.0,"warmth":0.2,"rain_protect":0.15,"move_mult":0.99,"color":"#746a4c"},
         "expedition_pack":{"name":"Экспедиционный рюкзак","short":"ЭКСП","w":2,"h":3,"stack":1,"weight":3.2,"category":"gear","use":"gear","slot":"backpack","carry_bonus":24.0,"warmth":0.3,"rain_protect":0.22,"move_mult":0.97,"color":"#4d5a43"},
+        "splint":{"name":"Шина","short":"ШИНА","w":2,"h":1,"stack":4,"weight":0.35,"category":"medical","use":"splint","color":"#a07a4a"},
         "trauma_kit":{"name":"Травматологический набор","short":"ТРАВМ","w":2,"h":1,"stack":4,"weight":0.65,"category":"medical","use":"trauma_kit","color":"#756c53"},
         "emergency_ration":{"name":"Аварийный рацион","short":"РАЦ","w":1,"h":1,"stack":10,"weight":0.32,"category":"food","use":"emergency_ration","rig_quick":true,"color":"#766641"},
         "makarov_extmag":{"name":"Увеличенный магазин ПМ","short":"ПМ+","w":1,"h":2,"stack":1,"weight":0.16,"category":"mod","use":"weapon_mod","mod_slot":"magazine","allowed_weapon":"makarov","mag_bonus":4,"color":"#5c6062"},
@@ -5054,6 +5063,7 @@ func _fallback_loot():
         # Generated dynamically from item_defs by _generate_loot().
         "all_items_test":[],
         "pharmacy":[
+            {"id":"splint","min":1,"max":1,"chance":0.12},
             {"id":"bandage","min":1,"max":4,"chance":1.0},
             {"id":"sterile_bandage","min":1,"max":3,"chance":0.78},
             {"id":"antiseptic","min":1,"max":2,"chance":0.74},
@@ -5072,6 +5082,7 @@ func _fallback_loot():
             {"id":"cloth","min":1,"max":2,"chance":0.30}
         ],
         "police":[
+            {"id":"splint","min":1,"max":1,"chance":0.06},
             {"id":"ammo_9x18","min":6,"max":18,"chance":0.62},
             {"id":"ammo_762x25","min":4,"max":12,"chance":0.28},
             {"id":"ammo_12g","min":3,"max":10,"chance":0.38},
@@ -5103,6 +5114,7 @@ func _fallback_loot():
             {"id":"fire_axe","min":1,"max":1,"chance":0.14}
         ],
         "medical_secure":[
+            {"id":"splint","min":1,"max":1,"chance":0.30},
             {"id":"bandage","min":2,"max":4,"chance":1.0},
             {"id":"sterile_bandage","min":1,"max":3,"chance":0.90},
             {"id":"antiseptic","min":1,"max":2,"chance":0.82},
@@ -5293,6 +5305,7 @@ func _fallback_loot():
         # warehouse and the yards. Stash: the boss' share (HQ, armory, общак),
         # refreshed as a target farm while the base stands.
         "marauder_supply":[
+            {"id":"splint","min":1,"max":1,"chance":0.06},
             {"id":"canned_meat","min":1,"max":3,"chance":0.62},
             {"id":"water","min":1,"max":2,"chance":0.58},
             {"id":"grain","min":1,"max":2,"chance":0.22},
@@ -5335,6 +5348,7 @@ func _fallback_loot():
             {"id":"tt33","min":1,"max":1,"chance":0.10}
         ],
         "military":[
+            {"id":"splint","min":1,"max":1,"chance":0.10},
             {"id":"bandage","min":1,"max":3,"chance":0.70},
             {"id":"sterile_bandage","min":1,"max":2,"chance":0.48},
             {"id":"antiseptic","min":1,"max":1,"chance":0.28},
@@ -5423,6 +5437,12 @@ func _fallback_recipes():
             "name":"Полевой бинт",
             "ingredients":{"cloth":2},
             "output":"bandage",
+            "output_qty":1
+        },
+        "splint":{
+            "name":"Шина",
+            "ingredients":{"firewood":1,"cloth":2},
+            "output":"splint",
             "output_qty":1
         },
         "sterile_bandage":{
@@ -7562,6 +7582,7 @@ func _respawn_player():
         pain = 0.0
         body_condition = {"head":100.0,"torso":100.0,"arms":100.0,"legs":100.0}
 
+    _clear_fractures()
     bleeding = false
     last_injury_zone = ""
     wound_contamination = 0.0
@@ -7743,7 +7764,7 @@ func _perform_melee_attack():
     var range_value = float(melee.get("range",38.0))
     var arc_value = float(melee.get("arc",0.8))
     var max_targets = int(melee.get("max_targets",1))
-    var damage = float(melee.get("damage",30.0))
+    var damage = float(melee.get("damage",30.0)) * _fracture_melee_multiplier()
     var knockback = float(melee.get("knockback",70.0))
     var stagger_time = float(melee.get("stagger",0.35))
     var hit_count = 0
@@ -8078,6 +8099,8 @@ func _play_infected_step(enemy):
         var voice = world_audio_players[(world_audio_cursor + world_audio_players.size() - 1) % world_audio_players.size()]
         voice.pitch_scale *= 0.82
 
+var _limp_step = false
+
 func _play_footstep():
     if player == null:
         return
@@ -8087,6 +8110,13 @@ func _play_footstep():
     if take == _last_step_take and n > 1:
         take = "step_%s_%d" % [surface,(int(take.get_slice("_",2)) % n) + 1]
     _last_step_take = take
+    if int(fractures.get("legs",0)) > 0:
+        # the bad leg: a hitch in every other step, a hiss of pain now and then
+        _limp_step = not _limp_step
+        if _limp_step:
+            _body_spring_kick(Vector2.DOWN,7.0 if int(fractures["legs"]) == 1 else 4.0)
+            if int(fractures["legs"]) == 1 and painkiller_time <= 0.0 and randf() < 0.12:
+                _play_world_sfx("player_hit",-20.0,0.06)
     var volume = -16.0
     if is_sprinting:
         volume = -11.5
@@ -9309,7 +9339,7 @@ func _rig_pocket_count():
 
 func _reload_duration_for_weapon(weapon_id):
     var duration = float(weapon_defs.get(weapon_id,{}).get("reload",0.90))
-    return duration * _rig_reload_multiplier()
+    return duration * _rig_reload_multiplier() * _fracture_reload_multiplier()
 
 func _reload_transfer_amount(weapon_id,mag_now,reserve,instance_id = ""):
     if not weapon_defs.has(weapon_id):
@@ -13930,9 +13960,15 @@ func _update_hud():
     if is_sprinting:
         movement_text = "БЕЖИТ"
     elif visual_move_speed > 2.0:
-        movement_text = "ИДЁТ"
+        movement_text = "ХРОМАЕТ" if int(fractures.get("legs",0)) == 1 else "ИДЁТ"
+    # dev67: a break stays in sight - it shapes every move
+    if int(fractures.get("legs",0)) == 2 and movement_text != "БЕЖИТ":
+        movement_text += " • НОГА В ШИНЕ"
+    elif int(fractures.get("arms",0)) > 0:
+        movement_text += " • РУКА " + ("СЛОМАНА" if int(fractures["arms"]) == 1 else "В ШИНЕ")
     var noise_text = _stealth_noise_label().to_upper()
     _hud_set_fitted_text(hud_stealth_label,movement_text,6,5,8,10)
+    _hud_font_color(hud_stealth_label,Color(0.92,0.42,0.34) if _broken_limb() != "" else Color(0.88,0.90,0.87))
     if hud_stealth_noise_label != null:
         _hud_set_fitted_text(hud_stealth_noise_label,noise_text,5,4,6,9)
         _hud_font_color(hud_stealth_noise_label,Color(0.92,0.77,0.44) if noise >= 55.0 else Color(0.58,0.64,0.62))
@@ -18213,9 +18249,21 @@ func _use_selected_inventory():
             return
         _consume_entry_at(selected_inventory_index,1)
 
+    elif use_type == "splint":
+        if not _set_splint(_broken_limb()):
+            inv_details.text = "Шина сейчас не нужна: переломов нет."
+            return
+        _consume_entry_at(selected_inventory_index,1)
+        _set_survival_feedback("Шина наложена. Кость срастётся примерно за полтора дня (под крышей быстрее).",3.5)
+
+    elif use_type == "" and id in ["cloth","tape"] and _broken_limb() != "":
+        if not _improvise_splint():
+            inv_details.text = "Для шины в поле нужно что-то жёсткое (дрова или 2 металлолома) и чем примотать (изолента или 2 ткани)."
+            return
+
     elif use_type == "trauma_kit":
         var worst_zone = _worst_injury_zone()
-        var needs_trauma = bleeding or health < 96.0 or pain > 12.0
+        var needs_trauma = bleeding or health < 96.0 or pain > 12.0 or _broken_limb() != ""
         if worst_zone != "":
             needs_trauma = needs_trauma or _body_condition_value(worst_zone) < 94.0
         if not needs_trauma:
@@ -18225,6 +18273,8 @@ func _use_selected_inventory():
         health = min(100.0,health + 24.0)
         pain = max(0.0,pain - 18.0)
         _stabilize_worst_injury(12.0)
+        # the kit carries a proper splint: it sets a break well
+        _set_splint(_broken_limb(),FRACTURE_HEAL_MINUTES * 0.85)
         wound_contamination = max(0.0,wound_contamination - 15.0)
         stamina = min(_survival_stamina_cap(),stamina + 5.0)
         _consume_entry_at(selected_inventory_index,1)
@@ -18375,7 +18425,7 @@ func _use_selected_inventory():
 const USE_SFX = {
     "water":"drink","water_container":"drink","dirty_water":"drink","herbal_tea":"drink",
     "food":"eat","hot_meal":"eat","emergency_ration":"eat",
-    "bandage":"bandage","sterile_bandage":"bandage","trauma_kit":"bandage","antiseptic":"bandage",
+    "bandage":"bandage","sterile_bandage":"bandage","trauma_kit":"bandage","antiseptic":"bandage","splint":"bandage",
     "antibiotics":"bag_rummage","painkillers":"bag_rummage","gear":"bag_rummage","bedroll":"bag_rummage",
 }
 
@@ -29798,7 +29848,7 @@ func _use_sterile_bandage():
 
 func _injury_move_multiplier():
     var p = _effective_pain()
-    var mult = 1.0
+    var mult = _fracture_move_multiplier()
     var legs = _body_condition_value("legs")
 
     if legs < 60.0:
@@ -29822,7 +29872,7 @@ func _injury_move_multiplier():
 
 func _injury_aim_spread_multiplier():
     var p = _effective_pain()
-    var mult = 1.0
+    var mult = _fracture_aim_multiplier()
     var arms = _body_condition_value("arms")
     var head = _body_condition_value("head")
 
@@ -29892,6 +29942,8 @@ func _injury_stamina_regen_multiplier():
 
 func _injury_can_sprint():
     var p = _effective_pain()
+    if int(fractures.get("legs",0)) > 0:
+        return false
     if _body_condition_value("legs") < 24.0:
         return false
     if p > 88.0:
@@ -29908,6 +29960,7 @@ func _apply_body_injury(zone,trauma):
     body_condition[zone] = max(0.0,_body_condition_value(zone) - amount)
     pain = min(100.0,pain + amount * 0.80)
     last_injury_zone = zone
+    _roll_fracture(zone,amount)
 
 func _stabilize_worst_injury(amount):
     var zone = _worst_injury_zone()
@@ -29920,8 +29973,114 @@ func _stabilize_worst_injury(amount):
 
     body_condition[zone] = min(100.0,value + max(0.0,float(amount)))
 
+# ---------------------------------------------------------------- fractures --
+# dev67: a heavy blow to an arm or a leg can break it. A broken leg is a hard
+# limp with no running, a broken arm a shaking aim, a slow reload and a weak
+# swing. Painkillers take the edge off. A splint (made from firewood and cloth,
+# or improvised from scrap and tape, or set by a trauma kit) lets the bone knit
+# in about a day and a half - two thirds of that under a roof; left broken it
+# never does.
+const FRACTURE_HEAL_MINUTES = 36.0 * 60.0
+const FRACTURE_MIN_TRAUMA = 11.0
+const LIMB_NAMES = {"arms":"РУКА","legs":"НОГА"}
+
+func _clear_fractures():
+    fractures = {"arms":0,"legs":0}
+    fracture_heal = {"arms":0.0,"legs":0.0}
+
+func _roll_fracture(zone,trauma:float) -> bool:
+    if not zone in fractures or int(fractures[zone]) == 1:
+        return false
+    var chance = clamp((trauma - FRACTURE_MIN_TRAUMA) / 24.0,0.0,0.45)
+    if _body_condition_value(zone) < 18.0:
+        chance = max(chance,0.5)
+    if randf() >= chance:
+        return false
+    _break_bone(zone)
+    return true
+
+func _break_bone(zone):
+    fractures[zone] = 1
+    fracture_heal[zone] = 0.0
+    pain = min(100.0,pain + 22.0)
+    _play_world_sfx("melee_hit",-6.0,0.02)
+    _body_spring_kick(Vector2.DOWN,22.0)
+    var what = "хромота, бежать не выйдет" if zone == "legs" else "прицел гуляет, перезарядка медленнее"
+    _set_survival_feedback("ПЕРЕЛОМ: %s — %s" % [str(LIMB_NAMES.get(zone,zone)),what],3.5)
+
+func _broken_limb() -> String:
+    # the one a splint goes on first: a leg before an arm
+    for limb in ["legs","arms"]:
+        if int(fractures.get(limb,0)) == 1:
+            return limb
+    return ""
+
+func _set_splint(limb:String,heal_minutes:float = FRACTURE_HEAL_MINUTES) -> bool:
+    if limb == "" or int(fractures.get(limb,0)) != 1:
+        return false
+    fractures[limb] = 2
+    fracture_heal[limb] = heal_minutes
+    pain = max(0.0,pain - 10.0)
+    return true
+
+func _improvise_splint() -> bool:
+    # in the field: something rigid (firewood or two pieces of scrap) and a
+    # binding (two strips of cloth or a tape)
+    var limb = _broken_limb()
+    if limb == "":
+        return false
+    var rigid = ["firewood",1] if _inventory_count("firewood") >= 1 else (["scrap",2] if _inventory_count("scrap") >= 2 else [])
+    var bind = ["tape",1] if _inventory_count("tape") >= 1 else (["cloth",2] if _inventory_count("cloth") >= 2 else [])
+    if rigid.is_empty() or bind.is_empty():
+        return false
+    _consume_inventory_item(str(rigid[0]),int(rigid[1]))
+    _consume_inventory_item(str(bind[0]),int(bind[1]))
+    # a field job sets less well: it takes longer to knit
+    _set_splint(limb,FRACTURE_HEAL_MINUTES * 1.25)
+    _play_world_sfx("bandage",-9.0,0.03)
+    _set_survival_feedback("Шина наложена из подручного: %s. Кость срастётся дольше обычного." % str(LIMB_NAMES[limb]).to_lower(),3.5)
+    return true
+
+func _update_fractures(delta):
+    for limb in ["arms","legs"]:
+        if int(fractures.get(limb,0)) != 2:
+            continue
+        var minutes = delta * day_speed * (1.5 if is_sheltered else 1.0)
+        fracture_heal[limb] = max(0.0,float(fracture_heal[limb]) - minutes)
+        if fracture_heal[limb] <= 0.0:
+            fractures[limb] = 0
+            body_condition[limb] = max(_body_condition_value(limb),60.0)
+            _set_survival_feedback("Перелом сросся: %s снова в порядке. Шину можно снять." % str(LIMB_NAMES[limb]).to_lower(),3.5)
+
+func _fracture_move_multiplier() -> float:
+    match int(fractures.get("legs",0)):
+        1: return 0.72 if painkiller_time > 0.0 else 0.55
+        2: return 0.84
+    return 1.0
+
+func _fracture_aim_multiplier() -> float:
+    match int(fractures.get("arms",0)):
+        1: return 1.35 if painkiller_time > 0.0 else 1.7
+        2: return 1.18
+    return 1.0
+
+func _fracture_reload_multiplier() -> float:
+    return 1.5 if int(fractures.get("arms",0)) == 1 else (1.15 if int(fractures.get("arms",0)) == 2 else 1.0)
+
+func _fracture_melee_multiplier() -> float:
+    return 0.6 if int(fractures.get("arms",0)) == 1 else (0.85 if int(fractures.get("arms",0)) == 2 else 1.0)
+
+func _fracture_summary() -> String:
+    var parts = []
+    for limb in ["legs","arms"]:
+        match int(fractures.get(limb,0)):
+            1: parts.append("ПЕРЕЛОМ: %s" % str(LIMB_NAMES[limb]))
+            2: parts.append("%s В ШИНЕ (%d ч)" % [str(LIMB_NAMES[limb]),int(ceil(float(fracture_heal[limb]) / 60.0))])
+    return "  •  ".join(parts)
+
 func _update_injuries(delta):
     _sanitize_body_condition()
+    _update_fractures(delta)
 
     var pain_decay = 0.045
 
@@ -29944,7 +30103,11 @@ func _update_injuries(delta):
             recovery *= 0.62
 
         for zone in ["head","torso","arms","legs"]:
-            body_condition[zone] = min(100.0,_body_condition_value(zone) + recovery)
+            var value = _body_condition_value(zone)
+            # a bone left broken does not mend past this
+            var cap = 35.0 if zone in fractures and int(fractures[zone]) == 1 else 100.0
+            if value < cap:
+                body_condition[zone] = min(cap,value + recovery)
 
 func _apply_enemy_hit(base_damage):
     if qa_visual_mode or developer_invulnerable:
@@ -34619,6 +34782,7 @@ func _save_state():
         "bleed_damage_taken":bleed_damage_taken,
         "pain":pain,
         "body_condition":body_condition,
+        "fractures":{"arms":int(fractures["arms"]),"legs":int(fractures["legs"]),"heal_arms":float(fracture_heal["arms"]),"heal_legs":float(fracture_heal["legs"])},
         "last_injury_zone":last_injury_zone,
         "wound_contamination":wound_contamination,
         "wound_infection":wound_infection,
@@ -34856,6 +35020,12 @@ func _load_state():
     bleed_damage_taken = float(parsed.get("bleed_damage_taken",0.0))
     pain = float(parsed.get("pain",0.0))
     body_condition = parsed.get("body_condition",body_condition)
+    _clear_fractures()
+    var saved_fx = parsed.get("fractures",{})
+    if typeof(saved_fx) == TYPE_DICTIONARY:
+        for limb in ["arms","legs"]:
+            fractures[limb] = clampi(int(saved_fx.get(limb,0)),0,2)
+            fracture_heal[limb] = clamp(float(saved_fx.get("heal_" + limb,0.0)),0.0,FRACTURE_HEAL_MINUTES)
     last_injury_zone = str(parsed.get("last_injury_zone",""))
     wound_contamination = float(parsed.get("wound_contamination",0.0))
     wound_infection = float(parsed.get("wound_infection",0.0))

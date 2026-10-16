@@ -67,7 +67,7 @@ const FACTIONS = {
 # Economy categories intentionally reference existing item ids. Unknown ids remain tradable
 # as "general" goods, so future content does not require schema migrations.
 const ITEM_CATEGORIES = {
-    "bandage":"medicine","sterile_bandage":"medicine","antiseptic":"medicine","painkillers":"medicine","antibiotics":"medicine","trauma_kit":"medicine",
+    "bandage":"medicine","sterile_bandage":"medicine","antiseptic":"medicine","painkillers":"medicine","antibiotics":"medicine","trauma_kit":"medicine","splint":"medicine",
     "water":"water","dirty_water":"water","canteen":"household","water_canister":"technical",
     "canned_meat":"food","emergency_ration":"food","grain":"food","herbs":"food","hot_meal":"food","herbal_tea":"food",
     "scrap":"parts","cloth":"household","tape":"tools","repair_kit":"tools","water_filter":"technical","flashlight":"electronics","firewood":"household",
