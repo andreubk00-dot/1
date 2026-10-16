@@ -66,11 +66,22 @@ func run():
         check(dir._free_at(m.global_position), "marauder spawned inside geometry")
         check(m.is_in_group("marauders") and m.has_meta("is_enemy"), "marauder not targetable")
     var hp0 = game.health
-    # accuracy is a dice roll: give them fifteen seconds
-    await frames(900)
-    var fighting = sq.alive().filter(func(m): return m.state == "combat").size()
+    # accuracy is a dice roll: give them fifteen seconds. Three rifles can now
+    # really kill a survivor standing in the open (dev69: zero health is
+    # death), and a respawn sends every squad away - keep the target alive
+    var fighting = 0
+    var hurt = false
+    for i in range(900):
+        await physics_frame
+        hurt = hurt or game.health < hp0
+        fighting = max(fighting, sq.alive().filter(func(m): return m.state == "combat").size())
+        if game.health < 40.0:
+            game.health = 100.0
+            hp0 = 100.0
+        if hurt and fighting >= 1:
+            break
     check(fighting >= 1, "squad never engaged the player")
-    check(game.health < hp0, "squad engaged but never hurt the player")
+    check(hurt, "squad engaged but never hurt the player")
     check(game.health > 0.0 or game.player_death_time > 0.0, "health went negative")
 
     # killed: bodies with their weapons, saved and restored

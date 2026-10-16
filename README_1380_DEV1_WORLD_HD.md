@@ -1366,3 +1366,59 @@ waiting. The raiders keep the frequency alive: people at home are easy prey.
   leave a broken arm (~37% of launches). It now restores fractures; the
   fracture test starts twelve fresh games to make sure.
 - Test: `tests/test_story_ether_dev68.gd` (93 checks).
+
+## dev69 — settings, the sound mix, the first minutes
+
+**Settings** (Esc → Настройки, four tabs):
+- **Клавиши**: every gameplay key is an InputMap action and can be rebound
+  (`world/input_bindings.gd`) - 25 actions, keyboard or the middle/side mouse
+  buttons. A taken key swaps with its owner (and says so); Esc, F10, the left
+  and right mouse buttons and the wheel stay with the game. Bindings live in
+  `user://settings.cfg` (section `bindings`), survive a corrupted file, reset
+  in one click. «Управление» opens this tab. Hints, the objective line, the
+  interaction badge, the quick-slot digits and tooltips print the bound keys.
+- **Экран**: window / fullscreen, window size (only those that fit the
+  screen), FPS cap (30–144 or none), vsync, crisp pixels (integer scaling),
+  HUD scale 80–110% (each block grows toward its own corner; the bottom bar
+  keeps a gap to its neighbours at every size).
+- **Звук**: the four sliders. **Игра**: camera shake, HUD auto-hide, the
+  objective pointer, beginner hints.
+
+**Sound mix** - levels measured from the recordings (loudest 50 ms plus the
+play gain), not guessed:
+- Per-take trims even out footsteps of one surface (grass takes were 8 dB
+  apart); reload profiles brought to one level (12 dB spread); a club hit no
+  longer outshouts a pistol; the suppressed PM sits between a shot and a
+  footstep (it was quieter than walking); rain under the steps; the night bed
+  and room tone no longer fall away; generators, dogs, crows, wind, distant
+  gunfire and thunder lowered to sit behind the player's own gun.
+- `world/audio_mix.gd` - a mix director on the buses (an Amplify and a
+  LowPass it owns, so the player's sliders are untouched): pause/title and
+  the console dialog muffle the world while the score keeps playing; menus
+  with focus (inventory, map, trader) step the world back a little; near
+  death a slight tunnel; dying sinks everything. A limiter on Master. The
+  title starts its music within seconds. Menu clicks ride their own UI bus.
+- The start-up self test was audible as a thump on every launch; it is
+  silent now. Verified end-to-end by recording the mix with Movie Maker.
+
+**The first minutes** (a naive-player bot with screenshots):
+- Bug: a survivor beaten to exactly zero health never died - natural healing
+  lifted 0 hp by a hair each frame before the death check, so under three
+  infected the bot hung at 0.01 hp for minutes. Death is now decided before
+  healing, and a body at zero does not heal.
+- The start yard: its four infected were pushed onto a ring exactly 220 px
+  around a fresh survivor - shoot once (as the hint suggests) and four close
+  in from every side (dead in ~5 s). On day one the yard holds two, set down
+  ≥320 px away.
+- An **objective pointer**: a small gold chevron circles the survivor and
+  points to the current goal (the Lazaret, the expedition target, home);
+  hidden near the goal, in menus and while an interaction prompt is up; can
+  be switched off.
+- The goal hint now follows the controls hint directly (it came after the
+  first door and the first infected) and mentions the pointer.
+- Quick-bar slots assigned to guns the survivor does not own are a faint
+  ghost (a new player read the dimmed AK and shotgun as part of the kit).
+- The flashlight key without a flashlight (or with a dead one) says why
+  nothing happens.
+- Tests: `test_settings_dev69` (290), `test_audio_mix_dev69` (111),
+  `test_first_minutes_dev69` (20).

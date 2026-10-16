@@ -167,10 +167,11 @@ func _check_warnings() -> void:
 func _check_hints() -> void:
     if _age > 1.5:
         hint("move", "{move_up} {move_left} {move_down} {move_right} — идти, {sprint} — бег, {crouch} — красться. Все клавиши: Esc → Управление.")
+        # the goal comes straight after the controls: it is what a new
+        # survivor needs next, before the first door or the first infected
+        hint("goal", "Текущая цель — справа вверху; золотая стрелка у персонажа показывает, куда идти. {region_map} — карта.")
     if not seen.has("move"):
         return
-    if _age > 12.0:
-        hint("goal", "Текущая цель — справа вверху. {region_map} — карта: цель отмечена пунктиром.")
     var near = game._nearest_interactable() if game.has_method("_nearest_interactable") else null
     if near != null:
         hint("interact", "{interact} — подобрать, обыскать, открыть дверь. Подсказка появляется у предмета.")

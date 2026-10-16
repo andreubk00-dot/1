@@ -41,7 +41,7 @@ const DEFAULTS = {
     "master": 0.85, "music": 0.7, "sfx": 0.9, "ambience": 0.8,
     "fullscreen": false, "resolution": "1280x720", "pixel_perfect": false,
     "vsync": true, "max_fps": 0, "ui_scale": 1.0,
-    "camera_shake": true, "hud_autohide": true,
+    "camera_shake": true, "hud_autohide": true, "objective_pointer": true,
 }
 static var _applied_window = ""
 
@@ -60,7 +60,7 @@ static func sanitize_settings(raw: Dictionary) -> Dictionary:
     for k in ["master", "music", "sfx", "ambience"]:
         var v = raw.get(k, out[k])
         out[k] = clamp(float(v), 0.0, 1.0) if (v is float or v is int) else out[k]
-    for k in ["fullscreen", "pixel_perfect", "vsync", "camera_shake", "hud_autohide"]:
+    for k in ["fullscreen", "pixel_perfect", "vsync", "camera_shake", "hud_autohide", "objective_pointer"]:
         var v = raw.get(k, out[k])
         out[k] = bool(v) if (v is bool or v is int) else out[k]
     var res = str(raw.get("resolution", out["resolution"]))
@@ -535,6 +535,7 @@ func _build_display_tab(s: Dictionary) -> void:
 func _build_game_tab(s: Dictionary) -> void:
     _check("camera_shake", "Тряска камеры при ударах", bool(s["camera_shake"]))
     _check("hud_autohide", "Прятать панели HUD в покое", bool(s["hud_autohide"]))
+    _check("objective_pointer", "Стрелка к текущей цели у персонажа", bool(s["objective_pointer"]))
     if game != null and game.get("field_hints") != null:
         var hints = CheckBox.new()
         hints.text = "Подсказки для новичка"

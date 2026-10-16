@@ -4322,6 +4322,10 @@ func _process(delta):
     else:
         modern_survivor_idle_time = 0.0
 
+    if health <= 0.0 and not developer_invulnerable and not qa_visual_mode:
+        # the last frame's blow was the end: decided before anything heals
+        _begin_player_death()
+        return
     _update_survival(delta)
     _update_injuries(delta)
     _update_medical(delta)
@@ -4354,6 +4358,7 @@ func _process(delta):
     _cull_dark_lights()
     _update_ambience_audio(delta)
     _update_music(delta)
+    _update_objective_pointer(delta)
     _update_exterior_atmosphere(delta)
     _update_base_system(delta)
 
@@ -13545,6 +13550,81 @@ func _apply_ui_scale(sc:float) -> void:
         _hud_scale_pivot(c)
         c.scale = Vector2(hud_ui_scale,hud_ui_scale)
 
+# 1.38-dev69: where the current goal lies. A small chevron circles the
+# survivor and points at it, so "reach the Lazaret" means something before the
+# map is ever opened. Hidden near the goal, in menus, in QA captures and when
+# switched off (Settings → Game).
+var objective_pointer = null
+var _objective_pointer_alpha = 0.0
+const OBJECTIVE_POINTER_RING = 38.0
+const OBJECTIVE_POINTER_NEAR = 420.0
+
+func _chunk_center_world(coord:Vector2i) -> Vector2:
+    return Vector2(coord) * CHUNK_SIZE + Vector2(CHUNK_SIZE,CHUNK_SIZE) * 0.5
+
+func _home_world_position():
+    if not _has_home():
+        return null
+    var pos = expedition_journal.get("home",{}).get("position",null)
+    if typeof(pos) == TYPE_ARRAY and pos.size() >= 2:
+        return Vector2(float(pos[0]),float(pos[1]))
+    return _chunk_center_world(_home_chunk())
+
+func _objective_target_world():
+    # the same goal the objective panel names; null when there is none to walk to
+    if expedition_active:
+        if expedition_target_reached or bool(expedition_journal.get("returning",false)):
+            var home = _home_world_position()
+            return home if home != null else _chunk_center_world(expedition_origin_chunk)
+        return _chunk_center_world(expedition_target_chunk)
+    if home_navigation_active:
+        return _home_world_position()
+    var slice_target = VerticalSlice.marker_target(faction_state,world_day,_vertical_slice_at_lazaret(),discovered_pois.has(VerticalSlice.HIGH_RISK_POI_ID),_vertical_slice_inventory_counts())
+    if not slice_target.is_empty():
+        var poi = RegionCatalog.poi_by_id(str(slice_target.get("poi_id","")))
+        if not poi.is_empty():
+            return _chunk_center_world(poi.get("coord",Vector2i.ZERO))
+    return null
+
+func _objective_pointer_wanted() -> bool:
+    if player == null or qa_visual_mode or player_death_time > 0.0 or _high_risk_floor_active():
+        return false
+    if has_meta("settings") and not bool(get_meta("settings").get("objective_pointer",true)):
+        return false
+    if inventory_open or region_map_open or trader_open or contract_open or crafting_open or base_build_open or rest_open or mod_panel_open:
+        return false
+    # the interaction prompt sits right over the survivor: it has the floor
+    if hud_interaction_panel != null and is_instance_valid(hud_interaction_panel) and hud_interaction_panel.visible:
+        return false
+    var target = _objective_target_world()
+    return target != null and player.global_position.distance_to(target) > OBJECTIVE_POINTER_NEAR
+
+func _update_objective_pointer(delta:float) -> void:
+    if objective_pointer == null or not is_instance_valid(objective_pointer):
+        return
+    var want = _objective_pointer_wanted()
+    _objective_pointer_alpha = move_toward(_objective_pointer_alpha,1.0 if want else 0.0,delta * 2.5)
+    objective_pointer.visible = _objective_pointer_alpha > 0.01
+    if objective_pointer.visible:
+        if want:
+            objective_pointer.set_meta("target",_objective_target_world())
+        objective_pointer.queue_redraw()
+
+func _draw_objective_pointer() -> void:
+    var target = objective_pointer.get_meta("target",null)
+    if target == null or player == null:
+        return
+    var screen = get_viewport().get_canvas_transform() * (player.global_position + Vector2(0,-14))
+    var dir = (Vector2(target) - player.global_position).normalized()
+    var tip = screen + dir * (OBJECTIVE_POINTER_RING + 8.0)
+    var base = screen + dir * OBJECTIVE_POINTER_RING
+    var side = dir.orthogonal() * 4.5
+    var pulse = 0.78 + 0.22 * sin(Time.get_ticks_msec() / 1000.0 * 3.2)
+    var col = Color(0.91,0.73,0.31,0.85 * _objective_pointer_alpha * pulse)
+    var shade = Color(0.0,0.0,0.0,0.55 * _objective_pointer_alpha)
+    objective_pointer.draw_colored_polygon(PackedVector2Array([tip + Vector2(1,1),base + side + Vector2(1,1),base - side + Vector2(1,1)]),shade)
+    objective_pointer.draw_colored_polygon(PackedVector2Array([tip,base + side,base - side]),col)
+
 func _home_defense_hint_text() -> String:
     return "%s — ремонт / укрепление • во время атаки ремонт недоступен" % InputBindings.key("interact")
 
@@ -13618,6 +13698,14 @@ func _create_hud():
     hud.visible = false
     canvas.add_child(hud)
 
+    objective_pointer = Control.new()
+    objective_pointer.name = "ObjectivePointer"
+    objective_pointer.size = Vector2(640,360)
+    objective_pointer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    objective_pointer.visible = false
+    objective_pointer.draw.connect(_draw_objective_pointer)
+    canvas.add_child(objective_pointer)
+
     hud_world_root = Control.new()
     hud_world_root.name = "ReferenceHUD"
     hud_world_root.position = Vector2.ZERO
@@ -13626,6 +13714,7 @@ func _create_hud():
     canvas.add_child(hud_world_root)
 
     _hud_add_screen_frame(hud_world_root)
+    canvas.move_child(objective_pointer,-1)
 
     var text_main = Color(0.88,0.90,0.87)
     var text_muted = Color(0.64,0.68,0.66)
@@ -14114,7 +14203,9 @@ func _update_hud():
         if slot_label != null:
             _hud_set_pixel_glyph_color(slot_label,Color(0.96,0.90,0.72) if active and owned else (Color(0.78,0.77,0.70) if owned else Color(0.58,0.60,0.57)))
         if slot_icon != null:
-            slot_icon.modulate = Color.WHITE if owned else Color(0.48,0.50,0.49,0.80)
+            # a slot assigned to a gun the survivor does not have yet shows only a
+            # faint ghost of it - a new player must not think the AK is theirs
+            slot_icon.modulate = Color.WHITE if owned else Color(0.48,0.50,0.49,0.22)
 
     if equipped_melee_id != "" and melee_defs.has(equipped_melee_id):
         var melee = melee_defs[equipped_melee_id]
@@ -21520,7 +21611,10 @@ func _load_chunk(coord):
 
     if coord == Vector2i(0,0):
         _build_showcase_chunk(chunk,coord)
-        _spawn_chunk_enemies(chunk,coord,4,931)
+        # dev69 onboarding: the first day's yard holds two of the four, set
+        # down well clear of the survivor - the first fight is one or two, not
+        # a ring of four closing from every side (the rest are there later)
+        _spawn_chunk_enemies(chunk,coord,START_YARD_FIRST_DAY_INFECTED if world_day <= 1 else 4,931)
         _spawn_fixed_item(chunk,coord,Vector2(252,260),"pharmacy_bandage","bandage",1)
         _spawn_fixed_item(chunk,coord,Vector2(472,415),"road_water","water",1)
         _spawn_fixed_item(chunk,coord,Vector2(175,520),"garage_ammo","ammo_9x18",10)
@@ -28213,19 +28307,22 @@ func _infected_kind_for_encounter(encounter_profile:String,rng) -> String:
 
 const ENEMY_SPAWN_CLEARANCE = 220.0
 
-func _spawn_clear_of_player(chunk,p:Vector2) -> Vector2:
+const START_YARD_FIRST_DAY_INFECTED = 2
+const START_YARD_CLEARANCE = 320.0
+
+func _spawn_clear_of_player(chunk,p:Vector2,clearance:float = ENEMY_SPAWN_CLEARANCE) -> Vector2:
     var local_player = player.global_position - chunk.global_position
     var away = p - local_player
-    if away.length() >= ENEMY_SPAWN_CLEARANCE:
+    if away.length() >= clearance:
         return p
     if away.length() < 1.0:
         away = Vector2.RIGHT.rotated(float(int(p.x * 7.0 + p.y * 3.0) % 360) * PI / 180.0)
     # straight away from the player first, then the other ways round if the
     # chunk edge is in the way
     for turn in [0.0,PI * 0.5,-PI * 0.5,PI,PI * 0.25,-PI * 0.25]:
-        var q = local_player + away.normalized().rotated(turn) * ENEMY_SPAWN_CLEARANCE
+        var q = local_player + away.normalized().rotated(turn) * clearance
         q = Vector2(clamp(q.x,35.0,733.0),clamp(q.y,35.0,733.0))
-        if q.distance_to(local_player) >= ENEMY_SPAWN_CLEARANCE * 0.9:
+        if q.distance_to(local_player) >= clearance * 0.9:
             return q
     return p
 
@@ -28245,7 +28342,7 @@ func _spawn_chunk_enemies(chunk,coord,count,seed_value,encounter_profile = "stan
         # respawn landed the survivor among them, struck from the first frame):
         # the same infected is set down further off, inside the same chunk
         if player != null:
-            p = _spawn_clear_of_player(chunk,p)
+            p = _spawn_clear_of_player(chunk,p,START_YARD_CLEARANCE if coord == Vector2i(0,0) else ENEMY_SPAWN_CLEARANCE)
         _spawn_enemy(chunk,coord,i,p,enemy_kind,str(encounter_profile))
 
 
@@ -29673,7 +29770,10 @@ func _update_survival(delta):
     _update_fatigue(delta,moving_now)
     stamina = clamp(stamina,0.0,_survival_stamina_cap())
 
-    if not bleeding and health < 100.0 and hunger >= 70.0 and thirst >= 70.0:
+    # a body at zero does not knit back (dev69: regen used to lift 0 hp by a
+    # hair every frame before the death check, so a survivor mobbed down to
+    # zero never died)
+    if not bleeding and health > 0.0 and health < 100.0 and hunger >= 70.0 and thirst >= 70.0:
         var recovery_rate = 0.045
         if is_sheltered:
             recovery_rate = 0.105
