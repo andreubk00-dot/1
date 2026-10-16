@@ -105,7 +105,8 @@ static func save_bindings(map: Dictionary) -> void:
 
 
 static func ensure_buses() -> void:
-    for name in ["Music", "SFX", "Ambience"]:
+    # UI has its own bus so menu clicks stay clear while the world is muffled
+    for name in ["Music", "SFX", "Ambience", "UI"]:
         if AudioServer.get_bus_index(name) < 0:
             AudioServer.add_bus()
             var i = AudioServer.bus_count - 1
@@ -136,7 +137,7 @@ static func resolutions_for_screen() -> Array:
 static func apply_settings(raw: Dictionary) -> void:
     var s = sanitize_settings(raw)
     ensure_buses()
-    var vol = {"Master": s["master"], "Music": s["music"], "SFX": s["sfx"], "Ambience": s["ambience"]}
+    var vol = {"Master": s["master"], "Music": s["music"], "SFX": s["sfx"], "Ambience": s["ambience"], "UI": s["sfx"]}
     for bus in vol.keys():
         var i = AudioServer.get_bus_index(bus)
         if i >= 0:
@@ -292,8 +293,24 @@ func _button(text: String, cb: Callable) -> Button:
     b.add_theme_stylebox_override("hover", _button_style(Color(0.10, 0.11, 0.10), ACCENT))
     b.add_theme_stylebox_override("pressed", _button_style(Color(0.13, 0.13, 0.11), ACCENT))
     b.add_theme_stylebox_override("focus", _button_style(Color(0.10, 0.11, 0.10), ACCENT))
+    b.pressed.connect(_click)
     b.pressed.connect(cb)
     return b
+
+
+var _click_player: AudioStreamPlayer = null
+
+func _click() -> void:
+    if _click_player == null:
+        _click_player = AudioStreamPlayer.new()
+        _click_player.bus = "UI"
+        _click_player.volume_db = -17.0
+        if ResourceLoader.exists("res://audio/ui/ui_confirm.wav"):
+            _click_player.stream = load("res://audio/ui/ui_confirm.wav")
+        add_child(_click_player)
+    if _click_player.stream != null:
+        _click_player.pitch_scale = randf_range(0.97, 1.03)
+        _click_player.play()
 
 
 func _build() -> void:

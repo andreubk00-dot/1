@@ -129,7 +129,7 @@ func _tick_gunfire(delta: float, night: float) -> void:
         var to_base = game.marauder_base.center() - game.player.global_position
         if to_base.length() < 9000.0:
             at = game.player.global_position + to_base.normalized() * randf_range(1000.0, 1500.0)
-    one_shot("gunfire_far_%d" % (randi() % 4 + 1), at, randf_range(-6.0, -1.0), randf_range(0.94, 1.04))
+    one_shot("gunfire_far_%d" % (randi() % 4 + 1), at, randf_range(-11.0, -6.0), randf_range(0.94, 1.04))
 
 
 func _tick_dogs(delta: float, night: float) -> void:
@@ -147,7 +147,7 @@ func _tick_dogs(delta: float, night: float) -> void:
     for i in range(n):
         get_tree().create_timer(i * randf_range(0.5, 0.9)).timeout.connect(func():
             if not _quiet():
-                one_shot("dog_bark_%d" % (randi() % 3 + 1), at, randf_range(-8.0, -3.0), randf_range(0.92, 1.08)))
+                one_shot("dog_bark_%d" % (randi() % 3 + 1), at, randf_range(-12.0, -7.0), randf_range(0.92, 1.08)))
 
 
 func _tick_wind(delta: float, indoors: bool) -> void:
@@ -159,14 +159,14 @@ func _tick_wind(delta: float, indoors: bool) -> void:
     if indoors:
         return
     # a gust passes by: from one side, close and broad
-    one_shot("wind_gust_%d" % (randi() % 2 + 1), _around(160.0), randf_range(-10.0, -5.0) + (3.0 if cold else 0.0), randf_range(0.9, 1.1))
+    one_shot("wind_gust_%d" % (randi() % 2 + 1), _around(160.0), randf_range(-12.0, -7.0) + (3.0 if cold else 0.0), randf_range(0.9, 1.1))
 
 
 func _tick_thunder(delta: float, indoors: bool) -> void:
     if thunder_pending > 0.0:
         thunder_pending -= delta
         if thunder_pending <= 0.0:
-            one_shot("thunder_%d" % (randi() % 3 + 1), _around(500.0), -2.0 if not indoors else -8.0, randf_range(0.9, 1.05))
+            one_shot("thunder_%d" % (randi() % 3 + 1), _around(500.0), -8.0 if not indoors else -14.0, randf_range(0.9, 1.05))
         return
     if game.weather_state != "rain" or game._is_snowing():
         thunder_t = max(thunder_t, 8.0)
@@ -184,4 +184,4 @@ func crows_took_off(at: Vector2) -> void:
     if crow_t > 0.0 or _quiet():
         return
     crow_t = CROW_GAP
-    one_shot("crow_%d" % (randi() % 2 + 1), at, -6.0, randf_range(0.9, 1.1))
+    one_shot("crow_%d" % (randi() % 2 + 1), at, -9.0, randf_range(0.9, 1.1))

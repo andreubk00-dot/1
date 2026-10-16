@@ -2848,6 +2848,11 @@ func _show_import_not_ready_screen() -> void:
 const PIXEL_UI_FONT = "res://fonts/DejaVuSans-Bold.ttf"
 const PauseMenu = preload("res://world/pause_menu.gd")
 const InputBindings = preload("res://world/input_bindings.gd")
+const AudioMix = preload("res://world/audio_mix.gd")
+var audio_mix = null
+# the start-up self tests break bones and fire guns on paper; they must not
+# be heard (a thump on every launch)
+var self_test_silent = false
 var pause_menu = null
 const FieldHints = preload("res://world/field_hints.gd")
 var field_hints = null
@@ -2930,6 +2935,9 @@ func _ready():
     # audio buses (Music / SFX / Ambience) and the saved player settings
     set_meta("settings",PauseMenu.load_settings())
     PauseMenu.apply_settings(get_meta("settings"))
+    audio_mix = AudioMix.new()
+    audio_mix.game = self
+    add_child(audio_mix)
     _load_data()
     _create_weapon_audio_layer()
     _create_world_audio_layer()
@@ -2939,7 +2947,9 @@ func _ready():
     if _developer_tools_available():
         _ensure_input("developer_panel", KEY_F10)
 
+    self_test_silent = true
     _run_static_self_tests()
+    self_test_silent = false
     _load_state()
     var vertical_slice_started = false
     VerticalSlice.ensure_state(faction_state)
@@ -3014,7 +3024,9 @@ func _ready():
     _create_base_system()
     _refresh_chunks(true)
     _validate_equipment()
+    self_test_silent = true
     _run_runtime_smoke_tests()
+    self_test_silent = false
     _apply_ui_scale(float(get_meta("settings",{}).get("ui_scale",1.0)))
     _on_bindings_changed()
     _refresh_inventory_ui()
@@ -7905,6 +7917,10 @@ func _weapon_shot_audio_path(weapon_id,instance_id = ""):
             return "res://audio/weapons/makarov_suppressed_shot.wav"
     return "res://audio/weapons/%s_shot.wav" % str(weapon_id)
 
+# dev69 mix: the reload takes differ by 12 dB as recorded; these bring each
+# profile to the same handling level (tools: loudness of audio/weapons/*.wav)
+const RELOAD_DB = {"pistol":-15.0,"rifle":-8.0,"smg":-3.0,"shell":-12.0,"bolt":-15.0}
+
 func _weapon_reload_audio_path(weapon_id):
     if not weapon_defs.has(weapon_id):
         return ""
@@ -7933,6 +7949,8 @@ func _cached_weapon_audio(path):
     return stream
 
 func _play_weapon_shot_audio(weapon_id,weapon = {},instance_id = ""):
+    if self_test_silent:
+        return
     if weapon_audio_players.is_empty():
         _create_weapon_audio_layer()
     if weapon_audio_players.is_empty():
@@ -7945,12 +7963,16 @@ func _play_weapon_shot_audio(weapon_id,weapon = {},instance_id = ""):
     voice.stream = stream
     var audible_db = float(weapon.get("shot_volume_db",-8.0))
     if str(weapon_id) == "makarov" and str(_weapon_mod_state("makarov",instance_id).get("muzzle","")) == "suppressor":
-        audible_db -= 7.0
+        # the suppressed take is already ~10 dB softer: still clearly a shot,
+        # louder than a footstep, far below an open muzzle
+        audible_db += 2.5
     voice.volume_db = audible_db
     voice.pitch_scale = randf_range(0.985,1.015)
     voice.play()
 
 func _play_weapon_reload_audio(weapon_id):
+    if self_test_silent:
+        return
     if reload_audio_player == null:
         _create_weapon_audio_layer()
     if reload_audio_player == null:
@@ -7959,11 +7981,13 @@ func _play_weapon_reload_audio(weapon_id):
     if stream == null:
         return
     reload_audio_player.stream = stream
-    reload_audio_player.volume_db = -11.0
+    reload_audio_player.volume_db = float(RELOAD_DB.get(str(weapon_defs.get(weapon_id,{}).get("reload_audio","rifle")),-11.0))
     reload_audio_player.pitch_scale = randf_range(0.985,1.015)
     reload_audio_player.play()
 
 func _play_weapon_cycle_audio(profile):
+    if self_test_silent:
+        return
     if cycle_audio_player == null:
         _create_weapon_audio_layer()
     if cycle_audio_player == null:
@@ -7972,11 +7996,13 @@ func _play_weapon_cycle_audio(profile):
     if stream == null:
         return
     cycle_audio_player.stream = stream
-    cycle_audio_player.volume_db = -12.0 if str(profile) == "pump" else -11.0
+    cycle_audio_player.volume_db = -14.0 if str(profile) == "pump" else -15.0
     cycle_audio_player.pitch_scale = randf_range(0.985,1.015)
     cycle_audio_player.play()
 
 func _play_dry_fire_audio():
+    if self_test_silent:
+        return
     if reload_audio_player == null:
         _create_weapon_audio_layer()
     if reload_audio_player == null:
@@ -7985,7 +8011,7 @@ func _play_dry_fire_audio():
     if stream == null:
         return
     reload_audio_player.stream = stream
-    reload_audio_player.volume_db = -14.0
+    reload_audio_player.volume_db = -8.0
     reload_audio_player.pitch_scale = randf_range(0.98,1.02)
     reload_audio_player.play()
 
@@ -8136,7 +8162,20 @@ func _play_infected_voice(enemy,kind,volume_db,max_distance,pitch_variation):
     sfx_pitch_base = 1.0
     return played
 
+# dev69 mix: per-take loudness trims (dB) measured from the assets, so one
+# grass step is not 8 dB louder than the next and a club does not outshout
+# a pistol. Call sites keep their intent; this evens the recordings.
+const SFX_TRIM = {
+    "melee_hit":-3.0,"container_close":4.0,"eat":3.0,"infected_spit":4.0,"infected_call":-2.0,
+    "flyby_1":4.0,"flyby_2":3.0,"flyby_3":3.5,
+    "step_grass_1":0.9,"step_grass_2":0.2,"step_grass_3":4.0,"step_grass_5":3.4,"step_grass_8":-1.4,"step_grass_9":-0.3,
+    "step_gravel_2":-1.8,"step_gravel_4":1.4,"step_snow_2":-0.6,"step_snow_3":-0.4,"step_snow_4":0.4,"step_snow_6":2.9,
+    "step_snow_8":1.1,"step_snow_9":-1.0,"step_stone_1":-0.1,"step_stone_6":-0.7,"step_wood_2":-0.5,"step_wood_3":-1.0,
+}
+
 func _play_world_sfx(kind, volume_db = -12.0, pitch_variation = 0.018):
+    if self_test_silent:
+        return false
     if world_audio_players.is_empty():
         _create_world_audio_layer()
     if world_audio_players.is_empty():
@@ -8147,7 +8186,7 @@ func _play_world_sfx(kind, volume_db = -12.0, pitch_variation = 0.018):
     var voice = world_audio_players[world_audio_cursor % world_audio_players.size()]
     world_audio_cursor = (world_audio_cursor + 1) % world_audio_players.size()
     voice.stream = stream
-    voice.volume_db = float(volume_db)
+    voice.volume_db = float(volume_db) + float(SFX_TRIM.get(str(kind),0.0))
     var spread = max(0.0,float(pitch_variation))
     voice.pitch_scale = sfx_pitch_base * (randf_range(1.0 - spread,1.0 + spread) if spread > 0.0001 else 1.0)
     voice.play()
@@ -8205,6 +8244,8 @@ func _create_ambience_audio_layer():
         player_node.name = "Ambience_%s" % kind.capitalize()
         player_node.volume_db = -60.0
         player_node.bus = "Ambience"
+        # the bed carries on, muffled, under the menus (AudioMix)
+        player_node.process_mode = Node.PROCESS_MODE_ALWAYS
         var stream = _cached_ambience_audio(kind)
         if stream != null:
             player_node.stream = stream
@@ -8238,11 +8279,14 @@ func _ambience_target_volume(kind,selection = {}):
     var state = selection if not selection.is_empty() else _ambience_selection()
     var key = str(kind)
     if key == str(state.get("base","")):
+        # the night bed is recorded 4 dB quieter and the room tone 6 dB: they
+        # sit a little under the day, not under the floor
         if key == "interior":
-            return -25.0
-        return -24.0 if key == "day" else -25.0
+            return -22.0
+        return -24.0 if key == "day" else -22.5
     if key == "rain" and bool(state.get("rain",false)):
-        return -19.0
+        # rain is the one loud bed; it sits just under the footsteps
+        return -24.0
     return -60.0
 
 # --- music ------------------------------------------------------------------
@@ -8292,7 +8336,12 @@ func _update_music(delta):
         music_player.name = "Music"
         music_player.bus = "Music"
         music_player.volume_db = -80.0
+        # the score keeps playing under the pause and title menus (AudioMix)
+        music_player.process_mode = Node.PROCESS_MODE_ALWAYS
         add_child(music_player)
+    if get_tree().paused and pause_menu != null and is_instance_valid(pause_menu) and pause_menu.visible and pause_menu.mode == "title" and not music_player.playing and music_wait > 2.5:
+        # the title should not sit in silence for half a minute
+        music_wait = 2.5
     var mood = _music_mood()
     var chased = false
     for e in get_tree().get_nodes_in_group("infected"):
@@ -23493,7 +23542,7 @@ func _dress_marauder_base(chunk,coord,cell_data:Dictionary):
         hum.position = Vector2(136,300) if idx == 2 else Vector2(578,300)
         hum.set_meta("base_generator",true)
         chunk.add_child(hum)
-        soundscape.attach_loop(hum,"generator_loop",-10.0,420.0)
+        soundscape.attach_loop(hum,"generator_loop",-15.0,420.0)
     if idx == 5:
         _marauder_base_rails(floor_layer)
     if idx == 4:
@@ -23604,7 +23653,7 @@ func _settlement_piece(chunk,piece:Dictionary):
             prop.set_meta("settlement_piece_kind",kind)
             # a settlement keeps its generators running (dev67)
             if kind == "prop:generator_prop" and soundscape != null:
-                soundscape.attach_loop(prop,"generator_loop",-14.0,300.0)
+                soundscape.attach_loop(prop,"generator_loop",-19.0,300.0)
         return prop
     var atlas_path = "res://settlement_props_v1.png"
     var index = SETTLEMENT_PIECE_KINDS.find(kind)
@@ -30081,7 +30130,7 @@ func _break_bone(zone):
     fractures[zone] = 1
     fracture_heal[zone] = 0.0
     pain = min(100.0,pain + 22.0)
-    _play_world_sfx("melee_hit",-6.0,0.02)
+    _play_world_sfx("melee_hit",-5.0,0.02)
     _body_spring_kick(Vector2.DOWN,22.0)
     var what = "хромота, бежать не выйдет" if zone == "legs" else "прицел гуляет, перезарядка медленнее"
     _set_survival_feedback("ПЕРЕЛОМ: %s — %s" % [str(LIMB_NAMES.get(zone,zone)),what],3.5)
