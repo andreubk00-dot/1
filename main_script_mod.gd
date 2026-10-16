@@ -1574,6 +1574,9 @@ func _run_static_self_tests():
 
     var old_pain_test = pain
     var old_body_test = body_condition.duplicate(true)
+    # dev67: the injury checks below may roll a fracture - never leave one behind
+    var old_fractures_test = fractures.duplicate(true)
+    var old_fracture_heal_test = fracture_heal.duplicate(true)
 
     pain = 0.0
     body_condition = {
@@ -1620,6 +1623,8 @@ func _run_static_self_tests():
 
     pain = old_pain_test
     body_condition = old_body_test
+    fractures = old_fractures_test
+    fracture_heal = old_fracture_heal_test
     _sanitize_body_condition()
 
     _record_test(_ai_state_valid("idle"),"AI idle state невалиден")
@@ -2852,6 +2857,10 @@ const MarauderBase = preload("res://world/marauder_base.gd")
 # dev67: the world beyond the screen (distant fights, dogs, wind, thunder, fires)
 const Soundscape = preload("res://world/soundscape.gd")
 var soundscape = null
+# dev68: the narrative thread «ЭФИР» (docs/STORY_ETHER.md)
+const StoryEther = preload("res://world/story_ether.gd")
+const StoryDialog = preload("res://world/story_dialog.gd")
+var story_ether = {"choice":"","choice_day":0}
 var marauder_base = null
 var marauder_base_saved = {}
 var marauder_memory_saved = {}
@@ -11933,6 +11942,10 @@ func _hud_survival_objective():
         return slice_objective
     if _at_home():
         return {"title":"ВЫ ДОМА","sub":"M → Дом / журнал: восстановление"}
+    # «ЭФИР»: only when there is nothing else to do does the thread speak up
+    var ether_hint = StoryEther.hint(_ether_seen,str(story_ether.get("choice","")))
+    if ether_hint != "":
+        return {"title":"НИТЬ • ЭФИР","sub":ether_hint}
     return {"title":"ПОДГОТОВИТЬ ВЫЛАЗКУ","sub":"M — карта региона и планирование"}
 
 func _expedition_sector_distance(from_coord:Vector2i,to_coord:Vector2i) -> int:
@@ -18661,6 +18674,8 @@ func _update_interaction_prompt():
         interaction_label.text = "ГОВОРИТЬ  •  %s" % str(who).to_upper()
     elif type == "marauder_captive":
         interaction_label.text = "ОБЫСКАТЬ  •  СДАЛСЯ"
+    elif type == "ether_console":
+        interaction_label.text = "ПУЛЬТ ОПОВЕЩЕНИЯ  •  ЭФИР ГО" if str(story_ether.get("choice","")) == "" else "ПУЛЬТ ОПОВЕЩЕНИЯ  •  %s" % ("НОВАЯ ЗАПИСЬ" if str(story_ether["choice"]) == "truth" else "ВЫКЛЮЧЕН")
     elif type == "story_clue":
         var story_id = str(target.get_meta("story_id",""))
         var story_action = "ПЕРЕЧИТАТЬ" if WorldChronicle.story_seen(faction_state,story_id) else "ЧИТАТЬ"
@@ -18816,6 +18831,8 @@ func _interact():
         _search_captive(target)
     elif type == "marauder_talk":
         _talk_marauder(target)
+    elif type == "ether_console":
+        _open_ether_console()
     elif type == "base_heater":
         _toggle_base_heater(target)
     elif type == "base_campfire":
@@ -20848,6 +20865,8 @@ func _build_high_risk_floor(root,poi_id:String,floor_index:int,data:Dictionary) 
     var high_risk_floor_story = HighRiskStoryCatalog.floor_clue(poi_id,floor_index)
     if not high_risk_floor_story.is_empty():
         _create_environmental_story_clue(root,high_risk_floor_story)
+    if poi_id == StoryEther.CONSOLE_POI and floor_index == StoryEther.CONSOLE_FLOOR:
+        _create_ether_console(root,StoryEther.CONSOLE_POS)
 
     var count = _high_risk_floor_effective_enemy_count(poi_id,floor_index,data)
     var profile = str(data.get("enemy_profile","high_interior"))
@@ -21421,6 +21440,7 @@ func _load_chunk(coord):
     _dress_ground_seams(chunk,coord)
     _place_puddles(chunk,coord)
     _record_map_footprint(chunk,coord)
+    _place_ether_note(chunk,coord)
 
     _spawn_saved_drops_for_chunk(chunk,coord)
     _spawn_player_bodies_for_chunk(chunk,coord)
@@ -22978,7 +22998,10 @@ func _talk_faction_npc(node):
     var line = "Держись ближе к освещённым улицам. За стенами сейчас неспокойно."
     match npc_id:
         "perron_steward": line = "Если привезёшь припасы, это почувствует весь Перрон, не только рынок."
-        "perron_radio": line = "По радио снова говорят о проблемах на дальних маршрутах. " + _marauder_base_rumor()
+        "perron_radio":
+            # «ЭФИР»: the first time he plays it - after that he follows the thread
+            line = StoryEther.lenka_line(_ether_seen,str(story_ether.get("choice","")))
+            _ether_hear_voice()
         "rubezh_commander": line = "Дороги важнее трофеев. Без маршрутов поселения начинают голодать."
         "rubezh_dispatch": line = "Патрули отмечают опасные участки, но людей на всё не хватает. " + _marauder_base_rumor()
         "mechanics_electrician": line = "Хорошая электроника сейчас ценнее блестящей безделушки. " + _marauder_base_rumor()
@@ -25347,6 +25370,8 @@ func _read_story_clue(node:Node) -> void:
         return
     var was_seen = WorldChronicle.story_seen(faction_state,story_id)
     WorldChronicle.append_story(faction_state,world_day,int(world_minutes),story_id,title,text)
+    if StoryEther.is_trace(story_id) and not was_seen:
+        _ether_trace_found(story_id)
     node.set_meta("story_seen",true)
     _resolve_story_thread_echoes()
     _set_survival_feedback("%s • %s\n%s" % [("ЗАПИСЬ" if was_seen else "НАЙДЕНА ЗАПИСЬ"),title,text],6.0)
@@ -25434,6 +25459,13 @@ func _build_world_event(chunk,coord:Vector2i,profile:Dictionary,event:Dictionary
         var story_clue = EnvironmentalStoryCatalog.clue_for(coord,event_id)
         if not story_clue.is_empty():
             _create_environmental_story_clue(root,story_clue)
+        # «ЭФИР»: the column that was coming for collection point №4
+        if coord == StoryEther.COLUMN_NOTE["coord"] and event_id == str(StoryEther.COLUMN_NOTE["event_id"]):
+            var column = StoryEther.COLUMN_NOTE.duplicate(true)
+            column["pos"] = column["offset"]
+            var node = _create_environmental_story_clue(root,column)
+            if node != null:
+                node.set_meta("ether_note",true)
 
     var loot_profile = EncounterCatalog.loot_profile(event,zone)
     if loot_profile != "" and _loot_profile_risk(loot_profile) <= risk:
@@ -33368,6 +33400,102 @@ func _close_base_build():
         base_build_panel.visible = false
 
 
+# ------------------------------------------------------------- «ЭФИР» (dev68) --
+func _ether_seen(story_id:String) -> bool:
+    return WorldChronicle.story_seen(faction_state,story_id)
+
+func _place_ether_note(chunk,coord:Vector2i) -> void:
+    var note = StoryEther.note_for_chunk(coord)
+    if note.is_empty():
+        return
+    var node = _create_environmental_story_clue(chunk,note)
+    if node != null:
+        node.set_meta("ether_note",true)
+
+func _ether_trace_found(story_id:String) -> void:
+    # a quiet sign that this paper belongs to a bigger story
+    _soft_ether_ping()
+
+func _ether_hear_voice() -> void:
+    if _ether_seen(str(StoryEther.VOICE["id"])):
+        return
+    WorldChronicle.append_story(faction_state,world_day,int(world_minutes),str(StoryEther.VOICE["id"]),str(StoryEther.VOICE["title"]),str(StoryEther.VOICE["text"]))
+    _soft_ether_ping()
+
+func _soft_ether_ping() -> void:
+    if world_chronicle_button != null:
+        var unread = WorldChronicle.unread_count(faction_state)
+        world_chronicle_button.text = "ЭФИР" if unread <= 0 else "ЭФИР %d" % min(99,unread)
+
+func _create_ether_console(root,pos:Vector2):
+    var node = Node2D.new()
+    node.name = "EtherConsole"
+    node.position = pos
+    node.z_index = 8
+    node.z_as_relative = false
+    node.add_to_group("interactable")
+    node.set_meta("interaction_type","ether_console")
+    node.set_meta("display_name","Пульт оповещения")
+    node.set_meta("interaction_radius",64.0)
+    root.add_child(node)
+    # the broadcast cabinet with its monitor; a green lamp burns while a tape runs
+    _ellipse(Vector2(2,2),20,5,Color(0.01,0.012,0.012,0.30),node)
+    _world_prop_sprite("electrical_box",node,Vector2(-8,0),0,0.62)
+    _world_prop_sprite("broken_monitor",node,Vector2(10,-2),1,0.55)
+    var lamp = ColorRect.new()
+    lamp.color = Color(0.30,0.95,0.45) if str(story_ether.get("choice","")) != "silence" else Color(0.30,0.32,0.30)
+    lamp.size = Vector2(2,2)
+    lamp.z_index = 2
+    lamp.position = Vector2(-9,-14)
+    lamp.name = "Lamp"
+    node.add_child(lamp)
+    _add_detail_light(node,Vector2(0,-8),Color(0.55,0.95,0.70),0.35,0.7,false)
+    return node
+
+func _open_ether_console() -> void:
+    if not _ether_seen(str(StoryEther.SOURCE["id"])):
+        WorldChronicle.append_story(faction_state,world_day,int(world_minutes),str(StoryEther.SOURCE["id"]),str(StoryEther.SOURCE["title"]),str(StoryEther.SOURCE["text"]))
+        _soft_ether_ping()
+    var choice = str(story_ether.get("choice",""))
+    if choice != "":
+        var now = "В эфире — твоя запись:\n«%s»" % str(StoryEther.CHOICES["truth"]["broadcast"]) if choice == "truth" else "Оповещение выключено. Лента стоит."
+        _set_survival_feedback("ПУЛЬТ ОПОВЕЩЕНИЯ\n" + now,5.0)
+        return
+    # the prompt under the dimmed screen would show through the buttons
+    if hud_interaction_panel != null:
+        hud_interaction_panel.visible = false
+    var dialog = StoryDialog.new()
+    get_tree().root.add_child(dialog)
+    dialog.open("«ВЕКТОР» • ГЛУБИНА −3","ПУЛЬТ ОПОВЕЩЕНИЯ",StoryEther.CONSOLE_TEXT,[
+        [str(StoryEther.CHOICES["truth"]["label"]),func(): _ether_choose("truth")],
+        [str(StoryEther.CHOICES["silence"]["label"]),func(): _ether_choose("silence")],
+        ["ОСТАВИТЬ",func(): pass]
+    ])
+
+func _ether_choose(choice:String) -> void:
+    if not StoryEther.CHOICES.has(choice) or str(story_ether.get("choice","")) != "":
+        return
+    var c = StoryEther.CHOICES[choice]
+    story_ether["choice"] = choice
+    story_ether["choice_day"] = world_day
+    for fid in FactionCatalog.ids():
+        for res in c["resources"].keys():
+            FactionEconomy.adjust_resource(faction_state,str(fid),str(res),float(c["resources"][res]))
+    WorldChronicle.append_story(faction_state,world_day,int(world_minutes),"ether_7_" + choice,str(c["title"]),str(c["text"]))
+    _record_world_news("world","",str(c["text"]),world_day,int(world_minutes),true)
+    _set_survival_feedback(("В эфире теперь:\n«%s»" % str(c["broadcast"])) if choice == "truth" else "Лента остановилась. В эфире — тишина.",6.0)
+    for n in get_tree().get_nodes_in_group("interactable"):
+        if is_instance_valid(n) and str(n.get_meta("interaction_type","")) == "ether_console":
+            var lamp = n.get_node_or_null("Lamp")
+            if lamp != null and choice == "silence":
+                lamp.color = Color(0.30,0.32,0.30)
+    _soft_ether_ping()
+    _save_state()
+
+func ether_roaming_factor() -> float:
+    var c = str(story_ether.get("choice",""))
+    return float(StoryEther.CHOICES[c]["roaming"]) if StoryEther.CHOICES.has(c) else 1.0
+
 # dev65: the base in the world's news (the chronicle, the settlements' talk)
 const MARAUDER_BASE_NEWS = {
     "boss":"На «Чёрном дворе» убит Седой, главарь мародёров. Говорят, его люди грызутся за общак.",
@@ -33482,8 +33610,16 @@ func _show_ending_screen(outcome,definition,day):
     var screen = EndingScreen.new()
     screen.game = self
     add_child(screen)
-    screen.show_outcome(outcome if typeof(outcome) == TYPE_DICTIONARY else {},definition if typeof(definition) == TYPE_DICTIONARY else {},
+    var told = (definition if typeof(definition) == TYPE_DICTIONARY else {}).duplicate(true)
+    told["text"] = _ending_text_with_ether(str(told.get("text","")))
+    screen.show_outcome(outcome if typeof(outcome) == TYPE_DICTIONARY else {},told,
         {"day":int(day),"sectors":discovered_chunks.size(),"kills":defeated.size()})
+
+func _ending_text_with_ether(text:String) -> String:
+    # «ЭФИР»: what the region hears at the end, for whoever followed the thread
+    if not _ether_seen(str(StoryEther.SOURCE["id"])) and not _ether_seen(str(StoryEther.VOICE["id"])):
+        return text
+    return text + "\n\n" + StoryEther.epilogue(str(story_ether.get("choice","")))
 
 func _record_regional_endgame_outcome(outcome:Dictionary,event_day:int) -> void:
     if typeof(outcome) != TYPE_DICTIONARY or outcome.is_empty():
@@ -34828,6 +34964,7 @@ func _save_state():
         "marauder_squads":marauder_director.serialize() if marauder_director != null else [],
         "marauder_base":marauder_base.serialize() if marauder_base != null else {},
         "marauder_memory":marauder_director.serialize_memory() if marauder_director != null else {},
+        "story_ether":story_ether.duplicate(true),
         "next_body_id":next_body_id,
         "picked_world_items":picked_world_items,
         "dropped_items":dropped_items,
@@ -35084,6 +35221,7 @@ func _load_state():
     marauder_saved = parsed.get("marauder_squads",[]) if typeof(parsed.get("marauder_squads",[])) == TYPE_ARRAY else []
     marauder_base_saved = parsed.get("marauder_base",{}) if typeof(parsed.get("marauder_base",{})) == TYPE_DICTIONARY else {}
     marauder_memory_saved = parsed.get("marauder_memory",{}) if typeof(parsed.get("marauder_memory",{})) == TYPE_DICTIONARY else {}
+    story_ether = StoryEther.sanitize(parsed.get("story_ether",{}))
     if marauder_director != null:
         marauder_director.restore_memory(marauder_memory_saved)
     if marauder_base != null:

@@ -1337,3 +1337,32 @@ nothing overlaps.
   a new survivor starts whole.
 - Tests: `tests/test_soundscape_dev67.gd` (32), `tests/test_fractures_dev67.gd`
   (33); the inventory art contract counts 60 icons.
+
+## dev68 — «ЭФИР», the thread under the sandbox
+
+Design and texts: `docs/STORY_ETHER.md`. A narrative, not a quest: six traces
+explain why the region fell apart - an evacuation broadcast from the
+underground node «Вектор» that has looped «stay where you are, wait for
+transport» for three weeks. People waited at collection points, columns
+turned back to them, and the settlements began with those who stopped
+waiting. The raiders keep the frequency alive: people at home are easy prey.
+- The survivor is the holder of tag **4-117** of collection point №4 (the old
+  polyclinic) - the tag lies by the start; the same number is on the route
+  sheet of the column «Запад-3» that was coming and turned back.
+- Traces: the tag (start), Лёнька's voice (first talk on the Perron), the
+  relay's passport (the police department, west), the column's route sheet
+  (the convoy wreck on the western road), the raiders' radioman's note
+  («Чёрный двор»), and the **broadcast console** at the deep core of the
+  «Вектор» (−3).
+- At the console: **write the truth** (no evacuation - go to the people:
+  security +6 and food +3 for every settlement, raider squads −15%),
+  **switch it off** (silence; security +2 each), or leave it as it is.
+- The thread never hands out items or access; it lives in the chronicle
+  (the «ЭФИР» panel), in Лёнька's lines, and - only when the survivor has no
+  other goal at all - as a soft hint «НИТЬ • ЭФИР» on the objective line. The
+  region's ending gains a closing line about what is on the air.
+- A quiet decision dialog (`world/story_dialog.gd`), same look as the ending.
+- Fix: the start-up self test hit the survivor's arm and since dev67 could
+  leave a broken arm (~37% of launches). It now restores fractures; the
+  fracture test starts twelve fresh games to make sure.
+- Test: `tests/test_story_ether_dev68.gd` (93 checks).

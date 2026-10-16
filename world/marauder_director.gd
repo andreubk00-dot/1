@@ -324,6 +324,9 @@ func _maybe_spawn() -> void:
     # the raiders' base presses the roads around it; once it falls they thin out
     if game.marauder_base != null:
         chance *= game.marauder_base.roaming_pressure(game.player.global_position)
+    # «ЭФИР»: told the truth, people stop sitting at home as easy prey
+    if game.has_method("ether_roaming_factor"):
+        chance *= game.ether_roaming_factor()
     if randf() > chance:
         return
     var rec = _reunion_type()

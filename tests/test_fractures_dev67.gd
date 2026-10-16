@@ -39,6 +39,16 @@ func run():
     root.add_child(game)
     await frames(6)
 
+    # a new game never starts with a break left by the start-up self test
+    check(game._broken_limb() == "" and int(game.fractures["arms"]) == 0, "the self test left the survivor with a broken bone")
+    for i in range(12):
+        var g = Main.new()
+        root.add_child(g)
+        await frames(2)
+        check(g._broken_limb() == "", "start-up self test broke a bone (run %d)" % i)
+        g.queue_free()
+        await frames(1)
+
     # the item is complete
     check(game.item_defs.has("splint") and str(game.item_defs["splint"]["use"]) == "splint", "no splint item")
     check(game.inventory_icon_regions.has("splint") and game._make_item_icon("splint") != null, "the splint has no icon")
