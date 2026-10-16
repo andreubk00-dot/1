@@ -67,6 +67,24 @@ func run():
             break
     check(broke, "crushing blows never break a leg")
     check(int(game.fractures["arms"]) == 0, "a blow to the leg broke an arm")
+    # a brute's club can break what an ordinary bite cannot
+    game._clear_fractures()
+    var brute_breaks = 0
+    var bite_breaks = 0
+    for i in range(300):
+        game.body_condition["legs"] = 100.0
+        game.body_condition["arms"] = 100.0
+        game._clear_fractures()
+        game._heavy_blow = true
+        game._apply_body_injury("legs", 10.2)
+        game._heavy_blow = false
+        brute_breaks += int(game.fractures["legs"] == 1)
+        game._clear_fractures()
+        game._apply_body_injury("legs", 6.8)
+        bite_breaks += int(game.fractures["legs"] == 1)
+    check(brute_breaks > 15 and bite_breaks == 0, "brutes and bites break bones alike: %d / %d" % [brute_breaks, bite_breaks])
+    game._clear_fractures()
+    game._break_bone("legs")
     game._apply_body_injury("torso", 60.0)
     check(not game.fractures.has("torso"), "the torso grew a fracture slot")
 

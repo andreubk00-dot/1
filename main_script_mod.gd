@@ -29058,7 +29058,8 @@ func _update_enemies(delta):
             attack_cd = max(0.58,float(enemy.get_meta("attack_interval",0.9)))
             attack_anim = 0.26
             _play_infected_voice(enemy,"infected_attack",-9.0,360.0,0.025)
-            _apply_enemy_hit(float(enemy.get_meta("attack_damage",8.0)))
+            # a brute's blow is a club: it can break a limb (dev67)
+            _apply_enemy_hit(float(enemy.get_meta("attack_damage",8.0)),str(enemy.get_meta("infected_kind","")) == "brute")
 
         enemy.set_meta("ai_state",state)
         enemy.set_meta("attack_anim",attack_anim)
@@ -29984,6 +29985,8 @@ const FRACTURE_HEAL_MINUTES = 36.0 * 60.0
 const FRACTURE_MIN_TRAUMA = 11.0
 const LIMB_NAMES = {"arms":"РУКА","legs":"НОГА"}
 
+var _heavy_blow = false
+
 func _clear_fractures():
     fractures = {"arms":0,"legs":0}
     fracture_heal = {"arms":0.0,"legs":0.0}
@@ -29992,6 +29995,8 @@ func _roll_fracture(zone,trauma:float) -> bool:
     if not zone in fractures or int(fractures[zone]) == 1:
         return false
     var chance = clamp((trauma - FRACTURE_MIN_TRAUMA) / 24.0,0.0,0.45)
+    if _heavy_blow:
+        chance += 0.14
     if _body_condition_value(zone) < 18.0:
         chance = max(chance,0.5)
     if randf() >= chance:
@@ -30109,7 +30114,7 @@ func _update_injuries(delta):
             if value < cap:
                 body_condition[zone] = min(cap,value + recovery)
 
-func _apply_enemy_hit(base_damage):
+func _apply_enemy_hit(base_damage,heavy_blow:bool = false):
     if qa_visual_mode or developer_invulnerable:
         return
     var zone = _roll_injury_zone()
@@ -30120,7 +30125,9 @@ func _apply_enemy_hit(base_damage):
     _hurt_feedback(final_damage)
 
     var trauma = final_damage * _injury_zone_trauma_mult(zone)
+    _heavy_blow = heavy_blow
     _apply_body_injury(zone,trauma)
+    _heavy_blow = false
 
     var bleed_chance = 0.32
     bleed_chance *= _injury_zone_bleed_mult(zone)

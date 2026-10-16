@@ -1290,3 +1290,50 @@ nothing overlaps.
 - Tests: `tests/test_marauder_memory_dev66.gd` (38 checks: names, the spared
   man's return, debt, no mercy and its fading, save, the first trader, the
   road stall); the base test checks the night shift (446 checks).
+
+## dev67 — the world beyond the screen, broken bones
+
+### Sound and atmosphere (`world/soundscape.gd`)
+- Audit: the game had music by mood (day / night / danger), ambience beds
+  (day, night, interior, rain), use and weapon sounds - but nothing living
+  beyond the screen, fires that burned silently, crows that flew silently,
+  rain without thunder.
+- Now: **shooting far off** (muffled, echoing volleys built from our own
+  shots - more at night, and more toward the raiders' base, which is where
+  they come from half the time); **dogs** after dusk near where people live;
+  **wind gusts** outdoors, harder in the cold and the snow; **thunder with
+  lightning** in the rain - the street flashes blue-white, the rumble comes
+  0.4-3 s later; **crows** caw when a flock takes off (once per flock);
+  **fires crackle** (barrels, bonfires, stoves, field kitchens) and
+  **generators hum** (settlements, the base's boiler house and generator
+  shed) in seamless loops, each starting at a random point. The raiders'
+  base carries the danger score.
+- New CC0 sources (HaelDB, zeroisnotnull, fvcalderan, PagDev, YCbCr,
+  WuxiaScrub) are listed in `audio/CREDITS_CC0.md`; everything is processed
+  deterministically by `tools/import_cc0_audio.py` (thunder low-passed to
+  the rumble, loops crossfaded, tails trimmed).
+
+### Broken bones
+- Audit: four body zones with condition, pain, painkillers, bleeding, wound
+  contamination turning into infection, antibiotics - but a smashed leg just
+  slowly recovered; nothing ever broke.
+- A heavy blow to an arm or a leg can break it: buckshot at close range (up
+  to 45% a limb hit), a brute's club (+14%), almost anything on a battered
+  limb (below 18%). An ordinary bite or a rifle round to a healthy limb does
+  not.
+- **Broken leg**: speed ×0.55 (×0.72 on painkillers), no running, a hitch
+  in every other step and a hiss of pain. **Broken arm**: aim spread ×1.7,
+  reload ×1.5, melee ×0.6. A broken bone never mends by itself and holds
+  the limb's condition at 35%.
+- **Splint** (new item with its own art): made at a bench from firewood and
+  two cloths; found in pharmacies, the military, the police, medical sites
+  and the raiders' stores; sold by Тимур in the Lazaret. **Improvised in
+  the field**: use cloth or tape with something rigid in the pack (firewood
+  or two scrap) - it knits 25% slower. A **trauma kit** sets a break well.
+  A set bone knits in ~36 game hours (two thirds of that under a roof);
+  while splinted: speed ×0.84, aim ×1.18, still no running.
+- On screen: «ХРОМАЕТ» in red, «НОГА В ШИНЕ», «РУКА СЛОМАНА» in the stance
+  panel; a standing warning tells how to splint. Saved with the survivor;
+  a new survivor starts whole.
+- Tests: `tests/test_soundscape_dev67.gd` (32), `tests/test_fractures_dev67.gd`
+  (33); the inventory art contract counts 60 icons.
