@@ -18,7 +18,9 @@ func _story_nodes(root:Node) -> Array:
     var stack:Array = [root]
     while not stack.is_empty():
         var node:Node = stack.pop_back()
-        if str(node.get_meta("interaction_type","")) == "story_clue": out.append(node)
+        # dev68: the «ЭФИР» thread is its own narrative layer (the column's route
+        # sheet lies beside the convoy wreck) - the encounter's own trace stays one
+        if str(node.get_meta("interaction_type","")) == "story_clue" and not bool(node.get_meta("ether_note",false)): out.append(node)
         for child in node.get_children(): stack.append(child)
     return out
 
