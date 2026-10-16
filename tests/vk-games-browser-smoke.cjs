@@ -76,5 +76,42 @@ async function check(p){
     await context.close();await browser.close();
   }
 }
-(async()=>{for(const s of scenarios)await check(s);console.log('PASS all VK/OK browser smoke cases');})()
+// Unlike a direct Render tab, the real VK/OK app is hosted inside an iframe.
+// Emulate an embed without a responding social host: loading must complete,
+// SDK-only rewards stay disabled and touch controls remain usable.
+async function checkUnresponsiveEmbed(platform,port){
+  const browser=await chromium.launch({headless:true});
+  const context=await browser.newContext({
+    viewport:{width:1100,height:740},serviceWorkers:'block',locale:'ru-RU'
+  });
+  const page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(String(e)));
+  try{
+    await page.setContent('<iframe id="gameFrame" width="1000" height="600" src="http://127.0.0.1:'+port+'/" style="border:0"></iframe>');
+    const frame=page.frameLocator('#gameFrame');
+    await frame.locator('#shell:not(.hidden)').waitFor({timeout:20000});
+    assert(await frame.locator('#playBtn').isVisible(),platform+' iframe missing start');
+    const status=await frame.locator('#shell').evaluate(()=>{
+      const g=window.__ENDLESS_DEFENDERS__;
+      return {ready:g?.bridge?.ready,version:g?.save?.version,
+        viewport:innerWidth,pageWidth:document.documentElement.scrollWidth};
+    });
+    assert.equal(status.ready,false,platform+' unverified parent unexpectedly initialized bridge');
+    assert.equal(status.version,21,platform+' iframe altered saves');
+    assert(status.pageWidth<=status.viewport+6,platform+' iframe horizontal overflow');
+    await frame.locator('#playBtn').click();
+    const live=await frame.locator('#gameCanvas').isVisible();
+    assert(live,platform+' iframe cannot start combat');
+    assert.deepEqual(errors,[],platform+' iframe JS errors: '+errors.join(','));
+    console.log('PASS '+platform+' iframe startup with unavailable SDK host');
+  }finally{
+    await context.close();await browser.close();
+  }
+}
+(async()=>{
+  for(const s of scenarios)await check(s);
+  await checkUnresponsiveEmbed('vk',4175);
+  await checkUnresponsiveEmbed('ok',4176);
+  console.log('PASS VK/OK direct and embedded browser smoke');
+})()
   .catch(e=>{console.error(e);process.exitCode=1;});
