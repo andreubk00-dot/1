@@ -257,7 +257,7 @@ func _tick_trader(sq) -> void:
             sq.set_meta("greeted", true)
             trader.say_line("Стой-стой, не стреляй! Торговлю ведём? Патроны, бинты, мелочь.", 4.0)
             if game.field_hints != null:
-                game.field_hints.hint("road_trader", "Не каждый с оружием — враг. Кузьмич торгует с дороги (E — ТОРГОВАТЬ), нейтральные бродяги не стреляют первыми. Но ствол на них не наводи.")
+                game.field_hints.hint("road_trader", "Не каждый с оружием — враг. Кузьмич торгует с дороги ({interact} — ТОРГОВАТЬ), нейтральные бродяги не стреляют первыми. Но ствол на них не наводи.")
     if game.trader_open and game.active_trader_id == tid and d > TRADER_FAR:
         game._close_trader()
 

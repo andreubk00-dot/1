@@ -1,5 +1,6 @@
 extends RefCounted
 const SettlementCrisis = preload("res://world/settlement_crisis.gd")
+const InputBindings = preload("res://world/input_bindings.gd")
 
 # OSTATOK 1.23.0-dev15 — vertical slice state retained; sandbox route consequences remain owned by normal routes/markets/NPCs.
 # This is not a global story goal and not a parallel quest generator. It only makes
@@ -420,17 +421,17 @@ static func objective(state:Dictionary,world_day:int,at_lazaret:bool,clinical_di
         if completed_day > 0 and world_day < completed_day + POSTRUN_HUD_DAYS:
             if not bool(rec.get("doctor_debrief_seen",false)):
                 return {"title":"ПЕРВЫЙ ЦИКЛ ЗАВЕРШЁН","sub":"Миронова готова подвести итог • дальше цель выбираете вы"}
-            return {"title":"СВОБОДНЫЙ МАРШРУТ","sub":"Первый цикл закрыт • M — выберите следующую вылазку"}
+            return {"title":"СВОБОДНЫЙ МАРШРУТ","sub":"Первый цикл закрыт • %s — выберите следующую вылазку" % InputBindings.key("region_map")}
         return {}
     if not bool(rec.get("enabled",false)):
         return {}
     if not bool(rec.get("visited_settlement",false)):
-        return {"title":"ДОБРАТЬСЯ ДО ЛАЗАРЕТА","sub":"M — полевой маршрут отмечен на карте"}
+        return {"title":"ДОБРАТЬСЯ ДО ЛАЗАРЕТА","sub":"%s — полевой маршрут отмечен на карте" % InputBindings.key("region_map")}
     if not bool(rec.get("met_doctor",false)):
         return {"title":"НАЙТИ ДОКТОРА МИРОНОВУ","sub":"Главная площадь • доска снабжения"}
     var active_event = state.get("supply_events",{}).get("active",{})
     if not bool(rec.get("supply_resolved",false)) and typeof(active_event) == TYPE_DICTIONARY and not active_event.is_empty() and str(active_event.get("faction","")) == FACTION_ID:
-        return {"title":"ОТВЕТИТЬ НА SOS ЛАЗАРЕТА","sub":"M — аварийный сигнал отмечен на карте"}
+        return {"title":"ОТВЕТИТЬ НА SOS ЛАЗАРЕТА","sub":"%s — аварийный сигнал отмечен на карте" % InputBindings.key("region_map")}
     var contract_done = bool(rec.get("crisis_contract_completed",false))
     var contract_active = crisis_contract_active(state)
     if not contract_active and not contract_done:
@@ -439,13 +440,13 @@ static func objective(state:Dictionary,world_day:int,at_lazaret:bool,clinical_di
         return {"title":"ПОДГОТОВИТЬСЯ К РЕЙСУ","sub":"Сигнал ожидается в ближайшие сутки • проверьте воду, лечение и боезапас"}
     if bool(rec.get("recovery_pending",false)) and at_lazaret and not bool(rec.get("clinical_cargo_secured",false)):
         var attempts = int(rec.get("clinical_incapacitations",1))
-        var note = "Эвакуация заняла 6 ч • проверьте лечение, воду и БК • M — клиника"
+        var note = "Эвакуация заняла 6 ч • проверьте лечение, воду и БК • %s — клиника" % InputBindings.key("region_map")
         if attempts > 1:
-            note = "Повторная эвакуация • помощь больше не пополняется • M — клиника"
+            note = "Повторная эвакуация • помощь больше не пополняется • %s — клиника" % InputBindings.key("region_map")
         return {"title":"ПЕРЕПРОВЕРИТЬ СНАРЯЖЕНИЕ","sub":note}
     if not bool(rec.get("clinical_discovered",false)):
         var readiness = clinical_readiness(inventory_counts)
-        var prep_note = clinical_readiness_text(inventory_counts) + " • M — маршрут"
+        var prep_note = clinical_readiness_text(inventory_counts) + " • %s — маршрут" % InputBindings.key("region_map")
         if str(rec.get("supply_outcome","")) == "lost" and not bool(readiness.get("ready",false)):
             prep_note = "Рейс потерян • " + prep_note
         return {"title":"РАЗВЕДАТЬ КЛИНИЧЕСКИЙ КОМПЛЕКС №4","sub":prep_note}

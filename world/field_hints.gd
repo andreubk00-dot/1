@@ -9,9 +9,10 @@ const WARN_REPEAT = 40.0
 const INK = Color(0.88, 0.85, 0.72)
 const GOLD = Color(0.86, 0.66, 0.34)
 const RED = Color(0.92, 0.36, 0.28)
+const InputBindings = preload("res://world/input_bindings.gd")
 
 const KIND_HINTS = {
-    "runner": "Рывковый: быстрый и худой. Не убегайте по прямой — встретьте его толчком (V).",
+    "runner": "Рывковый: быстрый и худой. Не убегайте по прямой — встретьте его толчком ({shove}).",
     "brute": "Тяжёлый: держит много попаданий и бьёт сильно. Держите дистанцию.",
     "screamer": "Крикун: его вопль зовёт всех вокруг. Убейте его раньше, чем он закричит.",
     "spitter": "Плевун: плюётся издалека. Уходите с места, куда он целится.",
@@ -112,7 +113,7 @@ func _show(entry: Dictionary) -> void:
         seen[entry["id"]] = true
     _title.text = entry["title"]
     _title.add_theme_color_override("font_color", RED if entry["warn"] else GOLD)
-    _text.text = entry["text"]
+    _text.text = InputBindings.fill(str(entry["text"]))
     (_panel.get_theme_stylebox("panel") as StyleBoxFlat).border_color = RED if entry["warn"] else GOLD
     _panel.set_meta("warn", entry["warn"])
     _panel.reset_size()
@@ -150,57 +151,57 @@ func _menu_open() -> bool:
 
 func _check_warnings() -> void:
     if float(game.thirst) < 15.0:
-        warn("thirst", "ОБЕЗВОЖИВАНИЕ", "Вы умираете от жажды. Выпейте воду немедленно (Tab → ПКМ по воде).")
+        warn("thirst", "ОБЕЗВОЖИВАНИЕ", "Вы умираете от жажды. Выпейте воду немедленно ({inventory} → ПКМ по воде).")
     if float(game.hunger) < 10.0:
         warn("hunger", "ИСТОЩЕНИЕ", "Организм на пределе. Срочно съешьте что-нибудь.")
     if float(game.health) < 25.0:
-        warn("health", "КРИТИЧЕСКОЕ СОСТОЯНИЕ", "Уйдите от заражённых и перевяжитесь (H). Отдых восстановит силы.")
+        warn("health", "КРИТИЧЕСКОЕ СОСТОЯНИЕ", "Уйдите от заражённых и перевяжитесь ({bandage}). Отдых восстановит силы.")
     if bool(game.bleeding):
-        warn("bleeding", "КРОВОТЕЧЕНИЕ", "Вы теряете кровь. H — быстрая перевязка.")
+        warn("bleeding", "КРОВОТЕЧЕНИЕ", "Вы теряете кровь. {bandage} — быстрая перевязка.")
     if game.has_method("_broken_limb") and game._broken_limb() != "":
-        warn("fracture", "ПЕРЕЛОМ", "Наложите шину (Tab → шина) или соберите её в поле: дрова или металлолом + изолента или ткань.")
+        warn("fracture", "ПЕРЕЛОМ", "Наложите шину ({inventory} → шина) или соберите её в поле: дрова или металлолом + изолента или ткань.")
     if float(game.body_temperature) < 35.2:
         warn("cold", "ПЕРЕОХЛАЖДЕНИЕ", "Зайдите в здание, разведите огонь, смените мокрую одежду.")
 
 
 func _check_hints() -> void:
     if _age > 1.5:
-        hint("move", "W A S D — идти, Shift — бег, C — красться. Все клавиши: Esc → Управление.")
+        hint("move", "{move_up} {move_left} {move_down} {move_right} — идти, {sprint} — бег, {crouch} — красться. Все клавиши: Esc → Управление.")
     if not seen.has("move"):
         return
     if _age > 12.0:
-        hint("goal", "Текущая цель — справа вверху. M — карта: цель отмечена пунктиром.")
+        hint("goal", "Текущая цель — справа вверху. {region_map} — карта: цель отмечена пунктиром.")
     var near = game._nearest_interactable() if game.has_method("_nearest_interactable") else null
     if near != null:
-        hint("interact", "E — подобрать, обыскать, открыть дверь. Подсказка появляется у предмета.")
+        hint("interact", "{interact} — подобрать, обыскать, открыть дверь. Подсказка появляется у предмета.")
     var items = game.inventory_entries.size()
     if _items_seen >= 0 and items > _items_seen:
-        hint("inventory", "Tab — инвентарь. ПКМ по предмету — использовать: пить, есть, перевязать.")
+        hint("inventory", "{inventory} — инвентарь. ПКМ по предмету — использовать: пить, есть, перевязать.")
     _items_seen = items
     for e in get_tree().get_nodes_in_group("infected"):
         if is_instance_valid(e) and e.global_position.distance_to(game.player.global_position) < 260.0:
-            hint("infected", "Заражённый! ЛКМ — выстрел или удар, V — оттолкнуть, R — перезарядка. Шум и свет зовут других.")
+            hint("infected", "Заражённый! ЛКМ — выстрел или удар, {shove} — оттолкнуть, {reload} — перезарядка. Шум и свет зовут других.")
             var kind = str(e.get_meta("infected_kind", "normal"))
             if KIND_HINTS.has(kind):
                 hint("kind_" + kind, KIND_HINTS[kind])
     if float(game.health) < 75.0 or bool(game.bleeding):
-        hint("hurt", "Ранены. H — быстрая перевязка; кровотечение нельзя оставлять.")
+        hint("hurt", "Ранены. {bandage} — быстрая перевязка; кровотечение нельзя оставлять.")
     var hour = int(float(game.world_minutes) / 60.0) % 24
     if hour >= 20 or hour < 6:
-        hint("dark", "Темно. F — фонарь: светит далеко, но и вас видно издалека.")
+        hint("dark", "Темно. {flashlight} — фонарь: светит далеко, но и вас видно издалека.")
     for m in get_tree().get_nodes_in_group("marauders"):
         if is_instance_valid(m) and m.global_position.distance_to(game.player.global_position) < 300.0:
             hint("marauders", "Мародёры: люди с оружием. Одни стреляют сразу, другие предупреждают — не целься в них, и разойдётесь. С тел можно снять оружие и патроны.")
             break
     for pump in get_tree().get_nodes_in_group("water_pumps"):
         if is_instance_valid(pump) and pump.global_position.distance_to(game.player.global_position) < 140.0:
-            hint("pump", "Колонка: E — напиться вдоволь и наполнить флягу или канистру. Её отметят на карте.")
+            hint("pump", "Колонка: {interact} — напиться вдоволь и наполнить флягу или канистру. Её отметят на карте.")
             break
     if float(game.thirst) < 45.0:
-        hint("thirst", "Хочется пить: Tab → ПКМ по воде. Воду ищите на кухнях и в магазинах.")
+        hint("thirst", "Хочется пить: {inventory} → ПКМ по воде. Воду ищите на кухнях и в магазинах.")
     if float(game.hunger) < 45.0:
         hint("food", "Голод: еда бывает в шкафах, холодильниках и у торговцев.")
     if float(game.body_temperature) < 36.0:
-        hint("cold", "Холодно. Внутри зданий теплее; B — строительство: костёр.")
+        hint("cold", "Холодно. Внутри зданий теплее; {base_build} — строительство: костёр.")
     if float(game.fatigue) > 60.0:
         hint("rest", "Усталость растёт. Отдыхайте в укрытии — у кровати или спального места.")

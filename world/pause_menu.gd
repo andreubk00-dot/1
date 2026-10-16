@@ -23,24 +23,84 @@ var _main_box = null
 var _settings_box = null
 var _confirm_box = null
 var _sliders = {}
-var _fullscreen = null
-var _shake = null
-var _autohide = null
+var _checks = {}
+var _cycles = {}
+var _tab = "sound"
+var _tab_buttons = {}
+var _key_buttons = {}
+var _capturing = ""
+var _key_status: Label = null
+var _settings_content: VBoxContainer = null
+
+const InputBindings = preload("res://world/input_bindings.gd")
+
+const RESOLUTIONS = ["960x540", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"]
+const FPS_CAPS = [30, 60, 90, 120, 144, 0]
+const UI_SCALES = [0.8, 0.9, 1.0, 1.1]
+const DEFAULTS = {
+    "master": 0.85, "music": 0.7, "sfx": 0.9, "ambience": 0.8,
+    "fullscreen": false, "resolution": "1280x720", "pixel_perfect": false,
+    "vsync": true, "max_fps": 0, "ui_scale": 1.0,
+    "camera_shake": true, "hud_autohide": true,
+}
+static var _applied_window = ""
 
 
 static func load_settings() -> Dictionary:
-    var out = {"master": 0.85, "music": 0.7, "sfx": 0.9, "ambience": 0.8, "fullscreen": false, "camera_shake": true, "hud_autohide": true}
+    var out = DEFAULTS.duplicate()
     var cfg = ConfigFile.new()
     if cfg.load(SETTINGS_PATH) == OK:
         for k in out.keys():
             out[k] = cfg.get_value("settings", k, out[k])
+    return sanitize_settings(out)
+
+
+static func sanitize_settings(raw: Dictionary) -> Dictionary:
+    var out = DEFAULTS.duplicate()
+    for k in ["master", "music", "sfx", "ambience"]:
+        var v = raw.get(k, out[k])
+        out[k] = clamp(float(v), 0.0, 1.0) if (v is float or v is int) else out[k]
+    for k in ["fullscreen", "pixel_perfect", "vsync", "camera_shake", "hud_autohide"]:
+        var v = raw.get(k, out[k])
+        out[k] = bool(v) if (v is bool or v is int) else out[k]
+    var res = str(raw.get("resolution", out["resolution"]))
+    out["resolution"] = res if res in RESOLUTIONS else DEFAULTS["resolution"]
+    var fps = raw.get("max_fps", 0)
+    out["max_fps"] = int(fps) if ((fps is int or fps is float) and int(fps) in FPS_CAPS) else 0
+    var ui = raw.get("ui_scale", 1.0)
+    out["ui_scale"] = 1.0
+    if ui is float or ui is int:
+        for opt in UI_SCALES:
+            if abs(float(ui) - opt) < 0.001:
+                out["ui_scale"] = opt
     return out
 
 
 static func save_settings(s: Dictionary) -> void:
     var cfg = ConfigFile.new()
+    cfg.load(SETTINGS_PATH)    # keep the other sections (key bindings)
     for k in s.keys():
         cfg.set_value("settings", k, s[k])
+    cfg.save(SETTINGS_PATH)
+
+
+static func load_bindings() -> Dictionary:
+    var cfg = ConfigFile.new()
+    var raw = {}
+    if cfg.load(SETTINGS_PATH) == OK and cfg.has_section("bindings"):
+        for action in cfg.get_section_keys("bindings"):
+            raw[action] = cfg.get_value("bindings", action, [])
+    return InputBindings.sanitize(raw)
+
+
+static func save_bindings(map: Dictionary) -> void:
+    var cfg = ConfigFile.new()
+    cfg.load(SETTINGS_PATH)
+    if cfg.has_section("bindings"):
+        cfg.erase_section("bindings")
+    var clean = InputBindings.sanitize(map)
+    for action in clean.keys():
+        cfg.set_value("bindings", action, clean[action])
     cfg.save(SETTINGS_PATH)
 
 
@@ -53,19 +113,63 @@ static func ensure_buses() -> void:
             AudioServer.set_bus_send(i, "Master")
 
 
-static func apply_settings(s: Dictionary) -> void:
+static func resolution_size(res: String) -> Vector2i:
+    var parts = res.split("x")
+    if parts.size() != 2:
+        return Vector2i(1280, 720)
+    return Vector2i(int(parts[0]), int(parts[1]))
+
+
+static func resolutions_for_screen() -> Array:
+    # window sizes that fit the screen this window is on; 960x540 always does
+    var out = []
+    var usable = Vector2i(100000, 100000)
+    if DisplayServer.get_name() != "headless":
+        usable = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen()).size
+    for r in RESOLUTIONS:
+        var sz = resolution_size(r)
+        if r == RESOLUTIONS[0] or (sz.x <= usable.x and sz.y <= usable.y):
+            out.append(r)
+    return out
+
+
+static func apply_settings(raw: Dictionary) -> void:
+    var s = sanitize_settings(raw)
     ensure_buses()
-    var vol = {"Master": s.get("master", 0.85), "Music": s.get("music", 0.7), "SFX": s.get("sfx", 0.9), "Ambience": s.get("ambience", 0.8)}
+    var vol = {"Master": s["master"], "Music": s["music"], "SFX": s["sfx"], "Ambience": s["ambience"]}
     for bus in vol.keys():
         var i = AudioServer.get_bus_index(bus)
         if i >= 0:
             var v = clamp(float(vol[bus]), 0.0, 1.0)
             AudioServer.set_bus_volume_db(i, linear_to_db(max(v, 0.0001)))
             AudioServer.set_bus_mute(i, v <= 0.001)
-    if DisplayServer.get_name() != "headless":
-        var want = DisplayServer.WINDOW_MODE_FULLSCREEN if bool(s.get("fullscreen", false)) else DisplayServer.WINDOW_MODE_WINDOWED
-        if DisplayServer.window_get_mode() != want:
+    Engine.max_fps = int(s["max_fps"])
+    var tree = Engine.get_main_loop() as SceneTree
+    if tree != null and tree.root != null:
+        tree.root.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER if bool(s["pixel_perfect"]) else Window.CONTENT_SCALE_STRETCH_FRACTIONAL
+    if DisplayServer.get_name() == "headless":
+        return
+    DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if bool(s["vsync"]) else DisplayServer.VSYNC_DISABLED)
+    var want = DisplayServer.WINDOW_MODE_FULLSCREEN if bool(s["fullscreen"]) else DisplayServer.WINDOW_MODE_WINDOWED
+    var was = DisplayServer.window_get_mode()
+    var key = "%s|%s" % [want, s["resolution"]]
+    var windowed_now = was == DisplayServer.WINDOW_MODE_WINDOWED or was == DisplayServer.WINDOW_MODE_MAXIMIZED
+    if want == DisplayServer.WINDOW_MODE_FULLSCREEN and was != want and was != DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+        DisplayServer.window_set_mode(want)
+    elif want == DisplayServer.WINDOW_MODE_WINDOWED and not windowed_now:
+        DisplayServer.window_set_mode(want)
+    if want == DisplayServer.WINDOW_MODE_WINDOWED and _applied_window != key:
+        if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MAXIMIZED:
             DisplayServer.window_set_mode(want)
+        # size and centre the window only when the choice changes, so a
+        # window the player dragged is not snapped back on every slider move
+        var screen = DisplayServer.window_get_current_screen()
+        var usable = DisplayServer.screen_get_usable_rect(screen)
+        var size = resolution_size(str(s["resolution"]))
+        size = Vector2i(min(size.x, usable.size.x), min(size.y, usable.size.y))
+        DisplayServer.window_set_size(size)
+        DisplayServer.window_set_position(usable.position + (usable.size - size) / 2)
+    _applied_window = key
 
 
 func _init():
@@ -87,6 +191,7 @@ func open(menu_mode: String) -> void:
 
 
 func close() -> void:
+    _end_capture("")
     visible = false
     get_tree().paused = false
     emit_signal("closed")
@@ -98,7 +203,7 @@ func _unhandled_input(event):
     if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
         get_viewport().set_input_as_handled()
         if _settings_box.visible or _confirm_box.visible:
-            _show(_main_box)
+            _back_from_settings()
         elif mode == "pause":
             close()
 
@@ -260,21 +365,72 @@ func _rebuild_main() -> void:
 func _build_settings() -> void:
     var v = _clear(_settings_box)
     v.add_child(_label("НАСТРОЙКИ", 12, INK))
+    var tabs = HBoxContainer.new()
+    tabs.alignment = BoxContainer.ALIGNMENT_CENTER
+    tabs.add_theme_constant_override("separation", 4)
+    _tab_buttons.clear()
+    for pair in [["sound", "ЗВУК"], ["display", "ЭКРАН"], ["game", "ИГРА"], ["keys", "КЛАВИШИ"]]:
+        var id = pair[0]
+        var b = _button(pair[1], func(): _select_tab(id))
+        b.custom_minimum_size = Vector2(70, 16)
+        b.add_theme_font_size_override("font_size", 7)
+        tabs.add_child(b)
+        _tab_buttons[id] = b
+    v.add_child(tabs)
+    _settings_content = VBoxContainer.new()
+    _settings_content.custom_minimum_size = Vector2(320, 200)
+    _settings_content.add_theme_constant_override("separation", 5)
+    v.add_child(_settings_content)
+    v.add_child(_button("НАЗАД", _back_from_settings))
+    _select_tab(_tab)
+
+
+func _select_tab(id: String) -> void:
+    _end_capture("")
+    _tab = id
+    for k in _tab_buttons.keys():
+        var on = k == id
+        _tab_buttons[k].add_theme_color_override("font_color", ACCENT if on else DIM)
+        _tab_buttons[k].add_theme_stylebox_override("normal", _button_style(Color(0.12, 0.11, 0.08) if on else Color(0.07, 0.08, 0.08), ACCENT if on else Color(0.22, 0.24, 0.21)))
+    for c in _settings_content.get_children():
+        _settings_content.remove_child(c)
+        c.queue_free()
+    _sliders.clear()
+    _checks.clear()
+    _cycles.clear()
+    _key_buttons.clear()
+    _key_status = null
     var s = load_settings()
+    match id:
+        "sound":
+            _build_sound_tab(s)
+        "display":
+            _build_display_tab(s)
+        "game":
+            _build_game_tab(s)
+        "keys":
+            _build_keys_tab()
+
+
+func _row_label(text: String, width: float = 120.0) -> Label:
+    var l = Label.new()
+    l.text = text
+    l.custom_minimum_size = Vector2(width, 0)
+    l.add_theme_font_size_override("font_size", 7)
+    l.add_theme_color_override("font_color", INK)
+    return l
+
+
+func _build_sound_tab(s: Dictionary) -> void:
     for pair in [["master", "Общая громкость"], ["music", "Музыка"], ["sfx", "Эффекты"], ["ambience", "Окружение"]]:
         var row = HBoxContainer.new()
         row.add_theme_constant_override("separation", 8)
-        var l = Label.new()
-        l.text = pair[1]
-        l.custom_minimum_size = Vector2(96, 0)
-        l.add_theme_font_size_override("font_size", 7)
-        l.add_theme_color_override("font_color", INK)
-        row.add_child(l)
+        row.add_child(_row_label(pair[1], 110))
         var sl = HSlider.new()
         sl.min_value = 0.0
         sl.max_value = 100.0
         sl.step = 5.0
-        sl.custom_minimum_size = Vector2(110, 12)
+        sl.custom_minimum_size = Vector2(140, 12)
         sl.value = float(s.get(pair[0], 0.8)) * 100.0
         _style_slider(sl)
         var val = Label.new()
@@ -288,29 +444,80 @@ func _build_settings() -> void:
         )
         row.add_child(sl)
         row.add_child(val)
-        v.add_child(row)
+        _settings_content.add_child(row)
         _sliders[pair[0]] = sl
-    _fullscreen = CheckBox.new()
-    _fullscreen.text = "Полный экран"
-    _fullscreen.add_theme_font_size_override("font_size", 7)
-    _fullscreen.button_pressed = bool(s.get("fullscreen", false))
-    _style_check(_fullscreen)
-    _fullscreen.toggled.connect(func(_on): _apply_from_ui())
-    v.add_child(_fullscreen)
-    _shake = CheckBox.new()
-    _shake.text = "Тряска камеры при ударах"
-    _shake.add_theme_font_size_override("font_size", 7)
-    _shake.button_pressed = bool(s.get("camera_shake", true))
-    _style_check(_shake)
-    _shake.toggled.connect(func(_on): _apply_from_ui())
-    v.add_child(_shake)
-    _autohide = CheckBox.new()
-    _autohide.text = "Прятать панели HUD в покое"
-    _autohide.add_theme_font_size_override("font_size", 7)
-    _autohide.button_pressed = bool(s.get("hud_autohide", true))
-    _style_check(_autohide)
-    _autohide.toggled.connect(func(_on): _apply_from_ui())
-    v.add_child(_autohide)
+
+
+func _cycle(key: String, text: String, values: Array, labels: Array, current) -> void:
+    var row = HBoxContainer.new()
+    row.add_theme_constant_override("separation", 4)
+    row.add_child(_row_label(text, 150))
+    var idx = max(0, values.find(current))
+    var val = Label.new()
+    val.custom_minimum_size = Vector2(92, 0)
+    val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    val.add_theme_font_size_override("font_size", 7)
+    val.add_theme_color_override("font_color", ACCENT)
+    var state = {"key": key, "values": values, "labels": labels, "index": idx, "label": val}
+    _cycles[key] = state
+    var prev = _button("<", func(): _step_cycle(key, -1))
+    var next = _button(">", func(): _step_cycle(key, 1))
+    for b in [prev, next]:
+        b.custom_minimum_size = Vector2(14, 13)
+        b.add_theme_font_size_override("font_size", 7)
+    row.add_child(prev)
+    row.add_child(val)
+    row.add_child(next)
+    _settings_content.add_child(row)
+    val.text = str(labels[idx])
+
+
+func _step_cycle(key: String, dir: int) -> void:
+    var st = _cycles.get(key)
+    if st == null:
+        return
+    st["index"] = posmod(int(st["index"]) + dir, st["values"].size())
+    st["label"].text = str(st["labels"][st["index"]])
+    _apply_from_ui()
+
+
+func _check(key: String, text: String, on: bool) -> CheckBox:
+    var cb = CheckBox.new()
+    cb.text = text
+    cb.add_theme_font_size_override("font_size", 7)
+    cb.button_pressed = on
+    _style_check(cb)
+    cb.toggled.connect(func(_on): _apply_from_ui())
+    _settings_content.add_child(cb)
+    _checks[key] = cb
+    return cb
+
+
+func _build_display_tab(s: Dictionary) -> void:
+    _cycle("fullscreen", "Режим", [false, true], ["Окно", "Полный экран"], bool(s["fullscreen"]))
+    var res = resolutions_for_screen()
+    if not str(s["resolution"]) in res:
+        res.append(str(s["resolution"]))
+    var res_labels = []
+    for r in res:
+        res_labels.append(str(r).replace("x", " × "))
+    _cycle("resolution", "Размер окна", res, res_labels, str(s["resolution"]))
+    var fps_labels = []
+    for f in FPS_CAPS:
+        fps_labels.append("без ограничения" if f == 0 else "%d" % f)
+    _cycle("max_fps", "Ограничение кадров", FPS_CAPS, fps_labels, int(s["max_fps"]))
+    var ui_labels = []
+    for u in UI_SCALES:
+        ui_labels.append("%d%%" % int(round(u * 100.0)))
+    _cycle("ui_scale", "Масштаб HUD", UI_SCALES, ui_labels, float(s["ui_scale"]))
+    _check("vsync", "Вертикальная синхронизация", bool(s["vsync"]))
+    _check("pixel_perfect", "Чёткие пиксели (целый масштаб, с рамкой)", bool(s["pixel_perfect"]))
+    _settings_content.add_child(_note("Размер окна действует в оконном режиме. Чёткие пиксели убирают\nразмытие на нестандартных экранах ценой чёрной рамки по краям."))
+
+
+func _build_game_tab(s: Dictionary) -> void:
+    _check("camera_shake", "Тряска камеры при ударах", bool(s["camera_shake"]))
+    _check("hud_autohide", "Прятать панели HUD в покое", bool(s["hud_autohide"]))
     if game != null and game.get("field_hints") != null:
         var hints = CheckBox.new()
         hints.text = "Подсказки для новичка"
@@ -318,63 +525,169 @@ func _build_settings() -> void:
         hints.button_pressed = bool(game.field_hints.enabled)
         _style_check(hints)
         hints.toggled.connect(func(on): game.field_hints.enabled = on)
-        v.add_child(hints)
-    v.add_child(_button("НАЗАД", func(): _show(_main_box)))
+        _settings_content.add_child(hints)
+        _checks["field_hints"] = hints
+
+
+func _note(text: String) -> Label:
+    var l = Label.new()
+    l.text = text
+    l.add_theme_font_size_override("font_size", 6)
+    l.add_theme_color_override("font_color", DIM)
+    return l
+
+
+func _build_keys_tab() -> void:
+    var grid = GridContainer.new()
+    grid.columns = 4
+    grid.add_theme_constant_override("h_separation", 6)
+    grid.add_theme_constant_override("v_separation", 1)
+    var ids = InputBindings.action_ids()
+    var half = int(ceil(ids.size() / 2.0))
+    for i in range(half):
+        for j in [i, i + half]:
+            if j < ids.size():
+                _key_row(grid, str(ids[j]))
+            else:
+                grid.add_child(Control.new())
+                grid.add_child(Control.new())
+    _settings_content.add_child(grid)
+    _settings_content.add_child(_note("Esc — пауза / назад • ЛКМ — выстрел / удар • ПКМ — использовать предмет"))
+    _key_status = _note("Нажмите на клавишу, чтобы назначить другую.")
+    _key_status.add_theme_color_override("font_color", INK)
+    _settings_content.add_child(_key_status)
+    var reset = _button("СБРОСИТЬ КЛАВИШИ", _reset_bindings)
+    reset.custom_minimum_size = Vector2(120, 12)
+    reset.add_theme_font_size_override("font_size", 6)
+    _compact(reset)
+    _settings_content.add_child(reset)
+
+
+func _key_row(grid: GridContainer, action: String) -> void:
+    var l = Label.new()
+    l.text = InputBindings.action_label(action)
+    l.custom_minimum_size = Vector2(96, 0)
+    l.add_theme_font_size_override("font_size", 6)
+    l.add_theme_color_override("font_color", INK)
+    grid.add_child(l)
+    var b = _button(InputBindings.keys(action), func(): _begin_capture(action))
+    b.custom_minimum_size = Vector2(58, 10)
+    b.add_theme_font_size_override("font_size", 6)
+    _compact(b)
+    grid.add_child(b)
+    _key_buttons[action] = b
+
+
+func _compact(b: Button) -> void:
+    # thin one-pixel padding so the full key list fits the 360 px screen
+    for state in ["normal", "hover", "pressed", "focus"]:
+        var st = (b.get_theme_stylebox(state) as StyleBoxFlat).duplicate()
+        st.set_content_margin_all(1)
+        b.add_theme_stylebox_override(state, st)
+
+
+func _refresh_key_buttons() -> void:
+    for action in _key_buttons.keys():
+        _key_buttons[action].text = InputBindings.keys(action)
+        _key_buttons[action].add_theme_color_override("font_color", ACCENT if action == _capturing else INK)
+    if _capturing != "" and _key_buttons.has(_capturing):
+        _key_buttons[_capturing].text = "..."
+
+
+func _set_key_status(text: String) -> void:
+    if _key_status != null and text != "":
+        _key_status.text = text
+
+
+func _begin_capture(action: String) -> void:
+    _capturing = action
+    _refresh_key_buttons()
+    _set_key_status("«%s»: нажмите клавишу или кнопку мыши. Esc — отмена." % InputBindings.action_label(action))
+
+
+func _end_capture(message: String) -> void:
+    _capturing = ""
+    _refresh_key_buttons()
+    _set_key_status(message)
+
+
+func _input(event):
+    if not visible or _capturing == "":
+        return
+    var key = event is InputEventKey and event.pressed and not event.echo
+    var mouse = event is InputEventMouseButton and event.pressed
+    if not (key or mouse):
+        return
+    get_viewport().set_input_as_handled()
+    if key and (event.physical_keycode == KEY_ESCAPE or event.keycode == KEY_ESCAPE):
+        _end_capture("Отменено.")
+        return
+    if mouse and event.button_index == MOUSE_BUTTON_LEFT:
+        _end_capture("Отменено.")
+        return
+    try_bind(_capturing, InputBindings.code_for_event(event))
+
+
+func try_bind(action: String, code: String) -> bool:
+    var res = InputBindings.rebind(InputBindings.current(), action, code)
+    if not res["ok"]:
+        _set_key_status("Эту клавишу игра держит за собой: Esc, F10, ЛКМ, ПКМ и колесо мыши." if res["reason"] == "reserved" else "Эту клавишу назначить нельзя.")
+        return false
+    InputBindings.apply(res["map"])
+    save_bindings(InputBindings.current())
+    var msg = "«%s» — %s." % [InputBindings.action_label(action), InputBindings.keys(action)]
+    if res["swapped"] != "":
+        msg += " «%s» теперь — %s." % [InputBindings.action_label(res["swapped"]), InputBindings.keys(res["swapped"])]
+    _end_capture(msg)
+    _bindings_changed()
+    return true
+
+
+func _reset_bindings() -> void:
+    InputBindings.apply(InputBindings.defaults())
+    save_bindings(InputBindings.current())
+    _end_capture("Клавиши сброшены.")
+    _bindings_changed()
+
+
+func _bindings_changed() -> void:
+    if game != null and game.has_method("_on_bindings_changed"):
+        game._on_bindings_changed()
+
+
+func _back_from_settings() -> void:
+    _end_capture("")
+    _show(_main_box)
 
 
 func _apply_from_ui() -> void:
-    var s = {}
+    var s = load_settings()
     for k in _sliders.keys():
         s[k] = _sliders[k].value / 100.0
-    s["fullscreen"] = _fullscreen.button_pressed
-    s["camera_shake"] = _shake.button_pressed
-    s["hud_autohide"] = _autohide.button_pressed
+    for k in _checks.keys():
+        if k != "field_hints":
+            s[k] = _checks[k].button_pressed
+    for k in _cycles.keys():
+        var st = _cycles[k]
+        s[k] = st["values"][st["index"]]
+    s = sanitize_settings(s)
     save_settings(s)
     apply_settings(s)
     if game != null:
         game.set_meta("settings", s)
+        if game.has_method("_apply_ui_scale"):
+            game._apply_ui_scale(float(s["ui_scale"]))
 
 
 # --- actions --------------------------------------------------------------
-func _open_settings() -> void:
+func _open_settings(tab: String = "sound") -> void:
+    _tab = tab
+    _build_settings()
     _show(_settings_box)
 
 
-const CONTROLS = [
-    ["W A S D", "движение"], ["Shift", "бег"], ["C", "присесть / красться"],
-    ["ЛКМ", "выстрел / удар"], ["R", "перезарядка"], ["V", "оттолкнуть"],
-    ["E", "взаимодействие"], ["H", "быстрая перевязка"], ["F", "фонарь"],
-    ["1 – 6", "быстрые слоты"], ["7, 8", "карманы разгрузки"],
-    ["Tab / I", "инвентарь"], ["ПКМ", "использовать предмет"], ["Q", "выбросить предмет"],
-    ["M", "карта региона"], ["B", "строительство (X — разобрать)"],
-    ["F5", "быстрое сохранение"], ["Esc", "пауза / назад"],
-]
-
-
 func _open_controls() -> void:
-    var v = _clear(_confirm_box)
-    v.add_child(_label("УПРАВЛЕНИЕ", 11, INK))
-    var grid = GridContainer.new()
-    grid.columns = 4
-    grid.add_theme_constant_override("h_separation", 8)
-    grid.add_theme_constant_override("v_separation", 1)
-    for pair in CONTROLS:
-        var k = Label.new()
-        k.text = pair[0]
-        k.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-        k.custom_minimum_size = Vector2(40, 0)
-        k.add_theme_font_size_override("font_size", 6)
-        k.add_theme_color_override("font_color", ACCENT)
-        grid.add_child(k)
-        var a = Label.new()
-        a.text = pair[1]
-        a.custom_minimum_size = Vector2(104, 0)
-        a.add_theme_font_size_override("font_size", 6)
-        a.add_theme_color_override("font_color", INK)
-        grid.add_child(a)
-    v.add_child(grid)
-    v.add_child(_button("НАЗАД", func(): _show(_main_box)))
-    _show(_confirm_box)
+    _open_settings("keys")
 
 
 func _ask_new_game() -> void:

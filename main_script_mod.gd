@@ -997,6 +997,7 @@ var interaction_label = null
 
 # 0.47 reference-integrated production HUD references.
 var hud_world_root = null
+var hud_ui_scale = 1.0
 var hud_interaction_panel = null
 var hud_interaction_key_badge = null
 var hud_interaction_key_label = null
@@ -2846,6 +2847,7 @@ func _show_import_not_ready_screen() -> void:
 # keeps small capitals intact (normal hinting broke Н into П at 8 px).
 const PIXEL_UI_FONT = "res://fonts/DejaVuSans-Bold.ttf"
 const PauseMenu = preload("res://world/pause_menu.gd")
+const InputBindings = preload("res://world/input_bindings.gd")
 var pause_menu = null
 const FieldHints = preload("res://world/field_hints.gd")
 var field_hints = null
@@ -2932,23 +2934,8 @@ func _ready():
     _create_weapon_audio_layer()
     _create_world_audio_layer()
     _create_ambience_audio_layer()
-    _ensure_input("move_left", KEY_A)
-    _ensure_input("move_right", KEY_D)
-    _ensure_input("move_up", KEY_W)
-    _ensure_input("move_down", KEY_S)
-    _ensure_input("reload", KEY_R)
-    _ensure_input("sprint", KEY_SHIFT)
-    _ensure_input("crouch", KEY_C)
-    _ensure_input("base_build", KEY_B)
-    _ensure_input("region_map", KEY_M)
-    _ensure_input("quick_slot_1", KEY_1)
-    _ensure_input("quick_slot_2", KEY_2)
-    _ensure_input("quick_slot_3", KEY_3)
-    _ensure_input("quick_slot_4", KEY_4)
-    _ensure_input("quick_slot_5", KEY_5)
-    _ensure_input("quick_slot_6", KEY_6)
-    _ensure_input("rig_quick_1", KEY_7)
-    _ensure_input("rig_quick_2", KEY_8)
+    # every gameplay key comes from the player's bindings (Settings → Keys)
+    InputBindings.apply(PauseMenu.load_bindings())
     if _developer_tools_available():
         _ensure_input("developer_panel", KEY_F10)
 
@@ -3028,6 +3015,8 @@ func _ready():
     _refresh_chunks(true)
     _validate_equipment()
     _run_runtime_smoke_tests()
+    _apply_ui_scale(float(get_meta("settings",{}).get("ui_scale",1.0)))
+    _on_bindings_changed()
     _refresh_inventory_ui()
     _restore_loaded_high_risk_floor_if_needed()
 
@@ -4505,11 +4494,7 @@ func _refresh_hud_quick_slot_binding(index):
         _hud_apply_quick_slot_icon(icon,id)
     var button = slot.get("button",null)
     if button != null:
-        button.tooltip_text = "%d — %s\nИнвентарь: выберите оружие и нажмите %d, чтобы заменить слот." % [
-            index + 1,
-            str(item_defs.get(id,{}).get("name",id)),
-            index + 1
-        ]
+        button.tooltip_text = _quick_slot_tooltip(index,id)
     hud_quick_slots[index] = slot
 
 func _assign_quick_slot(slot,item_id):
@@ -4652,6 +4637,10 @@ func _event_matches_digit(event,key_code):
     return event.physical_keycode == key_code or event.keycode == key_code
 
 
+func _is_escape(event) -> bool:
+    return event is InputEventKey and event.pressed and not event.echo and (event.physical_keycode == KEY_ESCAPE or event.keycode == KEY_ESCAPE)
+
+
 func _unhandled_input(event):
     if player_death_time > 0.0:
         return
@@ -4661,158 +4650,117 @@ func _unhandled_input(event):
         return
 
     if developer_panel_open:
-        if event is InputEventKey and event.pressed and not event.echo and (event.physical_keycode == KEY_ESCAPE or event.keycode == KEY_ESCAPE):
+        if _is_escape(event):
             _close_developer_panel()
         get_viewport().set_input_as_handled()
         return
 
     if contract_open:
-        if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode in [KEY_ESCAPE,KEY_TAB,KEY_I]:
+        if _is_escape(event) or InputBindings.pressed(event,"inventory"):
             _close_contract_board()
         get_viewport().set_input_as_handled()
         return
 
     if trader_open:
-        if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode in [KEY_ESCAPE,KEY_TAB,KEY_I]:
+        if _is_escape(event) or InputBindings.pressed(event,"inventory"):
             _close_trader()
         get_viewport().set_input_as_handled()
         return
 
-    if event.is_action_pressed("region_map"):
+    if InputBindings.pressed(event,"region_map"):
         _toggle_region_map()
         return
 
     if region_map_open:
-        if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_ESCAPE:
+        if _is_escape(event):
             _close_region_map()
         return
 
-    if event.is_action_pressed("reload"):
+    if _is_escape(event):
+        if mod_panel_open:
+            _close_weapon_mod_panel()
+        elif rest_open:
+            _close_rest_panel()
+        elif crafting_open:
+            _close_crafting()
+        elif base_build_open:
+            _close_base_build()
+        elif inventory_open:
+            _close_inventory()
+        else:
+            _open_menu("pause")
+        return
+
+    if InputBindings.pressed(event,"reload"):
         _handle_reload_action()
         return
 
-    if event.is_action_pressed("quick_slot_1"):
-        _select_quick_slot(1)
+    for i in range(6):
+        if InputBindings.pressed(event,"quick_slot_%d" % (i + 1)):
+            _select_quick_slot(i + 1)
+            return
+    for i in range(2):
+        if InputBindings.pressed(event,"rig_quick_%d" % (i + 1)):
+            _use_rig_quick_slot(i + 1)
+            return
+
+    if InputBindings.pressed(event,"interact"):
+        if not inventory_open:
+            _interact()
         return
-    if event.is_action_pressed("quick_slot_2"):
-        _select_quick_slot(2)
+    if InputBindings.pressed(event,"inventory"):
+        if mod_panel_open:
+            _close_weapon_mod_panel()
+        elif rest_open:
+            _close_rest_panel()
+        elif crafting_open:
+            _close_crafting()
+        elif base_build_open:
+            _close_base_build()
+        else:
+            _toggle_inventory()
         return
-    if event.is_action_pressed("quick_slot_3"):
-        _select_quick_slot(3)
+    if InputBindings.pressed(event,"base_build"):
+        if base_build_open:
+            _close_base_build()
+        elif not inventory_open:
+            _open_base_build()
         return
-    if event.is_action_pressed("quick_slot_4"):
-        _select_quick_slot(4)
+    if InputBindings.pressed(event,"dismantle"):
+        if base_build_open:
+            _dismantle_nearest_base_object()
         return
-    if event.is_action_pressed("quick_slot_5"):
-        _select_quick_slot(5)
+    if InputBindings.pressed(event,"bandage"):
+        _quick_bandage()
         return
-    if event.is_action_pressed("quick_slot_6"):
-        _select_quick_slot(6)
+    if InputBindings.pressed(event,"flashlight"):
+        _toggle_flashlight()
         return
-    if event.is_action_pressed("rig_quick_1"):
-        _use_rig_quick_slot(1)
+    if InputBindings.pressed(event,"shove"):
+        if not inventory_open:
+            _perform_shove()
         return
-    if event.is_action_pressed("rig_quick_2"):
-        _use_rig_quick_slot(2)
+    if InputBindings.pressed(event,"drop_item"):
+        if inventory_open and not crafting_open:
+            _drop_selected_inventory()
+        return
+    if InputBindings.pressed(event,"quick_save"):
+        _save_state()
         return
 
     if event is InputEventMouseButton:
-        if event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not inventory_open and not trader_open and not contract_open:
+        if event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not inventory_open:
             _primary_attack()
 
-    elif event is InputEventKey:
-        if event.pressed and not event.echo:
-            # Logical-key fallback fixes layouts where physical digit codes
-            # differ from KEY_1..KEY_6.
-            if _event_matches_digit(event,KEY_1):
-                _select_quick_slot(1)
-                return
-            if _event_matches_digit(event,KEY_2):
-                _select_quick_slot(2)
-                return
-            if _event_matches_digit(event,KEY_3):
-                _select_quick_slot(3)
-                return
-            if _event_matches_digit(event,KEY_4):
-                _select_quick_slot(4)
-                return
-            if _event_matches_digit(event,KEY_5):
-                _select_quick_slot(5)
-                return
-            if _event_matches_digit(event,KEY_6):
-                _select_quick_slot(6)
-                return
-            if _event_matches_digit(event,KEY_7):
-                _use_rig_quick_slot(1)
-                return
-            if _event_matches_digit(event,KEY_8):
-                _use_rig_quick_slot(2)
-                return
-
-            match event.physical_keycode:
-                KEY_R:
-                    _handle_reload_action()
-                KEY_E:
-                    if not inventory_open and not trader_open and not contract_open:
-                        _interact()
-                KEY_TAB, KEY_I:
-                    if trader_open:
-                        _close_trader()
-                    elif mod_panel_open:
-                        _close_weapon_mod_panel()
-                    elif rest_open:
-                        _close_rest_panel()
-                    elif crafting_open:
-                        _close_crafting()
-                    elif base_build_open:
-                        _close_base_build()
-                    else:
-                        _toggle_inventory()
-                KEY_ESCAPE:
-                    if trader_open:
-                        _close_trader()
-                    elif mod_panel_open:
-                        _close_weapon_mod_panel()
-                    elif rest_open:
-                        _close_rest_panel()
-                    elif crafting_open:
-                        _close_crafting()
-                    elif base_build_open:
-                        _close_base_build()
-                    elif inventory_open:
-                        _close_inventory()
-                    else:
-                        _open_menu("pause")
-                KEY_B:
-                    if base_build_open:
-                        _close_base_build()
-                    elif not inventory_open and not trader_open and not contract_open:
-                        _open_base_build()
-                KEY_X:
-                    if base_build_open:
-                        _dismantle_nearest_base_object()
-                KEY_H:
-                    _quick_bandage()
-                KEY_F:
-                    _toggle_flashlight()
-                KEY_T:
-                    # debug time skip: only in -dev builds
-                    if not _developer_tools_available():
-                        return
-                    var debug_previous_day = world_day
-                    var debug_advanced_minutes = world_minutes + 60.0
-                    if debug_advanced_minutes >= 1440.0:
-                        world_day += int(floor(debug_advanced_minutes / 1440.0))
-                    world_minutes = fmod(debug_advanced_minutes,1440.0)
-                    _process_world_day_rollovers(debug_previous_day,world_day)
-                KEY_V:
-                    if not inventory_open and not trader_open and not contract_open:
-                        _perform_shove()
-                KEY_Q:
-                    if inventory_open and not crafting_open:
-                        _drop_selected_inventory()
-                KEY_F5:
-                    _save_state()
+    elif event is InputEventKey and event.pressed and not event.echo:
+        if event.physical_keycode == KEY_T and _developer_tools_available():
+            # debug time skip: only in -dev builds, and only while T is not bound
+            var debug_previous_day = world_day
+            var debug_advanced_minutes = world_minutes + 60.0
+            if debug_advanced_minutes >= 1440.0:
+                world_day += int(floor(debug_advanced_minutes / 1440.0))
+            world_minutes = fmod(debug_advanced_minutes,1440.0)
+            _process_world_day_rollovers(debug_previous_day,world_day)
 
 func _load_data():
     item_defs = _fallback_items()
@@ -11924,7 +11872,7 @@ func _hud_survival_objective():
         if expedition_target_reached or bool(expedition_journal.get("returning",false)):
             return {"title":"ВЕРНУТЬСЯ С ВЫЛАЗКИ","sub":_home_navigation_text()}
         var target_distance = _expedition_sector_distance(current_chunk,expedition_target_chunk)
-        return {"title":"ИДТИ: %s" % expedition_target_name,"sub":"До цели: %d сект. • M — карта" % target_distance}
+        return {"title":"ИДТИ: %s" % expedition_target_name,"sub":"До цели: %d сект. • %s — карта" % [target_distance,InputBindings.key("region_map")]}
     if home_navigation_active:
         return {"title":"ВЕРНУТЬСЯ ДОМОЙ","sub":_home_navigation_text()}
     var slice_objective = _vertical_slice_objective()
@@ -11941,12 +11889,12 @@ func _hud_survival_objective():
     if not slice_objective.is_empty():
         return slice_objective
     if _at_home():
-        return {"title":"ВЫ ДОМА","sub":"M → Дом / журнал: восстановление"}
+        return {"title":"ВЫ ДОМА","sub":"%s → Дом / журнал: восстановление" % InputBindings.key("region_map")}
     # «ЭФИР»: only when there is nothing else to do does the thread speak up
     var ether_hint = StoryEther.hint(_ether_seen,str(story_ether.get("choice","")))
     if ether_hint != "":
         return {"title":"НИТЬ • ЭФИР","sub":ether_hint}
-    return {"title":"ПОДГОТОВИТЬ ВЫЛАЗКУ","sub":"M — карта региона и планирование"}
+    return {"title":"ПОДГОТОВИТЬ ВЫЛАЗКУ","sub":"%s — карта региона и планирование" % InputBindings.key("region_map")}
 
 func _expedition_sector_distance(from_coord:Vector2i,to_coord:Vector2i) -> int:
     return max(abs(to_coord.x - from_coord.x),abs(to_coord.y - from_coord.y))
@@ -12528,7 +12476,7 @@ func _plan_selected_expedition():
     if region_map_selected_chunk.x >= 900000 or region_map_selected_chunk == current_chunk:
         return
     if not _has_home():
-        _set_survival_feedback("Войдите в здание и закрепите дом: M → Дом / журнал",3.0)
+        _set_survival_feedback("Войдите в здание и закрепите дом: %s → Дом / журнал" % InputBindings.key("region_map"),3.0)
         return
     if region_map_selected_chunk == _home_chunk():
         return
@@ -12599,7 +12547,7 @@ func _finish_expedition(status):
     expedition_journal["departed"] = false
     expedition_journal["returning"] = false
     home_navigation_active = false
-    var message = "Вы вернулись домой. Итоги: M → Дом / журнал"
+    var message = "Вы вернулись домой. Итоги: %s → Дом / журнал" % InputBindings.key("region_map")
     if status == "cancelled":
         message = "План отменён. Запись сохранена в журнале."
     elif status == "incapacitated":
@@ -12668,7 +12616,7 @@ func _home_navigation_text():
         return "Вы внутри своего убежища"
     var dist = _expedition_sector_distance(current_chunk,_home_chunk())
     if dist > 0:
-        return "До дома: %d сект. • M — карта" % dist
+        return "До дома: %d сект. • %s — карта" % [dist,InputBindings.key("region_map")]
     var pos = expedition_journal["home"]["position"]
     var delta = Vector2(float(pos[0]),float(pos[1])) - player.global_position
     var direction = ""
@@ -12863,7 +12811,7 @@ func _create_home_journal_ui():
     home_defense_rows.custom_minimum_size = Vector2(550,0)
     home_defense_rows.add_theme_constant_override("separation",2)
     home_defense_scroll.add_child(home_defense_rows)
-    home_defense_hint = _hud_make_label(home_journal_panel,Vector2(16,267),Vector2(568,16),"E — ремонт / укрепление • во время атаки ремонт недоступен",7,Color(0.70,0.72,0.62))
+    home_defense_hint = _hud_make_label(home_journal_panel,Vector2(16,267),Vector2(568,16),_home_defense_hint_text(),7,Color(0.70,0.72,0.62))
 
     home_supply_preset.visible = false
     home_unload_button.visible = false
@@ -13291,7 +13239,7 @@ func _home_infrastructure_text():
     else:
         lines.append("Верстак: проверьте при посещении дома.")
     if int(counts.get("stash",0)) == 0:
-        lines.append("Нужен ящик: B → ЯЩИК.")
+        lines.append("Нужен ящик: %s → ЯЩИК." % InputBindings.key("base_build"))
     if int(counts.get("cot",0)) == 0:
         lines.append("Для сна установите раскладушку.")
     if breached_doors > 0 or broken_windows > 0:
@@ -13299,7 +13247,7 @@ func _home_infrastructure_text():
     elif damaged_doors > 0 or damaged_windows > 0:
         lines.append("У убежища есть ослабленные точки входа — проверьте их до следующей вылазки.")
     if broken_barricades > 0:
-        lines.append("Сломанные баррикады больше не держат проход: подойдите и нажмите E для ремонта.")
+        lines.append("Сломанные баррикады больше не держат проход: подойдите и нажмите %s для ремонта." % InputBindings.key("interact"))
     elif damaged_barricades > 0:
         lines.append("Есть повреждённые баррикады — их можно усилить металлоломом.")
     lines.append("Сырая вода требует очистки. Тепло зависит от расстояния; срок топлива — по текущей погоде.")
@@ -13514,6 +13462,103 @@ func _pack_home_supplies():
     _refresh_home_journal_ui()
     return true
 
+# 1.38-dev69: Settings → Screen → HUD scale. Each corner block grows or
+# shrinks toward its own corner; the bottom bar keeps its place between the
+# stance and weapon blocks (pivot nudged so 110% leaves a gap on both sides).
+const HUD_BAR_PIVOT = Vector2(336,352)
+
+func _hud_scale_pivot(c:Control) -> void:
+    if c.has_meta("ui_pivot_screen"):
+        c.pivot_offset = Vector2(c.get_meta("ui_pivot_screen")) - c.position
+    else:
+        c.pivot_offset = c.size * Vector2(c.get_meta("ui_pivot_frac",Vector2(0.5,0.5)))
+
+func _apply_ui_scale(sc:float) -> void:
+    hud_ui_scale = clamp(sc,0.5,1.5)
+    if hud_world_root == null or not is_instance_valid(hud_world_root):
+        return
+    for c in hud_world_root.get_children():
+        if not (c is Control):
+            continue
+        if c.size.x <= 2.0 or c.size.y <= 2.0:
+            # thin frame strips that join the panels only line up at 100%
+            c.visible = is_equal_approx(hud_ui_scale,1.0)
+            continue
+        if not c.has_meta("ui_pivot_frac") and not c.has_meta("ui_pivot_screen"):
+            if c.name in ["QuickShell","RigQuickPockets"]:
+                c.set_meta("ui_pivot_screen",HUD_BAR_PIVOT)
+            else:
+                var center = c.position + c.size * 0.5
+                var fx = 0.0 if center.x < 213.0 else (1.0 if center.x > 427.0 else 0.5)
+                var fy = 0.0 if center.y < 120.0 else (1.0 if center.y > 240.0 else 0.5)
+                c.set_meta("ui_pivot_frac",Vector2(fx,fy))
+            c.item_rect_changed.connect(_hud_scale_pivot.bind(c))
+        _hud_scale_pivot(c)
+        c.scale = Vector2(hud_ui_scale,hud_ui_scale)
+
+func _home_defense_hint_text() -> String:
+    return "%s — ремонт / укрепление • во время атаки ремонт недоступен" % InputBindings.key("interact")
+
+func _quick_slot_keys_text() -> String:
+    var names = []
+    for i in range(6):
+        names.append(InputBindings.key("quick_slot_%d" % (i + 1)))
+    if names == ["1","2","3","4","5","6"]:
+        return "1–6"
+    return ", ".join(names)
+
+func _quick_slot_tooltip(index:int,id:String) -> String:
+    var key = InputBindings.key("quick_slot_%d" % (index + 1))
+    return "%s — %s\nИнвентарь: выберите оружие и нажмите %s, чтобы заменить слот." % [key,str(item_defs.get(id,{}).get("name",id)),key]
+
+func _on_bindings_changed() -> void:
+    # the key badge on the interaction prompt shows the bound key
+    if hud_interaction_key_badge == null or not is_instance_valid(hud_interaction_key_badge):
+        return
+    var short = InputBindings.short_key("interact")
+    var text_label = hud_interaction_key_badge.get_node_or_null("InteractionKeyText")
+    if text_label == null:
+        text_label = Label.new()
+        text_label.name = "InteractionKeyText"
+        text_label.position = Vector2.ZERO
+        text_label.size = hud_interaction_key_badge.size
+        text_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        text_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        text_label.add_theme_font_size_override("font_size",5)
+        text_label.add_theme_color_override("font_color",Color(0.96,0.94,0.86))
+        text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        hud_interaction_key_badge.add_child(text_label)
+    if home_defense_hint != null and is_instance_valid(home_defense_hint):
+        home_defense_hint.text = _home_defense_hint_text()
+    for i in range(hud_quick_slots.size()):
+        var b = hud_quick_slots[i].get("button",null)
+        if b == null or not is_instance_valid(b):
+            continue
+        b.tooltip_text = _quick_slot_tooltip(i,str(hud_quick_slots[i].get("id","")))
+        # the slot's pixel digit stays while the slot keeps its digit key
+        var slot_key = InputBindings.short_key("quick_slot_%d" % (i + 1))
+        var digit = hud_quick_slots[i].get("label",null)
+        var key_text = b.get_node_or_null("QuickKeyText")
+        if key_text == null:
+            key_text = Label.new()
+            key_text.name = "QuickKeyText"
+            key_text.position = Vector2(3,0)
+            key_text.size = Vector2(20,9)
+            key_text.z_index = 4
+            key_text.add_theme_font_size_override("font_size",5)
+            key_text.add_theme_color_override("font_color",Color(0.78,0.76,0.68))
+            key_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            b.add_child(key_text)
+        key_text.text = slot_key
+        key_text.visible = slot_key != str(i + 1)
+        if digit != null and is_instance_valid(digit):
+            digit.visible = slot_key == str(i + 1)
+    # the hand-drawn E stays for E; any other key is printed
+    text_label.text = short
+    text_label.visible = short != "E"
+    if hud_interaction_key_label != null:
+        hud_interaction_key_label.visible = short == "E"
+
 func _create_hud():
     var canvas = CanvasLayer.new()
     canvas.layer = 12
@@ -13695,11 +13740,7 @@ func _create_hud():
         slot_button.size = Vector2(40,40)
         slot_button.flat = false
         slot_button.text = ""
-        slot_button.tooltip_text = "%d — %s\nИнвентарь: выберите оружие и нажмите %d, чтобы заменить слот." % [
-            i + 1,
-            str(item_defs.get(item_id,{}).get("name",item_id)),
-            i + 1
-        ]
+        slot_button.tooltip_text = _quick_slot_tooltip(i,item_id)
         slot_button.focus_mode = Control.FOCUS_NONE
         slot_button.clip_contents = true
         slot_button.add_theme_stylebox_override("normal",hud_quick_style_normal)
@@ -13869,7 +13910,7 @@ func _update_hud():
             for i in range(pocket_count):
                 var pocket_id = str(rig_quick_ids[i])
                 var short_name = str(item_defs.get(pocket_id,{}).get("short","—")) if pocket_id != "" else "—"
-                pocket_text.append("%d:%s" % [i + 7,short_name])
+                pocket_text.append("%s:%s" % [InputBindings.short_key("rig_quick_%d" % (i + 1)),short_name])
             hud_rig_quick_label.text = "РАЗГРУЗКА  " + "   ".join(pocket_text)
 
     var stamina_cap = max(1.0,_survival_stamina_cap())
@@ -14223,7 +14264,7 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
         var vessel_capacity = _water_container_capacity_l(id)
         var vessel_fill = _water_container_fill_l(id,instance_id)
         lines.append("Вода: %.2f / %.2f л" % [vessel_fill,vessel_capacity])
-        lines.append("ИСП.: пить • R в инвентаре: перелить 0.5 л")
+        lines.append("ИСП.: пить • %s в инвентаре: перелить 0.5 л" % InputBindings.key("reload"))
     elif category == "weapon":
         var iid = _resolve_weapon_instance(id,instance_id)
         lines.append("Состояние: %d%% [%s]" % [int(_weapon_condition_value(id,iid)),_weapon_condition_state(id,iid)])
@@ -14238,7 +14279,7 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
             var melee = melee_defs[id]
             lines.append("Урон: %d   Дистанция: %d" % [int(melee.get("damage",0)),int(melee.get("range",0))])
             lines.append("Выносливость за удар: %d   Целей: %d" % [int(melee.get("stamina",0)),int(melee.get("max_targets",1))])
-        lines.append("ИСП.: взять в руки | V: толчок")
+        lines.append("ИСП.: взять в руки | %s: толчок" % InputBindings.key("shove"))
     elif category == "gear":
         lines.append("Слой: %s" % _slot_name(str(item.get("slot",""))))
         var armor = int(float(item.get("armor",0.0)) * 100.0)
@@ -14270,7 +14311,7 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
             lines.append("Подвижность: -%d%%" % int(round((1.0 - move_mult) * 100.0)))
         var quick_pockets = int(item.get("quick_pockets",0))
         if quick_pockets > 0:
-            lines.append("Быстрые карманы: %d • клавиши 7–8" % quick_pockets)
+            lines.append("Быстрые карманы: %d • клавиши %s, %s" % [quick_pockets,InputBindings.key("rig_quick_1"),InputBindings.key("rig_quick_2")])
             lines.append("Доступ к боеприпасам: +%d%%" % int(round((1.0 - float(item.get("reload_mult",1.0))) * 100.0)))
         if id == "flashlight":
             lines.append("Заряд: %d%%" % int(flashlight_battery))
@@ -18102,7 +18143,7 @@ func _entry_description(entry):
                 _hud_ammo_display_name(str(firearm.get("ammo","")))
             ]
             text += "\nМоды: %s" % _weapon_mod_summary(id,iid)
-        text += "\nБыстрый слот: в открытом инвентаре нажмите 1–6."
+        text += "\nБыстрый слот: в открытом инвентаре нажмите %s." % _quick_slot_keys_text()
     elif str(item.get("category","")) == "melee" and melee_defs.has(id):
         var melee = melee_defs[id]
         text += "\nУрон: %d   Выносливость: %d   Дистанция: %d" % [
@@ -18110,12 +18151,12 @@ func _entry_description(entry):
             int(melee.get("stamina",0)),
             int(melee.get("range",0))
         ]
-        text += "\nБыстрый слот: в открытом инвентаре нажмите 1–6."
+        text += "\nБыстрый слот: в открытом инвентаре нажмите %s." % _quick_slot_keys_text()
 
     if _is_water_container_item(id):
         var iid = str(entry.get("instance_id",""))
         text += "\nВода: %.2f / %.2f л" % [_water_container_fill_l(id,iid),_water_container_capacity_l(id)]
-        text += "\nИСП.: пить небольшими порциями. R: перелить 0.5 л из запаса."
+        text += "\nИСП.: пить небольшими порциями. %s: перелить 0.5 л из запаса." % InputBindings.key("reload")
     elif id == "repair_kit":
         text += "\nИспользуется у верстака для обслуживания и капремонта оружия."
     elif id == "bedroll":
@@ -33887,9 +33928,11 @@ func _torch_cone_texture() -> ImageTexture:
 func _toggle_flashlight():
     if str(equipment.get("utility","")) != "flashlight":
         flashlight_on = false
+        _set_survival_feedback("Фонаря нет: наденьте его в слот снаряжения",1.6)
         return
     if flashlight_battery <= 0.0:
         flashlight_on = false
+        _set_survival_feedback("Фонарь сел: нужны батарейки",1.6)
         return
     flashlight_on = not flashlight_on
 
