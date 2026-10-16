@@ -70,6 +70,20 @@ const game={
   await bridge.init();
   assert.equal(bridge.ready,true);
   assert.equal(apiCalls[0].method,'VKWebAppInit');
+  // Simulate a broken VK/OK iframe host: no VKWebAppInit answer ever arrives.
+  // The game must finish initialization in local-only mode instead of hanging.
+  let resolveLateInit;
+  handler=()=>new Promise(resolve=>{resolveLateInit=resolve;});
+  const stalled=new VKGamesBridge(game);
+  stalled.initTimeoutMs=25;
+  await stalled.init();
+  assert.equal(stalled.ready,false,'An unresponsive host falsely enabled the SDK');
+  assert.equal(await stalled.rewardAd(()=>{throw Error('unconfirmed reward');}),false,
+    'Timed-out host provided a free reward');
+  resolveLateInit({result:true});
+  await Promise.resolve();await Promise.resolve();
+  assert.equal(stalled.ready,false,'Late SDK reply enabled an unverified social session');
+  handler=async()=>({result:true});
   let grants=0;
   handler=async()=>({result:false});
   assert.equal(await bridge.rewardAd(()=>grants++),false,'Unconfirmed ad rewarded');
