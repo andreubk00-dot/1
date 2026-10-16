@@ -100,6 +100,10 @@ async function checkUnresponsiveEmbed(platform,port){
     assert.equal(status.version,21,platform+' iframe altered saves');
     assert(status.pageWidth<=status.viewport+6,platform+' iframe horizontal overflow');
     await frame.locator('#playBtn').click();
+    if(await frame.locator('#tutorialScreen').isVisible()){
+      assert(await frame.locator('#tutorialStartBtn').isVisible(),platform+' tutorial has no start action');
+      await frame.locator('#tutorialStartBtn').click();
+    }
     const live=await frame.locator('#gameCanvas').isVisible();
     assert(live,platform+' iframe cannot start combat');
     assert.deepEqual(errors,[],platform+' iframe JS errors: '+errors.join(','));
