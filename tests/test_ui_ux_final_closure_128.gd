@@ -36,8 +36,8 @@ func run():
         if font != null:
             title_w = font.get_string_size(game.hover_title.text,HORIZONTAL_ALIGNMENT_LEFT,-1,fs).x
         check(title_w <= game.hover_title.size.x + 0.1,"tooltip title exceeds title area: " + id)
-    # dev67: + the splint
-    check(game.item_defs.size() == 67,"item tooltip audit catalogue changed unexpectedly")
+    # dev67: + the splint; dev70: + the contract parcel
+    check(game.item_defs.size() == 68,"item tooltip audit catalogue changed unexpectedly")
     check(max_h <= 232.0,"tooltip closure height regressed beyond audited maximum")
     check(max_lines <= 10,"tooltip closure line count regressed beyond audited maximum")
 

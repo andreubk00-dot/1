@@ -102,6 +102,14 @@ static func sanitize_state(raw) -> Dictionary:
     var raw_endgame = raw.get("faction_endgame",{})
     if typeof(raw_endgame) == TYPE_DICTIONARY:
         state["faction_endgame"] = raw_endgame.duplicate(true)
+    var raw_field = raw.get("contract_field",{})
+    if typeof(raw_field) == TYPE_DICTIONARY:
+        # dev70 retrieve / hunt / raiders progress (world/contract_field.gd)
+        var field = {}
+        for k in raw_field.keys():
+            if typeof(raw_field[k]) == TYPE_DICTIONARY:
+                field[str(k)] = {"done":bool(raw_field[k].get("done",false))}
+        state["contract_field"] = field
     var raw_chronicle = raw.get("world_chronicle",{})
     if typeof(raw_chronicle) == TYPE_DICTIONARY:
         state["world_chronicle"] = raw_chronicle.duplicate(true)

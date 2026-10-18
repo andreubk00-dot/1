@@ -94,6 +94,87 @@ const TEMPLATES = {
         "reward":{"tickets":180,"reputation":16,"resources":{"security":20.0,"technical":8.0}}
     },
 
+    # dev70 (docs/CONTRACTS_DEV70.md): retrieve a parcel, hunt a named infected,
+    # break a raider squad. What waits at the site exists only while the
+    # contract is active; progress lives in faction_state.contract_field.
+    "lazaret_hospital_parcel":{
+        "faction":"lazaret","title":"УКЛАДКА ИЗ БОЛЬНИЦЫ","kind":"retrieve","need_key":"medicine","min_rep":15,
+        "description":"При эвакуации в больнице бросили опечатанную укладку с ампулами. Доктор Миронова знает, где её спрятали.",
+        "hint":"Районная больница на востоке города. Укладка в опечатанном ящике у хозяйственного двора — на крышке красный крест мелом.",
+        "poi_id":"district_hospital","cache_name":"Опечатанный ящик","parcel_name":"Укладка с ампулами",
+        "reward":{"tickets":104,"reputation":12,"resources":{"medicine":18.0}}
+    },
+    "lazaret_hospital_spitter":{
+        "faction":"lazaret","title":"ПЛЕВУН У БОЛЬНИЦЫ","kind":"hunt","need_key":"security","min_rep":10,
+        "description":"У приёмного покоя завёлся плевун — двое наших вернулись с ожогами. Пока он там, за расходниками туда не сходить.",
+        "hint":"Районная больница на востоке. Плевун бьёт издалека: подходи укрытиями и не стой на открытом месте.",
+        "poi_id":"district_hospital","target_kind":"spitter","target_name":"Плевун из приёмного",
+        "reward":{"tickets":92,"reputation":11,"resources":{"security":10.0,"medicine":6.0}}
+    },
+    "perron_dacha_parcel":{
+        "faction":"perron","title":"ПОСЫЛКА С ДАЧ","kind":"retrieve","need_key":"food","min_rep":5,
+        "description":"Семья с Перрона оставила на даче запас — закатки и семена. Сами туда не дойдут.",
+        "hint":"СНТ «Заря» к западу от города. Ящик в сарае у дальнего участка, на нём мелом «ПЕРРОН».",
+        "poi_id":"dacha_coop_zarya","cache_name":"Ящик с надписью мелом","parcel_name":"Посылка с дач",
+        "reward":{"tickets":70,"reputation":10,"resources":{"food":14.0}}
+    },
+    "perron_zarya_raiders":{
+        "faction":"perron","title":"ДОРОГА НА «ЗАРЮ»","kind":"raiders","need_key":"security","min_rep":10,
+        "description":"На дороге к дачам встали налётчики: отбирают у наших всё, что те несут с огородов.",
+        "hint":"Отряд держится у СНТ «Заря» к западу от города. Можно перебить, можно заставить бежать — главное, чтобы дорога стала свободной.",
+        "poi_id":"dacha_coop_zarya","squad_type":2,
+        "reward":{"tickets":96,"reputation":12,"resources":{"security":14.0,"food":4.0}}
+    },
+    "rubezh_police_safe":{
+        "faction":"rubezh","title":"ЖУРНАЛЫ ОТДЕЛА","kind":"retrieve","need_key":"security","min_rep":15,
+        "description":"Из дежурной части не успели вывезти ящик с журналами постов и описью складов. Орлову нужны журналы.",
+        "hint":"Районный отдел полиции в западной панельной застройке. Ящик стоит во дворе у дежурки, опечатан.",
+        "poi_id":"district_police","cache_name":"Ящик из дежурной части","parcel_name":"Журналы постов",
+        "reward":{"tickets":108,"reputation":12,"resources":{"security":12.0,"technical":4.0}}
+    },
+    "rubezh_garage_screamer":{
+        "faction":"rubezh","title":"КРИКУН В ГАРАЖАХ","kind":"hunt","need_key":"security","min_rep":10,
+        "description":"В гаражах «Севера» засел крикун: стоит патрулю пройти мимо — и на вопль сбегается весь квартал.",
+        "hint":"ГСК «Север» в северной части города. Крикуна надо снять тихо или быстро, пока он не закричал.",
+        "poi_id":"garage_coop_sever","target_kind":"screamer","target_name":"Крикун из гаражей",
+        "reward":{"tickets":88,"reputation":11,"resources":{"security":12.0}}
+    },
+    "rubezh_police_raiders":{
+        "faction":"rubezh","title":"ЗАСЛОН У ОТДЕЛА","kind":"raiders","need_key":"security","min_rep":15,
+        "description":"У старого отдела крутятся вооружённые чужие — разбирают то, что Рубеж считает своим.",
+        "hint":"Районный отдел полиции на западе. Отряд при оружии: стоит подходить укрытиями.",
+        "poi_id":"district_police","squad_type":4,
+        "reward":{"tickets":118,"reputation":13,"resources":{"security":16.0}}
+    },
+    "mechanics_depot_crate":{
+        "faction":"mechanics","title":"ЯЩИК ИЗ ДЕПО","kind":"retrieve","need_key":"technical","min_rep":15,
+        "description":"Саныч оставил в депо ящик с инструментом для тепловоза, когда группа уходила в спешке.",
+        "hint":"Железнодорожное депо у промышленной ветки. Ящик у смотровой канавы, крышка помечена красным.",
+        "poi_id":"rail_depot","cache_name":"Ящик с красной крышкой","parcel_name":"Инструмент для тепловоза",
+        "reward":{"tickets":112,"reputation":12,"resources":{"technical":18.0}}
+    },
+    "mechanics_factory_armored":{
+        "faction":"mechanics","title":"БРОНЯ НА КОМБИНАТЕ","kind":"hunt","need_key":"security","min_rep":30,
+        "description":"На Промкомбинате бродит заражённый в бронежилете — пули вязнут, а наши туда ходят за деталями.",
+        "hint":"Промкомбинат №7 в промышленном поясе. Бронежилет держит пули спереди: нужен холодный инструмент или заход со спины.",
+        "poi_id":"factory_7","target_kind":"armored","target_name":"Бронированный с комбината",
+        "reward":{"tickets":120,"reputation":13,"resources":{"security":12.0,"technical":8.0}}
+    },
+    "mechanics_garage_raiders":{
+        "faction":"mechanics","title":"ГРАБЁЖ В ГАРАЖАХ","kind":"raiders","need_key":"technical","min_rep":10,
+        "description":"Кто-то вскрывает боксы ГСК «Север» быстрее, чем Артель успевает их описать.",
+        "hint":"ГСК «Север» на севере города. Говорят, это гопота с пистолетами — шумная, но злая.",
+        "poi_id":"garage_coop_sever","squad_type":0,
+        "reward":{"tickets":90,"reputation":11,"resources":{"technical":8.0,"security":8.0}}
+    },
+    "perron_depot_brute":{
+        "faction":"perron","title":"ГРОМИЛА НА ПУТЯХ","kind":"hunt","need_key":"security","min_rep":20,
+        "description":"На путях у депо ходит громила — ломает дрезину и вагоны, Перрону не провести состав.",
+        "hint":"Железнодорожное депо у промышленной ветки. Громила держит много попаданий и бьёт так, что ломает кости: не подпускай вплотную.",
+        "poi_id":"rail_depot","target_kind":"brute","target_name":"Громила с путей",
+        "reward":{"tickets":110,"reputation":12,"resources":{"security":14.0,"technical":4.0}}
+    },
+
     "lazaret_dressing_supply":{
         "faction":"lazaret","title":"ПЕРЕВЯЗОЧНАЯ","kind":"delivery","need_key":"medicine","min_rep":0,
         "description":"Лазарету нужны материалы для ежедневной перевязочной работы.",

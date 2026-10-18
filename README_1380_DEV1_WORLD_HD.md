@@ -1422,3 +1422,30 @@ play gain), not guessed:
   nothing happens.
 - Tests: `test_settings_dev69` (290), `test_audio_mix_dev69` (111),
   `test_first_minutes_dev69` (20).
+
+## dev70 — fog for the raiders, three new kinds of contract
+
+- **Fog hides the survivor from the raiders** as it hides them from him: a
+  raider's sight is halved in thick fog and never reaches past the fog wall
+  the shader draws round the survivor (a lit lamp glows a little further).
+  Before, the infected went half-blind in fog while raiders saw as by day.
+- **New contract kinds** (design: `docs/CONTRACTS_DEV70.md`,
+  `world/contract_field.gd`). The boards offered deliveries (20), scouting
+  (16) and one clearing; now also:
+  - **ДОБЫТЬ** (retrieve, 4): a sealed parcel waits in a named cache at a
+    dangerous site while the contract is active; carry it back (a new item,
+    «Груз по заданию», 2.4 kg, cannot be sold).
+  - **ОХОТА** (hunt, 4): one named special infected with 2.2× health haunts a
+    site - the hospital's spitter, the garages' screamer, the depot's brute,
+    the factory's armoured one; told when sighted, gone for good when killed.
+  - **ОТРЯД** (raiders, 3): a hostile squad holds a site, set down as the
+    survivor nears it; done when every member is dead, surrendered or
+    running; a squad sent away whole comes back.
+  - Field work has **its own slot** on each board (deliveries and route
+    scouting keep their two), so it adds variety without pushing out the
+    route-opening work the economy is built on.
+  - A fourth kind, a settlement's night defence, is designed for later: it
+    needs the infected to path through settlement walls.
+- `docs/PLAYTEST.md` - a five-question playtest form.
+- Tests: `test_fog_marauders_dev70` (11), `test_contract_field_dev70` (93);
+  icon catalogue 61, item catalogue 68.

@@ -584,6 +584,7 @@ var inventory_icon_regions = {
     "expedition_pack":Rect2i(188,224,44,44),
     "trauma_kit":Rect2i(0,272,30,20),
     "splint":Rect2i(100,483,46,14),
+    "contract_parcel":Rect2i(152,483,36,20),
     "emergency_ration":Rect2i(35,272,22,18)
 }
 
@@ -596,6 +597,7 @@ var melee_icon_regions = {
 
 var loot_icon_cells = {
     "splint":Vector2i(2,9),
+    "contract_parcel":Vector2i(3,9),
     "bandage":Vector2i(0,0),
     "water":Vector2i(1,0),
     "canned_meat":Vector2i(2,0),
@@ -1172,7 +1174,7 @@ func _run_static_self_tests():
     _record_test(not _melee_point_in_arc(Vector2.ZERO,Vector2.RIGHT,Vector2(50,0),35.0,0.8),"Дальняя цель попала в melee range")
     _record_test(_make_item_icon("combat_knife") != null,"Не создаётся иконка ножа")
 
-    _record_test(inventory_icon_regions.size() == 60,"Должно быть 60 non-melee inventory icons (dev67: + шина)")
+    _record_test(inventory_icon_regions.size() == 61,"Должно быть 61 non-melee inventory icons (dev70: + груз по заданию)")
     _record_test(melee_icon_regions.size() == 3,"Должно быть 3 melee inventory icons")
     _record_test(item_defs.has("sterile_bandage"),"Нет стерильной повязки")
     _record_test(item_defs.has("antiseptic"),"Нет антисептика")
@@ -2849,6 +2851,8 @@ const PIXEL_UI_FONT = "res://fonts/DejaVuSans-Bold.ttf"
 const PauseMenu = preload("res://world/pause_menu.gd")
 const InputBindings = preload("res://world/input_bindings.gd")
 const AudioMix = preload("res://world/audio_mix.gd")
+const ContractField = preload("res://world/contract_field.gd")
+var contract_field = null
 var audio_mix = null
 # the start-up self tests break bones and fire guns on paper; they must not
 # be heard (a thump on every launch)
@@ -3005,6 +3009,9 @@ func _ready():
     marauder_base.game = self
     marauder_base.load_state(marauder_base_saved)
     add_child(marauder_base)
+    contract_field = ContractField.new()
+    contract_field.game = self
+    add_child(contract_field)
     _ensure_shelter_threat_indicator()
     _create_weather_visuals()
     _create_day_night()
@@ -4888,7 +4895,9 @@ func _fallback_items():
         "old_checkpoint_documents":{"name":"Документы старого КПП","short":"ДОК-КПП","w":2,"h":1,"stack":1,"weight":0.35,"category":"strategic","use":"","color":"#8f8060"},
         "military_radio_station":{"name":"Военная радиостанция","short":"РАДИО","w":2,"h":2,"stack":1,"weight":3.8,"category":"strategic","use":"","color":"#5f6d56"},
         "generator_control_unit":{"name":"Блок управления генератором","short":"БЛОК","w":2,"h":2,"stack":1,"weight":2.6,"category":"strategic","use":"","color":"#667369"},
-        "laboratory_analyzer":{"name":"Лабораторный анализатор","short":"АНАЛИЗ","w":2,"h":2,"stack":1,"weight":3.2,"category":"strategic","use":"","color":"#70877f"}
+        "laboratory_analyzer":{"name":"Лабораторный анализатор","short":"АНАЛИЗ","w":2,"h":2,"stack":1,"weight":3.2,"category":"strategic","use":"","color":"#70877f"},
+        # dev70: the sealed parcel of a retrieve contract
+        "contract_parcel":{"name":"Груз по заданию","short":"ГРУЗ","w":2,"h":1,"stack":1,"weight":2.4,"category":"strategic","use":"","color":"#96764c"}
     }
 
 func _fallback_melee():
@@ -8637,6 +8646,8 @@ func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
         var sid = int(enemy.get_meta("spawn_id"))
         var key = "%d:%d:%d" % [c.x, c.y, sid]
         defeated[key] = true
+        if contract_field != null and enemy.has_meta("contract_id"):
+            contract_field.on_infected_killed(enemy)
         _high_risk_check_incident_resolution(c,sid)
         _spawn_infected_corpse(enemy,hit_dir)
         _infected_pocket_drop(enemy)
@@ -14472,6 +14483,8 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
             lines.append("Шум выстрела: +%d%%" % int((nm - 1.0) * 100.0))
     elif id == "repair_kit":
         lines.append("Используется у верстака → ОРУЖЕЙНИК")
+    elif id == ContractSystem.PARCEL_ITEM:
+        lines.append("Опечатан. Отнесите заказчику — он знает, что внутри")
 
     if context == "equipment":
         hover_footer.text = "НАДЕТО НА ПЕРСОНАЖЕ"
@@ -18299,6 +18312,8 @@ func _entry_description(entry):
         text += "\nИСП.: пить небольшими порциями. %s: перелить 0.5 л из запаса." % InputBindings.key("reload")
     elif id == "repair_kit":
         text += "\nИспользуется у верстака для обслуживания и капремонта оружия."
+    elif id == ContractSystem.PARCEL_ITEM:
+        text += "\nОпечатан. Отнесите заказчику — он знает, что внутри."
     elif id == "bedroll":
         text += "\nМожно разложить как переносимое место отдыха и затем свернуть обратно."
 
@@ -34796,6 +34811,9 @@ func _contract_known_sites() -> Dictionary:
     var known = discovered_pois.duplicate()
     if marauder_base != null and (marauder_base.is_cleared() or int(marauder_base.state.get("boss_dead_day",-1)) >= 0):
         known["cleared:marauder_base"] = true
+    # dev70: retrieve / hunt / raiders progress
+    if contract_field != null:
+        known.merge(contract_field.facts(),true)
     return known
 
 func _refresh_contract_ui():
@@ -34848,8 +34866,15 @@ func _refresh_contract_ui():
         for contract in offers:
             var offer_prefix = "[ЛИЧНО]"
             if str(contract.get("owner_npc_id","")) == "":
+                var site_risk = clampi(int(RegionCatalog.poi_by_id(str(contract.get("poi_id",""))).get("risk",0)),0,5)
                 if str(contract.get("kind","")) == "clear_poi":
                     offer_prefix = "[ЗАЧИСТКА • РИСК 5]"
+                elif str(contract.get("kind","")) == "retrieve":
+                    offer_prefix = "[ДОБЫТЬ • РИСК %d]" % site_risk
+                elif str(contract.get("kind","")) == "hunt":
+                    offer_prefix = "[ОХОТА • РИСК %d]" % site_risk
+                elif str(contract.get("kind","")) == "raiders":
+                    offer_prefix = "[ОТРЯД • РИСК %d]" % site_risk
                 elif str(contract.get("kind","")) == "discover_poi":
                     var route_poi = RegionCatalog.poi_by_id(str(contract.get("poi_id","")))
                     var route_risk = clampi(int(route_poi.get("risk",0)),0,5)
@@ -35016,6 +35041,10 @@ func _contract_complete_selected():
     if not ContractSystem.can_complete(contract,counts,_contract_known_sites()):
         contract_status.text = "Условия пока не выполнены.\n" + ContractSystem.progress_text(contract,counts,_contract_known_sites(),_contract_item_names())
         return false
+    if str(contract.get("kind","")) == "retrieve":
+        if not _contract_remove_item_units(ContractSystem.PARCEL_ITEM,1):
+            contract_status.text = "Груза нет в рюкзаке."
+            return false
     if str(contract.get("kind","")) == "delivery":
         var requirements = ContractSystem.requirements_for_completion(contract,counts)
         if requirements.is_empty():

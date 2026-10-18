@@ -8,6 +8,10 @@ const FactionEndgame = preload("res://world/faction_endgame.gd")
 const FactionNpcState = preload("res://world/faction_npc_state.gd")
 
 const OFFER_SLOTS_PER_FACTION = 2
+# dev70: field work (retrieve / hunt / raiders) has its own slot on a board, so
+# it adds to the deliveries and route scouting instead of pushing them out
+const FIELD_KINDS = ["retrieve","hunt","raiders"]
+const FIELD_SLOTS_PER_FACTION = 1
 const OFFER_LIFETIME_DAYS = 3
 const HISTORY_COOLDOWN_DAYS = 5
 const MAX_ACTIVE = 4
@@ -253,12 +257,25 @@ static func refresh_offers(state:Dictionary,world_day:int,force:bool = false) ->
         var offered_templates = []
         for row in kept:
             offered_templates.append(str(row.get("template_id","")))
+        var classic_count = 0
+        var field_count = 0
+        for row in kept:
+            if str(row.get("kind","")) in FIELD_KINDS:
+                field_count += 1
+            else:
+                classic_count += 1
         for template in candidates:
-            if kept.size() >= OFFER_SLOTS_PER_FACTION:
-                break
             var template_id = str(template.get("template_id",""))
             if template_id in offered_templates:
                 continue
+            if str(template.get("kind","")) in FIELD_KINDS:
+                if field_count >= FIELD_SLOTS_PER_FACTION:
+                    continue
+                field_count += 1
+            else:
+                if classic_count >= OFFER_SLOTS_PER_FACTION:
+                    continue
+                classic_count += 1
             kept.append(_new_instance(state,template,world_day))
             offered_templates.append(template_id)
         state["contracts"]["offers"][faction_id] = kept
@@ -557,6 +574,10 @@ static func daily_tick(state:Dictionary,world_day:int) -> Array:
     refresh_offers(state,world_day,false)
     return events
 
+# dev70: the sealed parcel of a retrieve contract (one item for all of them;
+# the contract names what is inside)
+const PARCEL_ITEM = "contract_parcel"
+
 static func _inventory_count(inventory_counts:Dictionary,item_id:String) -> int:
     return max(0,int(inventory_counts.get(item_id,0)))
 
@@ -593,6 +614,10 @@ static func can_complete(contract:Dictionary,inventory_counts:Dictionary,discove
         return bool(discovered_pois.get(str(contract.get("poi_id","")),false))
     if kind == "clear_poi":
         return bool(discovered_pois.get("cleared:" + str(contract.get("poi_id","")),false))
+    if kind == "retrieve":
+        return _inventory_count(inventory_counts,PARCEL_ITEM) > 0 and bool(discovered_pois.get("done:" + str(contract.get("id","")),false))
+    if kind in ["hunt","raiders"]:
+        return bool(discovered_pois.get("done:" + str(contract.get("id","")),false))
     return false
 
 static func _append_history(state:Dictionary,contract:Dictionary,world_day:int,status:String) -> void:
@@ -668,6 +693,12 @@ static func requirement_text(contract:Dictionary,item_names:Dictionary = {}) -> 
         return "Разведка: %s" % str(contract.get("hint","Найти указанный объект."))
     if kind == "clear_poi":
         return "Зачистка: %s" % str(contract.get("hint","Выбить хозяев объекта."))
+    if kind == "retrieve":
+        return "Добыть: %s — %s" % [str(contract.get("parcel_name","груз")),str(contract.get("hint",""))]
+    if kind == "hunt":
+        return "Выследить: %s — %s" % [str(contract.get("target_name","цель")),str(contract.get("hint",""))]
+    if kind == "raiders":
+        return "Отряд: %s" % str(contract.get("hint",""))
     var alternatives = contract.get("requirements",[])
     var option_texts = []
     if typeof(alternatives) == TYPE_ARRAY:
@@ -689,6 +720,15 @@ static func progress_text(contract:Dictionary,inventory_counts:Dictionary,discov
     if kind == "clear_poi":
         var done = bool(discovered_pois.get("cleared:" + str(contract.get("poi_id","")),false))
         return "ГОТОВО К СДАЧЕ" if done else "Главарь жив, база держится"
+    var fact = bool(discovered_pois.get("done:" + str(contract.get("id","")),false))
+    if kind == "retrieve":
+        if fact and _inventory_count(inventory_counts,PARCEL_ITEM) > 0:
+            return "ГОТОВО К СДАЧЕ"
+        return "Груз потерян — он остался там, где вы его оставили" if fact else "Груз ещё на месте"
+    if kind == "hunt":
+        return "ГОТОВО К СДАЧЕ" if fact else "%s ещё бродит" % str(contract.get("target_name","Цель"))
+    if kind == "raiders":
+        return "ГОТОВО К СДАЧЕ" if fact else "Отряд ещё держит место"
     var alternatives = contract.get("requirements",[])
     var option_texts = []
     if typeof(alternatives) == TYPE_ARRAY:

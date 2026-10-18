@@ -19,7 +19,7 @@ func run():
     await process_frame
 
     # dev67: + the splint
-    check(game.inventory_icon_regions.size() == 60,"exact inventory icon catalogue must contain 60 non-melee items")
+    check(game.inventory_icon_regions.size() == 61,"exact inventory icon catalogue must contain 61 non-melee items (dev70: the contract parcel)")
     check(game.melee_icon_regions.size() == 3,"melee icon catalogue must contain 3 items")
 
     for item_id in game.item_defs.keys():
