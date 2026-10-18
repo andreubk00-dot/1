@@ -276,6 +276,10 @@ func _player_visible() -> bool:
     reach *= sight_mult
     if game.is_crouching:
         reach *= 0.7
+    # fog: a raider sees no further into it than the survivor does (dev69)
+    if "fog_density" in game and game.fog_density > 0.01:
+        reach *= lerp(1.0, 0.5, game.fog_density)
+        reach = min(reach, game.fog_sight_limit(game.flashlight_on and night > 0.3))
     if d > reach:
         return false
     # alert eyes see all round, a patrol looks ahead

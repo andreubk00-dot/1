@@ -31705,6 +31705,18 @@ func _fog_target() -> float:
                 target *= 0.9
     return clamp(target,0.0,1.0)
 
+func _fog_clear_radius() -> float:
+    # the same clear pocket the fog shader draws round the survivor
+    return lerpf(300.0,72.0,fog_density)
+
+func fog_sight_limit(lit:bool = false) -> float:
+    # how far eyes carry through the fog: to the wall at the pocket's edge and
+    # no further (a lamp glows through a little more). Used by people - the
+    # raiders - so fog hides the survivor from them as it hides them from him.
+    if fog_density <= 0.01 or _high_risk_floor_active():
+        return INF
+    return (_fog_clear_radius() + 70.0) * (1.4 if lit else 1.0)
+
 func _update_fog(delta):
     if weather_state == "rain":
         _since_rain = 0.0
