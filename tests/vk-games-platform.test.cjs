@@ -110,6 +110,50 @@ const game={
   assert.equal(game.sessionInterstitials,1);
   assert.equal(game.persistCount,1);
   assert.equal(await bridge.fullscreen(),false,'Interstitial cooldown not respected');
+  // An unresponsive SDK ad request must finish locally, resume gameplay,
+  // not update cooldowns and never grant reward on a late SDK success.
+  const timeoutGame={
+    ...game,
+    save:{noInterstitial:false,lastFullscreenAt:0},
+    pauses:[],sessionInterstitials:0,persistCount:0,
+    handleExternalPause(on,source){this.pauses.push({on,source});},
+    persist(){this.persistCount++;}
+  };
+  const timedBridge=new VKGamesBridge(timeoutGame);
+  handler=async()=>({result:true});
+  await timedBridge.init();
+  assert.equal(timedBridge.ready,true,'Timed bridge did not connect for ad test');
+  timedBridge.adTimeoutMs=25;
+  const late=[];
+  handler=()=>new Promise(resolve=>late.push(resolve));
+  let lateRewards=0;
+  assert.equal(await timedBridge.rewardAd(()=>lateRewards++),false,
+    'An unresponsive rewarded ad cannot claim a reward');
+  assert.equal(lateRewards,0,'Timed-out ad granted currency');
+  assert.equal(timedBridge.adInProgress,false,'Timed-out reward kept the ad lock');
+  assert.deepEqual(timeoutGame.pauses.slice(-2),[
+    {on:true,source:'ad'},{on:false,source:'ad'}
+  ],'Reward timeout did not resume gameplay');
+  assert.equal(await timedBridge.fullscreen(),false,
+    'Unresponsive interstitial must return false');
+  assert.equal(timedBridge.adInProgress,false,'Timed-out interstitial kept the ad lock');
+  assert.equal(timeoutGame.save.lastFullscreenAt,0,
+    'Timed-out interstitial advanced cooldown');
+  assert.equal(timeoutGame.persistCount,0,
+    'Timed-out interstitial mutated saved progress');
+  assert.equal(late.length,2,'Both ad formats must reach the bounded SDK request');
+  for(const resolve of late)resolve({result:true});
+  await Promise.resolve();await Promise.resolve();
+  assert.equal(lateRewards,0,'Late SDK result granted currency after timeout');
+  assert.equal(timeoutGame.sessionInterstitials,0,
+    'Late SDK result counted an interstitial after timeout');
+  handler=async()=>({result:true});
+  assert.equal(await timedBridge.rewardAd(()=>lateRewards++),true,
+    'SDK recovery cannot show ads after a timeout');
+  assert.equal(lateRewards,1,'Recovered confirmed ad did not reward exactly once');
+  assert.equal(timeoutGame.pauses.filter(x=>x.on).length,
+    timeoutGame.pauses.filter(x=>!x.on).length,
+    'SDK timeouts left the game stuck in an advertising pause');
   assert.equal(await bridge.purchase('crystals_80'),null);
   assert.deepEqual(await bridge.pendingPurchases(),[]);
   assert.equal(await bridge.loadCloud(),null,'Unverified cloud storage must remain disabled');
