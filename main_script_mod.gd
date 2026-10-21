@@ -1940,7 +1940,16 @@ func _run_runtime_smoke_tests():
     _record_test(qa_windows.size() >= 4,"Фасады не создали независимые window sprites")
     if qa_windows.size() > 0:
         _record_test(int(qa_windows[0].get_meta("window_state",-1)) >= 0,"Window sprite не хранит состояние")
-    var qa_depth_props = get_tree().get_nodes_in_group("interior_depth_props")
+    # dev71: the wiring is checked on the fixture like the facade above - the
+    # live world may be a sparse edge sector with almost no large furniture
+    var qa_depth_root = Node2D.new()
+    test_chunk.add_child(qa_depth_root)
+    for qa_depth_kind in ["medical_shelf","hospital_bed","metal_shelving","large_med_cabinet"]:
+        _archetype_prop(qa_depth_root,qa_depth_kind,Vector2(0,0))
+    var qa_depth_props = []
+    for qa_depth in qa_depth_root.get_children():
+        if qa_depth.is_in_group("interior_depth_props"):
+            qa_depth_props.append(qa_depth)
     _record_test(qa_depth_props.size() >= 4,"Интерьерные крупные пропсы не подключены к depth-системе")
     if qa_depth_props.size() > 0 and player != null:
         var depth_sprite = qa_depth_props[0]
@@ -2853,6 +2862,13 @@ const InputBindings = preload("res://world/input_bindings.gd")
 const AudioMix = preload("res://world/audio_mix.gd")
 const ContractField = preload("res://world/contract_field.gd")
 var contract_field = null
+const SceneCatalog = preload("res://world/scene_catalog.gd")
+const WorldScenes = preload("res://world/world_scenes.gd")
+var world_scenes = null
+# dev71 scenes: {"x,y": state}, and the sectors an old save had already
+# visited or looted - those keep the layout they had (docs/SCENES_DEV71.md)
+var world_scene_state = {}
+var scene_legacy_chunks = {}
 var audio_mix = null
 # the start-up self tests break bones and fire guns on paper; they must not
 # be heard (a thump on every launch)
@@ -3012,6 +3028,9 @@ func _ready():
     contract_field = ContractField.new()
     contract_field.game = self
     add_child(contract_field)
+    world_scenes = WorldScenes.new()
+    world_scenes.game = self
+    add_child(world_scenes)
     _ensure_shelter_threat_indicator()
     _create_weather_visuals()
     _create_day_night()
@@ -17585,6 +17604,8 @@ func _close_inventory():
 func _open_container(key):
     if not container_states.has(key):
         return
+    if world_scenes != null:
+        world_scenes.on_container_opened(str(key))
     if _high_risk_container_locked(key):
         var state = container_states[key]
         var poi_id = str(state.get("poi_id",""))
@@ -18870,6 +18891,8 @@ func _update_interaction_prompt():
         interaction_label.text = "ГОВОРИТЬ  •  %s" % str(who).to_upper()
     elif type == "marauder_captive":
         interaction_label.text = "ОБЫСКАТЬ  •  СДАЛСЯ"
+    elif type == "world_scene":
+        interaction_label.text = str(target.get_meta("scene_prompt","ОСМОТРЕТЬ"))
     elif type == "ether_console":
         interaction_label.text = "ПУЛЬТ ОПОВЕЩЕНИЯ  •  ЭФИР ГО" if str(story_ether.get("choice","")) == "" else "ПУЛЬТ ОПОВЕЩЕНИЯ  •  %s" % ("НОВАЯ ЗАПИСЬ" if str(story_ether["choice"]) == "truth" else "ВЫКЛЮЧЕН")
     elif type == "story_clue":
@@ -19029,6 +19052,9 @@ func _interact():
         _talk_marauder(target)
     elif type == "ether_console":
         _open_ether_console()
+    elif type == "world_scene":
+        if world_scenes != null:
+            world_scenes.interact(target)
     elif type == "base_heater":
         _toggle_base_heater(target)
     elif type == "base_campfire":
@@ -21487,6 +21513,20 @@ func _zone_loot_table(zone,index):
     if zone == "military":
         return "military" if index <= 2 else "industrial"
     return "residential"
+
+func _scene_legacy_snapshot(parsed:Dictionary) -> Dictionary:
+    # a save from before dev71: every sector it visited, looted or fought in
+    # keeps its layout - a new scene appears only where the survivor never was
+    var out = {}
+    var sources = [parsed.get("discovered_chunks",{}),parsed.get("container_states",{}),parsed.get("defeated",{}),parsed.get("picked_world_items",{})]
+    for src in sources:
+        if typeof(src) != TYPE_DICTIONARY:
+            continue
+        for k in src.keys():
+            var parts = str(k).split(":")
+            if parts.size() >= 2 and parts[0].is_valid_int() and parts[1].is_valid_int():
+                out["%d:%d" % [int(parts[0]),int(parts[1])]] = true
+    return out
 
 func _zone_chunk_key(coord):
     return "%d:%d" % [coord.x,coord.y]
@@ -25900,6 +25940,13 @@ func _build_procedural_chunk(chunk,coord):
         if not world_event.is_empty():
             if not _build_world_event(chunk,coord,profile,world_event):
                 world_event = {}
+        # dev71: a new scene, only where no old scene stands; it does not
+        # count as world_event below, so the sector keeps its pump, trees and
+        # verge (they step round the scene's footprint on their own)
+        if world_event.is_empty() and world_scenes != null and not scene_legacy_chunks.has(_zone_chunk_key(coord)):
+            var scene = SceneCatalog.scene_for(coord,zone,int(profile.get("risk",2)),poi_id)
+            if not scene.is_empty():
+                world_scenes.build(chunk,coord,profile,scene)
 
     for i in range(car_count):
         var car_pos = Vector2(-9999,-9999)
@@ -35206,6 +35253,9 @@ func _save_state():
         "base_objects":base_objects,
         "next_base_id":next_base_id,
         "discovered_chunks":discovered_chunks,
+        "world_scenes":world_scene_state,
+        "scene_legacy_chunks":scene_legacy_chunks,
+        "scene_era":true,
         "map_footprints":_sanitize_map_footprints(map_footprints),
         "field_hints":field_hints.state() if field_hints != null else field_hints_saved,
         "discovered_pois":discovered_pois,
@@ -35466,6 +35516,11 @@ func _load_state():
     base_objects = parsed.get("base_objects",[])
     next_base_id = int(parsed.get("next_base_id",1))
     discovered_chunks = parsed.get("discovered_chunks",{})
+    world_scene_state = parsed.get("world_scenes",{}) if typeof(parsed.get("world_scenes",{})) == TYPE_DICTIONARY else {}
+    if bool(parsed.get("scene_era",false)):
+        scene_legacy_chunks = parsed.get("scene_legacy_chunks",{}) if typeof(parsed.get("scene_legacy_chunks",{})) == TYPE_DICTIONARY else {}
+    else:
+        scene_legacy_chunks = _scene_legacy_snapshot(parsed)
     map_footprints = _sanitize_map_footprints(parsed.get("map_footprints",{}))
     field_hints_saved = parsed.get("field_hints",{}) if typeof(parsed.get("field_hints",{})) == TYPE_DICTIONARY else {}
     if field_hints != null:

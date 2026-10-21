@@ -1449,3 +1449,36 @@ play gain), not guessed:
 - `docs/PLAYTEST.md` - a five-question playtest form.
 - Tests: `test_fog_marauders_dev70` (11), `test_contract_field_dev70` (93);
   icon catalogue 61, item catalogue 68.
+
+## dev71 — six new world scenes
+
+Design: `docs/SCENES_DEV71.md`; code: `world/scene_catalog.gd` (where),
+`world/world_scenes.gd` (build, actions, state). About fifty new scene
+sectors, eight or nine of each:
+- **ВЫЖИВШИЙ В МАШИНЕ** - someone shut in a car, three infected round it.
+  Cleared, they can be let go (a small gift; the nearest settlement hears and
+  thinks better of you) or robbed (more, and worse), or left.
+- **ЗАСАДА** - a full crate in the middle of the road; fresh cigarette ends
+  beside it are the warning. Open it and a raider squad rises from cover.
+- **БРОШЕННЫЙ БЛОКПОСТ** - booth, barrier, sandbags, a crate, a former soldier
+  among the infected; the field radio names and marks the nearest unfound site,
+  once.
+- **АПТЕЧНЫЙ ФУРГОН** - a crashed «буханка» of medicine guarded by a carrier.
+- **ЖИВОЙ ЛАГЕРЬ** - two neutral strangers at a fire by the forest road; they
+  talk and leave you be unless you raise a gun; killed, the camp stays empty.
+- **КОСТРИЩЕ** - a burn pit and a radio that plays the air as «ЭФИР» now
+  stands: the old loop, the survivor's own voice, or hiss.
+
+Nothing that existed moves: the five old scenes keep their exact roll (the
+«ЭФИР» column depends on it), new scenes go only where no old one stands and
+never on a site, a settlement, the start ring or an «ЭФИР» sector; a save from
+before dev71 keeps every sector it had visited, looted or fought in as it was
+(`scene_legacy_chunks`). Scenes keep the sector's pump, trees and verge, which
+step round them on their own. Scene choice uses a well-mixed hash with a salt
+picked for an even spread.
+
+Also: the start-up self test counted large interior furniture on the live
+world and failed on a sparse edge sector (a save in the woods); it now checks
+the depth wiring on its own fixture, like the facade check beside it.
+
+Test: `test_world_scenes_dev71` (275).
