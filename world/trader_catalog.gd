@@ -11,7 +11,7 @@ const BASE_VALUES = {
     "repair_kit":28,"water_filter":20,
     "ammo_9x18":2,"ammo_12g":3,"ammo_762":3,"ammo_762x25":2,"ammo_545":3,"ammo_762x54r":4,
     "makarov":80,"tt33":92,"shotgun":135,"toz34":155,"sks":175,"akm":245,"pps43":165,"izh81":150,"aks74u":235,"mosin":190,
-    "combat_knife":22,"steel_pipe":10,"fire_axe":32,
+    "combat_knife":22,"steel_pipe":10,"fire_axe":32,"crowbar":18,
     "cap":5,"light_jacket":24,"police_vest":95,"field_backpack":58,"flashlight":24,"wool_hat":7,
     "ballistic_helmet":125,"rain_jacket":48,"insulated_parka":62,"storm_poncho":54,"bedroll":44,
     "canteen":18,"water_canister":34,"field_rig":72,"assault_rig":128,"military_vest":190,
@@ -78,6 +78,7 @@ const TRADERS = {
             {"id":"scrap","qty":24,"tier":"outsider"},{"id":"tape","qty":14,"tier":"outsider"},
             {"id":"repair_kit","qty":6,"tier":"known"},{"id":"water_filter","qty":6,"tier":"known"},
             {"id":"flashlight","qty":4,"tier":"outsider"},{"id":"water_canister","qty":3,"tier":"known"},
+            {"id":"crowbar","qty":2,"tier":"outsider"},
             {"id":"makarov_extmag","qty":2,"tier":"reliable"},{"id":"shotgun_exttube","qty":2,"tier":"reliable"},
             {"id":"akm_extmag","qty":1,"tier":"trusted"},{"id":"muzzle_brake","qty":2,"tier":"reliable"}
         ]

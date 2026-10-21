@@ -1482,3 +1482,26 @@ world and failed on a sparse edge sector (a save in the woods); it now checks
 the depth wiring on its own fixture, like the facade check beside it.
 
 Test: `test_world_scenes_dev71` (275).
+
+## dev72 — the crowbar, and what is locked
+
+Design: `docs/LOCKS_DEV72.md`; art: `tools/draw_crowbar.py`.
+- **Монтировка** (crowbar), a fourth melee weapon: 30 damage (the pipe 34),
+  more stagger, one target; found in garages, workshops, villages and police
+  stations, sold and bought by the Artel, broken down for scrap. Its own model
+  on the ground, in the pack and on the weapon card; in the hands it moves and
+  shows as the pipe (the survivor sheets bake two-handed bars as the pipe -
+  a new baked sheet is a Blender re-render, left for later).
+- **Locked doors** (about one in six of the ordinary town): pried with the
+  crowbar in a second and a half and some noise, or shouldered in - 30 stamina
+  and heard down the street; too spent to try - refused. Stepping away or
+  taking a hit breaks the work off.
+- **Locked caches** (about one in seven): only the crowbar opens them, and they
+  hold a second helping.
+- Raiders kick locked doors in (the lock is gone), a calm one cannot pass; a
+  passing squad does not rob a locked cache. A door broken down by the infected
+  has no lock left.
+- Locks are decided only when a building is first created: nothing that
+  existed in a save locks itself; never within two sectors of the start, at
+  sites, settlements, homes or bases.
+- Test: `test_crowbar_locks_dev72` (33); catalogues: 4 melee, 69 items.

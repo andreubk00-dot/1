@@ -20,7 +20,7 @@ func run():
 
     # dev67: + the splint
     check(game.inventory_icon_regions.size() == 61,"exact inventory icon catalogue must contain 61 non-melee items (dev70: the contract parcel)")
-    check(game.melee_icon_regions.size() == 3,"melee icon catalogue must contain 3 items")
+    check(game.melee_icon_regions.size() == 4,"melee icon catalogue must contain 4 items (dev72: + crowbar)")
 
     for item_id in game.item_defs.keys():
         var sid = str(item_id)

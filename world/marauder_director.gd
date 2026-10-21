@@ -294,6 +294,9 @@ func _maybe_pilfer(sq, lead) -> void:
         sq.looted[key] = true
         if randf() > 0.4 or not game.container_states.has(key):
             continue
+        # a padlock keeps a passing squad out (dev72)
+        if bool(game.container_states[key].get("locked", false)):
+            continue
         var items = game.container_states[key].get("items", [])
         var took = 0
         while took < 2 and not items.is_empty():

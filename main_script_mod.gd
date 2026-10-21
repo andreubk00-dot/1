@@ -215,7 +215,7 @@ const ITEM_RARITY = {
     "repair_kit":"scarce","water_filter":"scarce",
     "ammo_9x18":"scarce","ammo_12g":"scarce","ammo_762":"scarce","ammo_762x25":"scarce","ammo_545":"rare","ammo_762x54r":"rare",
     "makarov":"rare","tt33":"rare","pps43":"rare","shotgun":"scarce","toz34":"rare","izh81":"rare","sks":"rare","akm":"specialized","aks74u":"specialized","mosin":"rare",
-    "combat_knife":"scarce","steel_pipe":"common","fire_axe":"scarce",
+    "combat_knife":"scarce","steel_pipe":"common","fire_axe":"scarce","crowbar":"scarce",
     "light_jacket":"scarce","police_vest":"rare","field_backpack":"scarce","flashlight":"scarce",
     "wool_hat":"common","ballistic_helmet":"rare","rain_jacket":"scarce","military_vest":"specialized",
     "insulated_parka":"rare","storm_poncho":"scarce","bedroll":"scarce","canteen":"scarce","water_canister":"scarce",
@@ -591,6 +591,7 @@ var inventory_icon_regions = {
 var melee_icon_regions = {
     "combat_knife":Rect2i(0,0,48,20),
     "steel_pipe":Rect2i(0,24,48,18),
+    "crowbar":Rect2i(0,72,52,20),
     "fire_axe":Rect2i(0,48,76,20)
 }
 
@@ -627,6 +628,7 @@ var loot_icon_cells = {
     "suppressor":Vector2i(5,3),
     "combat_knife":Vector2i(0,4),
     "steel_pipe":Vector2i(1,4),
+    "crowbar":Vector2i(4,9),
     "fire_axe":Vector2i(2,4),
     "sterile_bandage":Vector2i(0,5),
     "antiseptic":Vector2i(1,5),
@@ -1165,7 +1167,7 @@ func _run_static_self_tests():
     _record_test(int(_service_costs("maintenance").get("repair_kit",0)) == 1,"Неверная цена обслуживания")
     _record_test(int(_service_costs("overhaul").get("repair_kit",0)) == 2,"Неверная цена капремонта")
 
-    _record_test(melee_defs.size() == 3,"Должно быть три оружия ближнего боя")
+    _record_test(melee_defs.size() == 4,"Должно быть четыре оружия ближнего боя (dev72: + монтировка)")
     _record_test(item_defs.has("combat_knife"),"Нет боевого ножа")
     _record_test(item_defs.has("steel_pipe"),"Нет стальной трубы")
     _record_test(item_defs.has("fire_axe"),"Нет пожарного топора")
@@ -1175,7 +1177,7 @@ func _run_static_self_tests():
     _record_test(_make_item_icon("combat_knife") != null,"Не создаётся иконка ножа")
 
     _record_test(inventory_icon_regions.size() == 61,"Должно быть 61 non-melee inventory icons (dev70: + груз по заданию)")
-    _record_test(melee_icon_regions.size() == 3,"Должно быть 3 melee inventory icons")
+    _record_test(melee_icon_regions.size() == 4,"Должно быть 4 melee inventory icons (dev72: + монтировка)")
     _record_test(item_defs.has("sterile_bandage"),"Нет стерильной повязки")
     _record_test(item_defs.has("antiseptic"),"Нет антисептика")
     _record_test(item_defs.has("painkillers"),"Нет обезболивающего")
@@ -2869,6 +2871,16 @@ var world_scenes = null
 # visited or looted - those keep the layout they had (docs/SCENES_DEV71.md)
 var world_scene_state = {}
 var scene_legacy_chunks = {}
+# dev72 locks (docs/LOCKS_DEV72.md): door keys that are locked; a lock being
+# worked on: {"kind","key","node","tool","t","from","hp"}
+var locked_doors = {}
+var lock_work = {}
+const LOCK_DOOR_CHANCE = 16
+const LOCK_CACHE_CHANCE = 14
+const LOCKABLE_TABLES = ["residential","grocery","garage","police","industrial","rural","pharmacy"]
+const LOCK_PRY_DOOR = 1.5
+const LOCK_PRY_CACHE = 1.1
+const LOCK_SHOULDER_STAMINA = 30.0
 var audio_mix = null
 # the start-up self tests break bones and fire guns on paper; they must not
 # be heard (a thump on every launch)
@@ -3284,7 +3296,7 @@ func _qa_preview_action_cycle():
     _update_player_visuals(0.0)
 
 func _qa_set_weapon(id):
-    if id in ["combat_knife","steel_pipe","fire_axe"]:
+    if id in ["combat_knife","steel_pipe","fire_axe","crowbar"]:
         equipped_melee_id = id
     elif id in FIREARM_IDS:
         equipped_melee_id = ""
@@ -4198,6 +4210,7 @@ func _process(delta):
     _update_death_fade_in(delta)
     if field_hints != null:
         field_hints.update(delta)
+    _update_lock_work(delta)
 
     fire_cooldown = max(0.0, fire_cooldown - delta)
     infected_spit_slow_time = max(0.0,infected_spit_slow_time - delta)
@@ -4872,6 +4885,7 @@ func _fallback_items():
         "mosin":{"name":"Винтовка Мосина","short":"МОСИН","w":4,"h":1,"stack":1,"weight":4.0,"category":"weapon","use":"weapon","color":"#65503c"},
         "combat_knife":{"name":"Боевой нож","short":"НОЖ","w":2,"h":1,"stack":1,"weight":0.42,"category":"melee","use":"melee","color":"#787d79"},
         "steel_pipe":{"name":"Стальная труба","short":"ТРУБА","w":2,"h":1,"stack":1,"weight":1.45,"category":"melee","use":"melee","color":"#727775"},
+        "crowbar":{"name":"Монтировка","short":"МОНТ","w":2,"h":1,"stack":1,"weight":1.30,"category":"melee","use":"melee","color":"#5e6672"},
         "fire_axe":{"name":"Пожарный топор","short":"ТОПОР","w":3,"h":1,"stack":1,"weight":2.35,"category":"melee","use":"melee","color":"#8b5546"},
         "cap":{"name":"Кепка","short":"КЕП","w":1,"h":1,"stack":1,"weight":0.12,"category":"gear","use":"gear","slot":"head","armor":0.02,"armor_head":0.02,"bleed_resist":0.0,"warmth":0.5,"rain_protect":0.05,"color":"#6f725f"},
         "light_jacket":{"name":"Плотная куртка","short":"КУРТ","w":2,"h":2,"stack":1,"weight":1.1,"category":"gear","use":"gear","slot":"outerwear","armor":0.08,"armor_torso":0.08,"armor_arms":0.06,"armor_legs":0.03,"bleed_resist":0.08,"warmth":3.2,"rain_protect":0.34,"color":"#59604f"},
@@ -4933,6 +4947,21 @@ func _fallback_melee():
             "stagger":0.22,
             "max_targets":1,
             "noise":45.0
+        },
+        # dev72: the crowbar - a little softer than the pipe, staggers more, and
+        # the one tool that opens locks quietly (docs/LOCKS_DEV72.md)
+        "crowbar":{
+            "name":"Монтировка",
+            "damage":30.0,
+            "range":39.0,
+            "arc":0.88,
+            "interval":0.58,
+            "swing_anim":0.58,
+            "stamina":2.0,
+            "knockback":96.0,
+            "stagger":0.58,
+            "max_targets":1,
+            "noise":80.0
         },
         "steel_pipe":{
             "name":"Стальная труба",
@@ -5085,6 +5114,7 @@ func _fallback_loot():
         ],
         "police":[
             {"id":"splint","min":1,"max":1,"chance":0.06},
+            {"id":"crowbar","min":1,"max":1,"chance":0.050},
             {"id":"ammo_9x18","min":6,"max":18,"chance":0.62},
             {"id":"ammo_762x25","min":4,"max":12,"chance":0.28},
             {"id":"ammo_12g","min":3,"max":10,"chance":0.38},
@@ -5103,6 +5133,7 @@ func _fallback_loot():
         ],
         "garage":[
             {"id":"scrap","min":2,"max":6,"chance":1.0},
+            {"id":"crowbar","min":1,"max":1,"chance":0.100},
             {"id":"firewood","min":1,"max":3,"chance":0.24},
             {"id":"water_canister","min":1,"max":1,"chance":0.07},
             {"id":"tape","min":1,"max":3,"chance":0.75},
@@ -5257,6 +5288,7 @@ func _fallback_loot():
         ],
         "residential":[
             {"id":"grain","min":1,"max":2,"chance":0.30},
+            {"id":"crowbar","min":1,"max":1,"chance":0.025},
             {"id":"herbs","min":1,"max":1,"chance":0.08},
             {"id":"water","min":1,"max":1,"chance":0.65},
             {"id":"painkillers","min":1,"max":1,"chance":0.12},
@@ -5279,6 +5311,7 @@ func _fallback_loot():
         ],
         "industrial":[
             {"id":"scrap","min":2,"max":7,"chance":1.0},
+            {"id":"crowbar","min":1,"max":1,"chance":0.100},
             {"id":"firewood","min":1,"max":3,"chance":0.18},
             {"id":"tape","min":1,"max":3,"chance":0.72},
             {"id":"cloth","min":1,"max":2,"chance":0.38},
@@ -5293,6 +5326,7 @@ func _fallback_loot():
         ],
         "industrial_secure":[
             {"id":"scrap","min":5,"max":10,"chance":1.0},
+            {"id":"crowbar","min":1,"max":1,"chance":0.140},
             {"id":"tape","min":2,"max":5,"chance":0.92},
             {"id":"cloth","min":1,"max":3,"chance":0.58},
             {"id":"repair_kit","min":1,"max":2,"chance":0.72},
@@ -5411,6 +5445,7 @@ func _fallback_loot():
         ],
         "rural":[
             {"id":"grain","min":1,"max":4,"chance":0.66},
+            {"id":"crowbar","min":1,"max":1,"chance":0.060},
             {"id":"herbs","min":1,"max":3,"chance":0.46},
             {"id":"firewood","min":2,"max":6,"chance":0.78},
             {"id":"water","min":1,"max":2,"chance":0.78},
@@ -5761,7 +5796,7 @@ func _pose_weapon_column(id):
     if id in ["shotgun","toz34","sks"]: return 1
     if id == "akm": return 2
     if id == "combat_knife": return 3
-    if id == "steel_pipe": return 4
+    if _melee_look(id) == "steel_pipe": return 4
     if id == "fire_axe": return 5
     return 0
 
@@ -5873,7 +5908,7 @@ func _pose_weapon_transform(id,row):
             {"pos":Vector2(3,-7),"angle":-0.70}, {"pos":Vector2(4.5,-3),"angle":0.42}, {"pos":Vector2(3,-15),"angle":-1.20}, {"pos":Vector2(6.5,-3),"angle":0.78}
         ]
     }
-    var rows = table.get(id,table["makarov"])
+    var rows = table.get(_melee_look(id),table["makarov"])
     return rows[clamp(int(row),0,6)]
 
 
@@ -6036,7 +6071,7 @@ func _update_pose_weapon(weapon_id,row,pose_offset,pose_rotation):
 func _modern_survivor_firearm_variant_prefix():
     if equipped_melee_id != "":
         # 0.75: melee weapons are baked into the survivor sheets as well.
-        match equipped_melee_id:
+        match _melee_look(equipped_melee_id):
             "combat_knife":
                 return "knife_"
             "steel_pipe":
@@ -6642,7 +6677,7 @@ func _update_melee_trail(weapon_id,swing_t):
     var trail_width = 0.9
     var trail_color = Color(0.86,0.89,0.84,0.30)
 
-    if weapon_id == "steel_pipe":
+    if _melee_look(weapon_id) == "steel_pipe":
         show_from = 0.32
         show_to = 0.82
         radius = 22.0
@@ -6794,7 +6829,7 @@ func _melee_clip_profile(id):
             "angles":[0.0,-0.10,-0.16,-0.24,0.05,0.45,0.90,1.35,1.75,1.55,1.05,0.45,0.0]
         }
 
-    if id == "steel_pipe":
+    if _melee_look(id) == "steel_pipe":
         return {
             "motion":0.86,
             "base_angle":0.85,
@@ -6888,7 +6923,15 @@ func _apply_melee_character_pose(state):
     pv_shadow.position += body_offset * 0.15
 
 func _melee_is_two_handed(id):
+    id = _melee_look(id)
     return id == "steel_pipe" or id == "fire_axe"
+
+# dev72: the crowbar moves and is held like the pipe - the survivor sheets bake
+# two-handed bars as the pipe; its own model is used where one is drawn
+const MELEE_LOOK = {"crowbar":"steel_pipe"}
+
+func _melee_look(id) -> String:
+    return str(MELEE_LOOK.get(str(id),str(id)))
 
 
 
@@ -7089,6 +7132,8 @@ func _melee_model_texture(id):
         row = 1
     elif id == "fire_axe":
         row = 2
+    elif id == "crowbar":
+        row = 3
     var tex = AtlasTexture.new()
     tex.atlas = melee_model_atlas
     tex.region = Rect2(0,row * 32,96,32)
@@ -9448,7 +9493,7 @@ func _owned_firearm_instance_except(exclude_instance_id):
     return {}
 
 func _owned_melee_except(exclude_id):
-    for melee_id in ["combat_knife","steel_pipe","fire_axe"]:
+    for melee_id in ["combat_knife","steel_pipe","fire_axe","crowbar"]:
         if melee_id != exclude_id and _inventory_has_item(melee_id):
             return melee_id
     return ""
@@ -10431,6 +10476,7 @@ func _salvage_outputs(item_id):
         "water_filter":{"scrap":1,"cloth":1},
         "combat_knife":{"scrap":1},
         "steel_pipe":{"scrap":2},
+        "crowbar":{"scrap":2},
         "fire_axe":{"scrap":2,"cloth":1},
         "cap":{"cloth":1},
         "light_jacket":{"cloth":2},
@@ -11577,6 +11623,8 @@ func _hud_display_texture(item_id):
             var melee_region = Rect2(15,11,69,10)
             if item_id == "steel_pipe":
                 melee_region = Rect2(10,43,74,11)
+            elif item_id == "crowbar":
+                melee_region = Rect2(10,100,76,22)
             elif item_id == "fire_axe":
                 melee_region = Rect2(10,68,82,25)
             var melee_tex = AtlasTexture.new()
@@ -11634,7 +11682,7 @@ func _hud_quick_icon_layout(item_id):
         return {"pos":Vector2(3,13),"size":Vector2(34,16)}
     if item_id == "combat_knife":
         return {"pos":Vector2(3,14),"size":Vector2(34,13)}
-    if item_id == "steel_pipe":
+    if item_id == "steel_pipe" or item_id == "crowbar":
         return {"pos":Vector2(3,14),"size":Vector2(34,13)}
     if item_id == "fire_axe":
         return {"pos":Vector2(3,12),"size":Vector2(34,18)}
@@ -12054,7 +12102,7 @@ func _expedition_readiness() -> Dictionary:
     var food_count = _inventory_count("canned_meat") + _inventory_count("hot_meal") + _inventory_count("emergency_ration")
     var medical_count = _inventory_count("bandage") + _inventory_count("sterile_bandage") + _inventory_count("trauma_kit")
     var defense_ok = false
-    for id in ["combat_knife","steel_pipe","fire_axe"]:
+    for id in ["combat_knife","steel_pipe","fire_axe","crowbar"]:
         defense_ok = defense_ok or _inventory_has_item(id)
     var weapon_lines = []
     var firearm_ready = false
@@ -17604,6 +17652,13 @@ func _close_inventory():
 func _open_container(key):
     if not container_states.has(key):
         return
+    if _container_locked(str(key)):
+        var node = null
+        for n in get_tree().get_nodes_in_group("interactable"):
+            if str(n.get_meta("container_key","")) == str(key):
+                node = n
+        _begin_lock_work("cache",str(key),node)
+        return
     if world_scenes != null:
         world_scenes.on_container_opened(str(key))
     if _high_risk_container_locked(key):
@@ -18840,7 +18895,10 @@ func _update_interaction_prompt():
         interaction_label.text = "ПОДОБРАТЬ  •  %s" % name.to_upper()
     elif type == "container":
         var container_key = str(target.get_meta("container_key",""))
-        interaction_label.text = ("ЗАПЕРТО  •  %s" if _high_risk_container_locked(container_key) else "ОБЫСКАТЬ  •  %s") % name.to_upper()
+        if _container_locked(container_key):
+            interaction_label.text = _lock_prompt("cache",name)
+        else:
+            interaction_label.text = ("ЗАПЕРТО  •  %s" if _high_risk_container_locked(container_key) else "ОБЫСКАТЬ  •  %s") % name.to_upper()
     elif type == "floor_transition":
         var floor_poi_id = str(target.get_meta("floor_poi_id",high_risk_floor_poi_id))
         var target_floor = int(target.get_meta("target_floor",1))
@@ -18852,7 +18910,9 @@ func _update_interaction_prompt():
     elif type == "door":
         var open = bool(target.get_meta("door_open",false))
         var door_condition = clamp(float(target.get_meta("door_condition",DOOR_MAX_CONDITION)),0.0,DOOR_MAX_CONDITION)
-        if door_condition <= 0.01:
+        if locked_doors.has(str(target.get_meta("door_key",""))):
+            interaction_label.text = _lock_prompt("door",name)
+        elif door_condition <= 0.01:
             interaction_label.text = "ПОЧИНИТЬ  •  ДВЕРЬ ВЫБИТА"
         elif open and _doorway_blocked(target):
             interaction_label.text = "ДВЕРЬ ЗАНЯТА"
@@ -20278,10 +20338,106 @@ func _doorway_blocked(door):
 
     return false
 
+func _lock_allowed_here(coord:Vector2i) -> bool:
+    if max(abs(coord.x),abs(coord.y)) <= 2 or _chunk_has_player_base(coord):
+        return false
+    var profile = _chunk_profile(coord)
+    return str(profile.get("poi_id","")) == ""
+
+func _maybe_lock_building(coord:Vector2i,building_id:String,index:int,loot_table:String,fresh_door:bool,fresh_cache:bool) -> void:
+    if not _lock_allowed_here(coord):
+        return
+    var door_key = "%d:%d:door:%s" % [coord.x,coord.y,building_id]
+    if fresh_door and absi(door_key.hash()) % 100 < LOCK_DOOR_CHANCE:
+        locked_doors[door_key] = true
+    var ckey = "%d:%d:container:cache_%d" % [coord.x,coord.y,index]
+    if fresh_cache and container_states.has(ckey) and loot_table in LOCKABLE_TABLES and absi((ckey + ":lock").hash()) % 100 < LOCK_CACHE_CHANCE:
+        var st = container_states[ckey]
+        st["locked"] = true
+        # someone locked it for a reason: a second helping of what it holds
+        var items = st.get("items",[])
+        for e in _generate_loot(ckey + ":lock",loot_table,int(st.get("grid_w",CONTAINER_W)),int(st.get("grid_h",CONTAINER_H))):
+            _grid_add(items,str(e.get("id","")),int(e.get("qty",1)),int(st.get("grid_w",CONTAINER_W)),int(st.get("grid_h",CONTAINER_H)))
+        st["items"] = items
+        container_states[ckey] = st
+
+func _container_locked(key:String) -> bool:
+    return container_states.has(key) and typeof(container_states[key]) == TYPE_DICTIONARY and bool(container_states[key].get("locked",false))
+
+func _lock_prompt(kind:String,name:String) -> String:
+    if _inventory_has_item("crowbar"):
+        return "ЗАПЕРТО  •  ВСКРЫТЬ МОНТИРОВКОЙ"
+    if kind == "door":
+        return "ЗАПЕРТО  •  ВЫБИТЬ ПЛЕЧОМ (ГРОМКО)"
+    return "ЗАПЕРТО  •  НУЖНА МОНТИРОВКА"
+
+func _begin_lock_work(kind:String,key:String,node) -> void:
+    if not lock_work.is_empty():
+        return
+    if field_hints != null:
+        field_hints.hint("locked","Заперто. Монтировка вскроет тихо и быстро; дверь можно выбить плечом — но это слышно на всю улицу.")
+    var tool = "crowbar" if _inventory_has_item("crowbar") else ""
+    if tool == "" and kind == "door":
+        if stamina < LOCK_SHOULDER_STAMINA:
+            _set_survival_feedback("Не хватит сил выбить дверь — отдышитесь",1.8)
+            return
+        tool = "shoulder"
+    if tool == "":
+        _set_survival_feedback("Заперто на замок. Без монтировки не открыть",2.0)
+        return
+    var t = 0.35 if tool == "shoulder" else (LOCK_PRY_DOOR if kind == "door" else LOCK_PRY_CACHE)
+    lock_work = {"kind":kind,"key":key,"node":node,"tool":tool,"t":t,"from":player.global_position,"hp":health}
+    if tool == "crowbar":
+        _set_survival_feedback("Вскрываю монтировкой...",t + 0.2)
+        _play_world_sfx("workbench",-13.0,0.04)
+        _emit_ai_sound(player.global_position,120.0,"door",0.8)
+
+func _update_lock_work(delta:float) -> void:
+    if lock_work.is_empty():
+        return
+    # stepping away or taking a blow breaks the work off
+    if player.global_position.distance_to(lock_work["from"]) > 40.0 or health < float(lock_work["hp"]) - 0.5 or inventory_open:
+        if not inventory_open:
+            _set_survival_feedback("Сорвалось",1.0)
+        lock_work = {}
+        return
+    lock_work["t"] = float(lock_work["t"]) - delta
+    if float(lock_work["t"]) > 0.0:
+        return
+    var work = lock_work
+    lock_work = {}
+    var key = str(work["key"])
+    if str(work["tool"]) == "shoulder":
+        stamina = max(0.0,stamina - LOCK_SHOULDER_STAMINA)
+        _emit_ai_sound(player.global_position,420.0,"door",1.6)
+        _play_world_sfx("melee_hit",-6.0,0.03)
+        _body_spring_kick(Vector2.UP,10.0)
+    else:
+        _emit_ai_sound(player.global_position,190.0,"door",1.1)
+        _play_world_sfx("melee_hit",-12.0,0.05)
+    if str(work["kind"]) == "door":
+        locked_doors.erase(key)
+        var node = work["node"]
+        if is_instance_valid(node):
+            _toggle_door(node)
+        _set_survival_feedback("Дверь %s" % ("выбита" if str(work["tool"]) == "shoulder" else "вскрыта"),1.4)
+    else:
+        if container_states.has(key):
+            container_states[key].erase("locked")
+        _set_survival_feedback("Замок сорван",1.2)
+        _open_container(key)
+
 func _toggle_door(node):
     var key = str(node.get_meta("door_key",""))
     if key == "":
         return
+    if locked_doors.has(key):
+        # a door already broken down has no lock left to pick
+        if float(_door_defense_record(node).get("condition",DOOR_MAX_CONDITION)) <= 0.01:
+            locked_doors.erase(key)
+        else:
+            _begin_lock_work("door",key,node)
+            return
 
     var is_open = bool(door_states.get(key,false))
     var defense = _door_defense_record(node)
@@ -21785,6 +21941,11 @@ func _npc_open_door(node,from_pos:Vector2,kicked:bool = false) -> bool:
     var key = str(node.get_meta("door_key",""))
     if key == "" or bool(door_states.get(key,false)):
         return false
+    if locked_doors.has(key):
+        if not kicked:
+            return false
+        # kicked in: the lock is gone
+        locked_doors.erase(key)
     var local_from = node.to_local(from_pos)
     node.set_meta("door_swing",-PI * 0.5 if local_from.y >= 0.0 else PI * 0.5)
     door_states[key] = true
@@ -25830,6 +25991,9 @@ func _build_procedural_chunk(chunk,coord):
                 center = _fit_procedural_building_center(center,size)
 
             var id = "building_%d" % i
+            # dev72: only a door / cache never created before may be locked
+            var fresh_door = not door_states.has("%d:%d:door:%s" % [coord.x,coord.y,id])
+            var fresh_cache = not container_states.has("%d:%d:container:cache_%d" % [coord.x,coord.y,i])
 
             var building_node = _create_building(
                 chunk,
@@ -25855,6 +26019,8 @@ func _build_procedural_chunk(chunk,coord):
                 loot_table,
                 "%s • %s" % [sign_text,_district_display_name(str(profile.get("district_id","")))]
             )
+            if not is_legacy and not preserve_082_layout:
+                _maybe_lock_building(coord,id,i,loot_table,fresh_door,fresh_cache)
 
             # Metadata is intentionally attached without changing save keys. Future
             # room/base/NPC systems can query archetype semantics from the building node.
@@ -35255,6 +35421,7 @@ func _save_state():
         "discovered_chunks":discovered_chunks,
         "world_scenes":world_scene_state,
         "scene_legacy_chunks":scene_legacy_chunks,
+        "locked_doors":locked_doors,
         "scene_era":true,
         "map_footprints":_sanitize_map_footprints(map_footprints),
         "field_hints":field_hints.state() if field_hints != null else field_hints_saved,
@@ -35517,6 +35684,7 @@ func _load_state():
     next_base_id = int(parsed.get("next_base_id",1))
     discovered_chunks = parsed.get("discovered_chunks",{})
     world_scene_state = parsed.get("world_scenes",{}) if typeof(parsed.get("world_scenes",{})) == TYPE_DICTIONARY else {}
+    locked_doors = parsed.get("locked_doors",{}) if typeof(parsed.get("locked_doors",{})) == TYPE_DICTIONARY else {}
     if bool(parsed.get("scene_era",false)):
         scene_legacy_chunks = parsed.get("scene_legacy_chunks",{}) if typeof(parsed.get("scene_legacy_chunks",{})) == TYPE_DICTIONARY else {}
     else:

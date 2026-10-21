@@ -73,7 +73,7 @@ const ITEM_CATEGORIES = {
     "scrap":"parts","cloth":"household","tape":"tools","repair_kit":"tools","water_filter":"technical","flashlight":"electronics","firewood":"household",
     "ammo_9x18":"ammo","ammo_762x25":"ammo","ammo_12g":"ammo","ammo_762":"ammo","ammo_545":"ammo","ammo_762x54r":"ammo",
     "makarov":"weapon","tt33":"weapon","pps43":"weapon","shotgun":"weapon","toz34":"weapon","izh81":"weapon","sks":"weapon","akm":"weapon","aks74u":"weapon","mosin":"weapon",
-    "combat_knife":"weapon","steel_pipe":"weapon","fire_axe":"weapon",
+    "combat_knife":"weapon","steel_pipe":"weapon","fire_axe":"weapon","crowbar":"tools",
     "police_vest":"armor","military_vest":"armor","ballistic_helmet":"armor","field_rig":"armor","assault_rig":"armor",
     "cap":"household","wool_hat":"household","light_jacket":"household","rain_jacket":"technical","insulated_parka":"technical","storm_poncho":"technical",
     "field_backpack":"technical","hiking_backpack":"technical","expedition_pack":"technical","bedroll":"technical",
