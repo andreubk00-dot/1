@@ -2871,6 +2871,12 @@ var world_scenes = null
 # visited or looted - those keep the layout they had (docs/SCENES_DEV71.md)
 var world_scene_state = {}
 var scene_legacy_chunks = {}
+# dev73 the dog (docs/DOG_DEV73.md): {"sites": {"x,y": "taken"|"dead"},
+# "dog": the companion's record, "lost": names}; dog is its node
+const DogCatalog = preload("res://world/dog_catalog.gd")
+const Dog = preload("res://world/dog.gd")
+var dog_state = {"sites":{},"dog":{},"lost":[]}
+var dog = null
 # dev72 locks (docs/LOCKS_DEV72.md): door keys that are locked; a lock being
 # worked on: {"kind","key","node","tool","t","from","hp"}
 var locked_doors = {}
@@ -3043,6 +3049,7 @@ func _ready():
     world_scenes = WorldScenes.new()
     world_scenes.game = self
     add_child(world_scenes)
+    call_deferred("_dog_restore")
     _ensure_shelter_threat_indicator()
     _create_weather_visuals()
     _create_day_night()
@@ -4791,6 +4798,10 @@ func _unhandled_input(event):
         return
     if InputBindings.pressed(event,"flashlight"):
         _toggle_flashlight()
+        return
+    if InputBindings.pressed(event,"dog_command"):
+        if dog != null and is_instance_valid(dog) and not inventory_open:
+            dog.command()
         return
     if InputBindings.pressed(event,"shove"):
         if not inventory_open:
@@ -8853,6 +8864,8 @@ func _sound_hearing_cap_multiplier(kind):
         return 0.58
     if kind == "infected_call":
         return 1.35
+    if kind == "dog_bark":
+        return 1.15
     if kind == "walk":
         return 0.45
     return 0.90
@@ -8874,6 +8887,8 @@ func _sound_suspicion_gain(kind):
         return 20.0
     if kind == "infected_call":
         return 82.0
+    if kind == "dog_bark":
+        return 46.0
     if kind == "walk":
         return 18.0
     return 34.0
@@ -12460,6 +12475,10 @@ func _region_map_snapshot():
         snapshot["selected"] = region_map_selected_chunk
     if _has_home():
         snapshot["home"] = _home_chunk()
+    if dog != null and is_instance_valid(dog) and not dog.dead and dog.mode == "wait":
+        var dog_chunk = _world_to_chunk(dog.global_position)
+        snapshot["dog"] = {"coord":dog_chunk,"label":"%s ЖДЁТ" % dog.dog_name.to_upper(),
+            "offset":(dog.global_position - Vector2(dog_chunk) * CHUNK_SIZE) / CHUNK_SIZE - Vector2(0.5,0.5)}
     if expedition_active or home_navigation_active:
         snapshot["target"] = _navigation_target_chunk()
         snapshot["route"] = [current_chunk] + _expedition_route_chunks(current_chunk,_navigation_target_chunk())
@@ -18953,6 +18972,8 @@ func _update_interaction_prompt():
         interaction_label.text = "ОБЫСКАТЬ  •  СДАЛСЯ"
     elif type == "world_scene":
         interaction_label.text = str(target.get_meta("scene_prompt","ОСМОТРЕТЬ"))
+    elif type == "dog":
+        interaction_label.text = target.prompt_text()
     elif type == "ether_console":
         interaction_label.text = "ПУЛЬТ ОПОВЕЩЕНИЯ  •  ЭФИР ГО" if str(story_ether.get("choice","")) == "" else "ПУЛЬТ ОПОВЕЩЕНИЯ  •  %s" % ("НОВАЯ ЗАПИСЬ" if str(story_ether["choice"]) == "truth" else "ВЫКЛЮЧЕН")
     elif type == "story_clue":
@@ -19041,6 +19062,11 @@ func _nearest_interactable():
             priority = 6.0
         elif type == "world_item":
             limit = max(limit,54.0)
+        elif type == "dog":
+            # a dog at heel never steals the prompt from a door or a crate
+            if not node.wants_attention():
+                continue
+            priority = -10.0
 
         var dist = player.global_position.distance_to(node.global_position)
         if dist > limit:
@@ -19115,6 +19141,8 @@ func _interact():
     elif type == "world_scene":
         if world_scenes != null:
             world_scenes.interact(target)
+    elif type == "dog":
+        target.care()
     elif type == "base_heater":
         _toggle_base_heater(target)
     elif type == "base_campfire":
@@ -25472,6 +25500,93 @@ func _supply_event_blocked_chunks() -> Array:
             blocked.append(coord)
     return blocked
 
+# ------------------------------------------------------------ dev73: dog --
+func _build_dog_yard(chunk,coord:Vector2i) -> void:
+    var k = DogCatalog.key(coord)
+    if dog_state.get("sites",{}).has(k) or _chunk_has_player_base(coord):
+        return
+    var yard = DogCatalog.YARD.duplicate(true)
+    var center = _world_event_anchor(chunk,yard,coord)
+    if center.x < -9000.0:
+        yard["placement"] = "road"
+        center = _world_event_anchor(chunk,yard,coord)
+    if center.x < -9000.0:
+        return
+    var root = Node2D.new()
+    root.name = "DogYard"
+    root.position = center
+    root.z_index = 5
+    root.z_as_relative = false
+    # trees, cars and the pump step round the yard like round a scene
+    root.set_meta("world_event_root",true)
+    root.set_meta("world_event_id","dog_yard")
+    root.set_meta("world_event_label",str(yard["label"]))
+    root.set_meta("world_event_footprint",yard["footprint"])
+    root.set_meta("dog_yard",k)
+    root.add_to_group("world_events")
+    chunk.add_child(root)
+    var kennel = _settlement_piece(chunk,{"kind":"dog_kennel","pos":center + Vector2(-14,-12),"solid":Vector2(22,10),"scale":0.55})
+    if kennel != null:
+        kennel.set_meta("world_scene_piece",true)
+    _event_prop(root,"cardboard_boxes",Vector2(26,-16),0.34,3)
+    var d = Dog.new()
+    d.setup(self,{"name":DogCatalog.site_name(coord),"site":k,"mode":"chained","trusted":false,
+        "hp":DogCatalog.MAX_HP * 0.75,"food":20.0,"water":40.0})
+    # on a short chain from the kennel's corner
+    var stake = (kennel.position if kennel != null else center + Vector2(-14,-12)) + Vector2(8,4)
+    d.position = stake + Vector2(18,16)
+    d.set_meta("stake",chunk.to_global(stake) if chunk is Node2D else stake)
+    chunk.add_child(d)
+
+func _adopt_dog(node) -> void:
+    if not is_instance_valid(node):
+        return
+    dog_state["sites"][str(node.site)] = "taken"
+    var at = node.global_position
+    node.reparent(self)
+    node.global_position = at
+    node.unchain()
+    dog = node
+    dog_state["dog"] = node.record()
+    _set_survival_feedback("Пёс съел всё и ткнулся носом в руку. На ошейнике нацарапано: «%s». Теперь %s с вами.  [%s] - ждать / ко мне" % [node.dog_name,DogCatalog.g(node.dog_name,"он","она"),InputBindings.key("dog_command")],5.0)
+
+func _on_dog_died(node,cause:String) -> void:
+    var who = str(node.dog_name)
+    dog_state["dog"] = {}
+    if not who in dog_state["lost"]:
+        dog_state["lost"].append(who)
+    if dog == node:
+        dog = null
+    var how = {"голод":"от голода","жажда":"без воды"}.get(cause,"от укусов заражённых")
+    _set_survival_feedback("%s %s %s." % [who,DogCatalog.g(who,"погиб","погибла"),how],4.0)
+    _record_world_news("world","","%s, пёс с цепи, ходил%s с выжившим по краю города. %s %s." % [who,DogCatalog.g(who,"","а"),DogCatalog.g(who,"Погиб","Погибла"),how],world_day,int(world_minutes),false)
+    # the body stays until the survivor is well away
+    var t = get_tree().create_timer(90.0)
+    t.timeout.connect(func():
+        if is_instance_valid(node) and (player == null or node.global_position.distance_to(player.global_position) > 600.0):
+            node.queue_free())
+
+func _dog_restore() -> void:
+    var rec = dog_state.get("dog",{})
+    if rec.is_empty() or (dog != null and is_instance_valid(dog)):
+        return
+    var d = Dog.new()
+    d.setup(self,rec)
+    add_child(d)
+    if d.mode == "follow" or (float(rec.get("x",0.0)) == 0.0 and float(rec.get("y",0.0)) == 0.0):
+        d.global_position = player.global_position + Vector2(-26,14)
+    else:
+        d.global_position = Vector2(float(rec["x"]),float(rec["y"]))
+    d.last_pos = d.global_position
+    dog = d
+
+func _dog_save_state() -> Dictionary:
+    var out = dog_state.duplicate(true)
+    if dog != null and is_instance_valid(dog) and not dog.dead:
+        out["dog"] = dog.record()
+        dog_state["dog"] = out["dog"].duplicate()
+    return out
+
 func _loaded_supply_event_root(event_id:String):
     for node in get_tree().get_nodes_in_group("world_events"):
         if is_instance_valid(node) and bool(node.get_meta("supply_event",false)) and str(node.get_meta("supply_event_id","")) == event_id:
@@ -26113,6 +26228,9 @@ func _build_procedural_chunk(chunk,coord):
             var scene = SceneCatalog.scene_for(coord,zone,int(profile.get("risk",2)),poi_id)
             if not scene.is_empty():
                 world_scenes.build(chunk,coord,profile,scene)
+        # dev73: a chained dog's yard (its sectors hold no scene of either kind)
+        if world_event.is_empty() and DogCatalog.site_name(coord) != "":
+            _build_dog_yard(chunk,coord)
 
     for i in range(car_count):
         var car_pos = Vector2(-9999,-9999)
@@ -27714,13 +27832,16 @@ func _use_water_pump(node):
         if fill < cap - 0.001:
             filled += cap - fill
             _set_water_container_fill_l(item_id,iid,cap)
-    if drank or filled > 0.0:
+    var dog_drank = dog != null and is_instance_valid(dog) and dog.water < 99.0 and dog.drink_at_pump(node.global_position)
+    if drank or filled > 0.0 or dog_drank:
         _play_world_sfx("drink",-10.0,0.03)
     var parts = []
     if drank:
         parts.append("Напились чистой воды")
     if filled > 0.0:
         parts.append("набрано %.1f л" % filled)
+    if dog_drank:
+        parts.append("%s напил%s" % [dog.dog_name,DogCatalog.g(dog.dog_name,"ся","ась")])
     if parts.is_empty():
         parts.append("Пить не хочется, ёмкостей нет")
     _set_survival_feedback(" • ".join(parts),2.2)
@@ -35422,6 +35543,7 @@ func _save_state():
         "world_scenes":world_scene_state,
         "scene_legacy_chunks":scene_legacy_chunks,
         "locked_doors":locked_doors,
+        "dog":_dog_save_state(),
         "scene_era":true,
         "map_footprints":_sanitize_map_footprints(map_footprints),
         "field_hints":field_hints.state() if field_hints != null else field_hints_saved,
@@ -35685,6 +35807,7 @@ func _load_state():
     discovered_chunks = parsed.get("discovered_chunks",{})
     world_scene_state = parsed.get("world_scenes",{}) if typeof(parsed.get("world_scenes",{})) == TYPE_DICTIONARY else {}
     locked_doors = parsed.get("locked_doors",{}) if typeof(parsed.get("locked_doors",{})) == TYPE_DICTIONARY else {}
+    dog_state = DogCatalog.sanitize(parsed.get("dog",{}))
     if bool(parsed.get("scene_era",false)):
         scene_legacy_chunks = parsed.get("scene_legacy_chunks",{}) if typeof(parsed.get("scene_legacy_chunks",{})) == TYPE_DICTIONARY else {}
     else:

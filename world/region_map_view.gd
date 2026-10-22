@@ -110,6 +110,11 @@ func _symbol(pos,kind,color):
     elif kind == "medical":
         draw_line(pos-Vector2(3,0),pos+Vector2(3,0),color,2)
         draw_line(pos-Vector2(0,3),pos+Vector2(0,3),color,2)
+    elif kind == "dog":
+        # a paw print: where the dog was told to wait
+        draw_circle(pos+Vector2(0,1.4),2.1,color)
+        for toe in [Vector2(-2.5,-1.5),Vector2(-0.9,-3.1),Vector2(0.9,-3.1),Vector2(2.5,-1.5)]:
+            draw_circle(pos+toe,0.95,color)
     elif kind == "target":
         draw_circle(pos,4,color,false,1.4)
         draw_line(pos-Vector2(6,0),pos+Vector2(6,0),color,1)
@@ -253,6 +258,14 @@ func _draw():
         var p = project(data["home"])
         _symbol(p,"home",Color("385b66"))
         _label(p+Vector2(7,0),"ДОМ",Color("385b66"),true)
+    if data.has("dog") and contains_sector(data["dog"]["coord"]):
+        var dp = project(data["dog"]["coord"]) + Vector2(data["dog"].get("offset",Vector2.ZERO)) * s
+        _symbol(dp,"dog",Color("6b4a2e"))
+        var dog_text = str(data["dog"].get("label",""))
+        var dog_w = get_theme_default_font().get_string_size(dog_text,HORIZONTAL_ALIGNMENT_LEFT,-1,7).x
+        for offset in [Vector2(7,10),Vector2(7,-8),Vector2(-dog_w-7,10),Vector2(-dog_w-7,-8)]:
+            if _label(dp+offset,dog_text,Color("6b4a2e"),true):
+                break
     if data.has("target"):
         _symbol(project(data["target"]),"target",Color("854d36"))
     if data.has("selected"):
