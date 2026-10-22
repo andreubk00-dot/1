@@ -30,16 +30,16 @@ VARIANTS = 4
 VARIANT = [
     dict(name='worker', top=(78, 86, 60), top2=(61, 68, 48), pants=(57, 60, 60),
          boots=(47, 38, 31), skin=(143, 139, 116), hair=(54, 43, 34), wound=(112, 37, 31),
-         accent=(142, 105, 48), hunch=0.19, drag='L', head_tilt=0.10),
+         accent=(142, 105, 48), hunch=0.19, drag='L', head_tilt=0.10, reach='R'),
     dict(name='clinic', top=(72, 91, 87), top2=(55, 72, 70), pants=(69, 74, 76),
          boots=(45, 42, 39), skin=(151, 145, 125), hair=(63, 57, 50), wound=(120, 43, 36),
-         accent=(173, 166, 145), hunch=0.15, drag='R', head_tilt=-0.11),
+         accent=(173, 166, 145), hunch=0.15, drag='R', head_tilt=-0.11, reach='both'),
     dict(name='civilian', top=(62, 72, 88), top2=(46, 54, 68), pants=(67, 58, 50),
          boots=(49, 38, 29), skin=(137, 134, 113), hair=(73, 57, 40), wound=(105, 34, 30),
          accent=(104, 83, 62), hunch=0.23, drag='L', head_tilt=0.15),
     dict(name='militia', top=(70, 77, 57), top2=(49, 55, 42), pants=(44, 49, 53),
          boots=(36, 32, 29), skin=(130, 132, 111), hair=(46, 42, 36), wound=(128, 42, 32),
-         accent=(98, 92, 65), hunch=0.18, drag='R', head_tilt=-0.08),
+         accent=(98, 92, 65), hunch=0.18, drag='R', head_tilt=-0.08, reach='L'),
 ]
 
 
@@ -70,11 +70,11 @@ EXTRA = [
     dict(name='soldier', top=(84, 90, 62), top2=(64, 70, 48), pants=(78, 82, 58),
          boots=(34, 30, 26), skin=(132, 130, 110), hair=None, wound=(124, 40, 32),
          accent=(56, 60, 44), hunch=0.17, drag='R', head_tilt=0.06,
-         size=1.03, girth=1.08, limb=1.0, gait='shamble', helmet=True, armor=True),
+         size=1.03, girth=1.08, limb=1.0, gait='shamble', helmet=True, armor=True, reach='R'),
     dict(name='patient', top=(170, 182, 184), top2=(140, 152, 156), pants=(150, 142, 122),
          boots=(140, 132, 112), skin=(156, 148, 126), hair=(70, 64, 56), wound=(134, 44, 38),
          accent=(196, 194, 182), hunch=0.2, drag='L', head_tilt=-0.12,
-         size=0.98, girth=0.9, limb=0.86, gait='shamble', gown=True),
+         size=0.98, girth=0.9, limb=0.86, gait='shamble', gown=True, reach='both'),
     dict(name='hazmat', top=(176, 160, 56), top2=(142, 128, 42), pants=(170, 154, 52),
          boots=(40, 40, 38), skin=(140, 136, 114), hair=None, wound=(120, 40, 34),
          accent=(42, 44, 42), hunch=0.18, drag='R', head_tilt=0.04,
@@ -168,10 +168,15 @@ def walk_pose(direction, variant, k):
     # arms mostly hang, with unequal swing and occasional clawing reach
     P.hands['L'] = (3.1 + 1.2*math.sin(ph+math.pi), -5.6, 5.7 + 0.5*math.cos(ph))
     P.hands['R'] = (3.5 + 1.7*math.sin(ph), 5.6, 6.0 + 0.6*math.cos(ph+0.4))
-    if variant == 1:
-        P.hands['L'] = (4.4 + 0.8*math.sin(ph), -5.2, 7.2)
-    elif variant == 3:
-        P.hands['R'] = (4.8 + 0.9*math.sin(ph), 5.1, 7.6)
+    # 1.38 dev74: the classic reach - an arm (or both) held out at the
+    # shoulder, fingers clawing, swaying with the lurch; it reads as dead at
+    # sprite size where a hanging arm reads as a passer-by
+    sway = 0.5*math.sin(ph*0.5 + variant)
+    reach = C.get('reach', '')
+    if reach in ('R', 'both'):
+        P.hands['R'] = (12.4 + 0.6*math.sin(ph), 3.6, 11.8 + sway)
+    if reach in ('L', 'both'):
+        P.hands['L'] = (12.0 + 0.6*math.sin(ph + 1.3), -3.6, 11.4 - sway)
     if gait == 'heavy':
         # wide, sagging stance: each step drops the whole mass, arms hang wide
         P.bob *= 1.5
@@ -241,6 +246,15 @@ def attack_pose(direction, variant, k):
         P.hands['R'] = (reach-2.2, 4.3, 7.4)
         P.twist = 0.23*P.attack
     return P
+
+
+# dried blood on the clothes, per body (front-facing spots, local f, r, z, size)
+STAINS = [
+    [(3.8, -2.6, 5.0, 1.2), (3.6, 3.2, 9.6, 0.9)],
+    [(3.8, 1.8, 4.2, 1.1), (3.7, -3.4, 9.0, 1.0)],
+    [(3.8, -1.2, 3.8, 1.3), (3.6, 3.6, 6.4, 0.8)],
+    [(3.8, 2.6, 4.6, 1.0), (3.7, -3.0, 10.0, 0.9)],
+]
 
 
 def build(P):
@@ -359,10 +373,13 @@ def build(P):
         s.ball(head + fU*3.6 - zU*1.8 - rU*1.1,1.0,C['accent'])
         s.ball(head + fU*3.6 - zU*1.8 + rU*1.1,1.0,C['accent'])
     else:
-        # sunken face and hair/scalp silhouette
-        s.ball(head + fU*3.15 + zU*0.15,1.35,darker(C['skin'],0.68),bias=0.8)
-        if C.get('mouth'):
-            s.ball(head + fU*3.5 - zU*1.4,1.15,(40,16,14),bias=1.0)
+        # a dead face: sunken cheeks, dark eye sockets, the jaw hanging open
+        s.ball(head + fU*3.0 + zU*0.1,1.45,darker(C['skin'],0.74),bias=0.8)
+        fvis = float(np.dot(fU, V(0,1,0.55)))
+        for sg in (-1, 1):
+            if fvis + 0.45*sg*float(np.dot(rU, V(0,1,0.55))) > -0.3:
+                s.ball(head + fU*3.45 + rU*(1.35*sg) + zU*0.75,0.72,(34,24,22),bias=1.05)
+        s.ball(head + fU*3.55 - zU*1.55,1.35 if C.get('mouth') else 0.95,(40,16,14),bias=1.0)
         if C.get('helmet'):
             s.ball(head + zU*1.5,4.5,C['top'],bias=0.25)
             s.box(head + zU*0.5 + fU*0.3,fU,rU,zU,4.6,4.8,0.5,darker(C['top'],0.75),edge=False)
@@ -372,6 +389,14 @@ def build(P):
         for (f, r, z, rad) in [(3.6,1.8,8.8,0.9),(3.2,-2.4,6.0,1.1),(1.0,4.6,9.5,0.8),(3.9,0.2,4.4,0.8),(-0.6,-4.8,7.2,0.9)]:
             s.ball(U(f*g,r*g,z),rad,(186,182,86),bias=0.9)
         s.ball(head + fU*2.4 + rU*2.4,0.9,(186,182,86),bias=1.0)
+    # blood: a dribble from the mouth down the front, old stains gone brown
+    if not C.get('hazmat'):
+        # short and uneven, dried dark - a straight red line reads as a tie
+        blood = darker(C['wound'],0.66)
+        s.capsule(U(3.85*g,0.4,11.3),U(3.9*g,0.9,10.0),0.65,0.5,blood,bias=0.75,edge=False)
+        s.ball(U(3.95*g,1.3,9.4),0.9,blood,bias=0.75)
+    for (f, r, z, rad) in STAINS[P.variant % len(STAINS)]:
+        s.ball(U(f*g, r*g, z), rad, (78, 34, 28) if not C.get('hazmat') else (96, 40, 30), bias=0.7)
     # wounds by variant
     if P.variant >= EXTRA_BASE:
         s.ball(U(3.9*g,1.6,7.4),1.3,C['wound'],bias=0.8)
