@@ -103,3 +103,10 @@
 | world/thunder_1..3.wav | Rain Long Thunder — https://opengameart.org/content/rain-long-thunder | WuxiaScrub |
 | world/gunfire_far_1..4.wav | собраны из выстрелов The Free Firearm Sound Library (CC0), приглушены и с эхом | — |
 | world/wind_gust_1..2.wav | синтезированы скриптом импорта | — |
+
+## Собака — `audio/dog/`
+Собираются скриптом `tools/import_dog_audio.py` (вырезка, срез гула, выравнивание).
+- bark_1-4 — «Dog barking mono» https://opengameart.org/content/dog-barking-mono (HaelDB; страница даёт CC0 и OGA-BY 3.0 на выбор — берём CC0)
+- yelp_1, whine_1-2 — «Dog sounds» https://opengameart.org/content/dog-sounds (pauliuw)
+- growl_1 — «Dog Growl» https://opengameart.org/content/dog-growl (bonebrah)
+- growl_2 — «Dog grunt» https://opengameart.org/content/dog-grunt (qubodup)

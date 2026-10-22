@@ -12,8 +12,15 @@ const Nav = preload("res://world/local_navigation.gd")
 const CELL = 128
 const SPRITE_SCALE = 0.5
 const SPRITE_OFFSET = Vector2(0, -14)
-const FRAMES = {"walk": 12, "run": 8, "idle": 8, "sit": 4, "alert": 4, "lie": 2}
-const STRIDE = {"walk": 30.0, "run": 46.0}
+const FRAMES = {"walk": 12, "run": 8, "idle": 8, "sit": 4, "rest": 4, "alert": 4, "bark": 4, "sniff": 6, "lie": 2}
+# world px a full gait cycle carries it: a trot, a gallop
+const STRIDE = {"walk": 24.0, "run": 34.0}
+const ACCEL = 420.0           # it picks up speed like an animal, not a cursor
+const BRAKE = 640.0
+const TURN = 10.0             # rad/s it swings round at
+const HEEL = 24.0             # at rest it stands this far to his side
+const SIT_AFTER = 7.0         # standing about, it sits ...
+const REST_AFTER = 30.0       # ... and then lies down
 const TROT_SPEED = 66.0
 const RUN_SPEED = 98.0
 const GAP = 34.0              # it keeps this far behind
@@ -39,6 +46,16 @@ var water = 70.0
 var dead = false
 
 var facing = Vector2.DOWN
+var want_face = Vector2.DOWN
+var still_t = 0.0             # how long it has stood
+var sniff_t = 0.0
+var sniff_cd = 4.0
+var bark_anim = 0.0
+var eat_t = 0.0
+var heel_side = 0.0
+var _player_prev = Vector2(INF, INF)
+var player_speed = 0.0
+var player_heading = Vector2.DOWN
 var dir8 = 2
 var trail = []
 var walk_dist = 0.0
@@ -156,23 +173,59 @@ func _physics_process(delta: float) -> void:
         _chained(delta)
         return
     _watch_survivor()
+    _watch_player(delta)
     think_t -= delta
     if think_t <= 0.0:
         think_t = 0.25
         _sense()
         _bitten()
     var move = _decide(delta)
-    velocity = move
+    var accel = BRAKE if move.length() < velocity.length() else ACCEL
+    if flee_t > 0.0:
+        accel = 1400.0
+    velocity = velocity.move_toward(move, accel * delta)
     move_and_slide()
+    if want_face.length() > 0.1:
+        facing = Vector2.from_angle(lerp_angle(facing.angle(), want_face.angle(), min(1.0, TURN * delta)))
     var moved = global_position.distance_to(last_pos)
     walk_dist += moved
     stuck_t = stuck_t + delta if (move.length() > 5.0 and moved < 0.25 * delta * 60.0) else max(0.0, stuck_t - delta)
+    _mood(delta)
     last_pos = global_position
     # the survivor's steps are kept while it waits too: called, it comes the
     # way he went, round the walls, not through them
     if mode in ["follow", "wait"] and game.player_death_time <= 0.0 and not mourning and trusted:
         _record_trail()
-    _animate(move)
+    _animate(velocity)
+
+
+func _watch_player(delta: float) -> void:
+    # how fast and which way the survivor goes - for where it stands at heel
+    var p = game.player.global_position
+    if _player_prev.x < INF and delta > 0.0:
+        var step = p - _player_prev
+        player_speed = lerp(player_speed, step.length() / delta, 0.3)
+        if step.length() > 0.4:
+            player_heading = step.normalized()
+    _player_prev = p
+
+
+func _mood(delta: float) -> void:
+    # standing about: a sniff at the ground now and then, then it sits, then
+    # it lies down; anything that moves it starts it over
+    bark_anim = max(0.0, bark_anim - delta)
+    eat_t = max(0.0, eat_t - delta)
+    sniff_t = max(0.0, sniff_t - delta)
+    sniff_cd = max(0.0, sniff_cd - delta)
+    if velocity.length() > 8.0 or sensed != null or alert_t > 0.0:
+        still_t = 0.0
+        sniff_t = 0.0 if velocity.length() > 8.0 else sniff_t
+        return
+    still_t += delta
+    if mode == "follow" and still_t > 1.5 and still_t < SIT_AFTER and sniff_cd <= 0.0:
+        sniff_cd = randf_range(6.0, 12.0)
+        if randf() < 0.6:
+            sniff_t = randf_range(1.2, 2.2)
 
 
 # ------------------------------------------------------------------ needs --
@@ -239,7 +292,7 @@ func _complain() -> void:
     if food > 50.0:
         _warned.erase("food")
     if not lines.is_empty():
-        _voice("whine_1", -10.0)
+        _voice("whine_%d" % (randi() % 2 + 1), -10.0)
         game._set_survival_feedback(" ".join(lines), 3.2)
 
 
@@ -249,7 +302,8 @@ func _chained(delta: float) -> void:
     var d = to.length()
     var clip = "idle"
     if d < 170.0 and game.player_death_time <= 0.0:
-        facing = to / max(d, 0.001)
+        want_face = to / max(d, 0.001)
+        facing = Vector2.from_angle(lerp_angle(facing.angle(), want_face.angle(), min(1.0, TURN * delta)))
         if d < WARY:
             clip = "alert"
             if growl_cd <= 0.0:
@@ -360,9 +414,13 @@ func _decide(delta: float) -> Vector2:
     if d > TELEPORT or (stuck_t > 1.6 and d > 220.0 and not _on_screen(global_position)) or (stuck_t > 4.0 and d > 120.0):
         _catch_up()
         return Vector2.ZERO
+    if d < GAP + 8.0 and player_speed < 6.0:
+        return _heel(p, delta)
     if d < GAP:
         _prune_trail(18.0)
+        heel_side = 0.0
         return Vector2.ZERO
+    heel_side = 0.0
     skip_t -= delta
     if skip_t <= 0.0:
         skip_t = 0.3
@@ -377,6 +435,23 @@ func _decide(delta: float) -> Vector2:
         # settling in behind: ease off so it does not run into his heels
         speed *= clamp((d - GAP) / 22.0, 0.35, 1.0)
     return _steer(target, speed * _speed_mult(), delta)
+
+
+func _heel(p: Vector2, delta: float) -> Vector2:
+    # he has stopped: it comes to stand at his side, a little behind, and
+    # looks where he looks
+    _prune_trail(18.0)
+    if heel_side == 0.0:
+        var cr = player_heading.cross(global_position - p)
+        heel_side = 1.0 if cr >= 0.0 else -1.0
+    var side = player_heading.orthogonal() * -heel_side
+    var spot = p + side * HEEL - player_heading * 8.0
+    var to = spot - global_position
+    if to.length() < 5.0 or not _clear_line(global_position, spot):
+        if still_t > 0.3:
+            want_face = player_heading
+        return Vector2.ZERO
+    return _toward(spot, clamp(to.length() * 3.0, 18.0, TROT_SPEED * 0.7))
 
 
 func _steer(target: Vector2, speed: float, delta: float) -> Vector2:
@@ -405,8 +480,8 @@ func _toward(target: Vector2, speed: float) -> Vector2:
     var to = target - global_position
     if to.length() < 1.0:
         return Vector2.ZERO
-    facing = to.normalized()
-    return facing * speed
+    want_face = to.normalized()
+    return want_face * speed
 
 
 func _record_trail() -> void:
@@ -457,6 +532,7 @@ func _catch_up() -> void:
             spot = game.player.global_position - game.aim_direction.normalized() * 40.0
     global_position = spot
     last_pos = spot
+    velocity = Vector2.ZERO
     stuck_t = 0.0
     for k in range(max(0, cut + 1)):
         trail.pop_front()
@@ -532,7 +608,7 @@ func _sense() -> void:
     if best != null:
         alert_t = 0.6
         if velocity.length() < 5.0:
-            facing = (best.global_position - global_position).normalized()
+            want_face = (best.global_position - global_position).normalized()
         if growl_cd <= 0.0:
             growl_cd = randf_range(3.0, 4.6)
             _voice("growl_%d" % (randi() % 2 + 1), -11.0 if best_d < 200.0 else -15.0)
@@ -548,9 +624,11 @@ func _maybe_bark(e, d: float) -> void:
         return
     bark_cd = randf_range(2.4, 4.2)
     if velocity.length() < 5.0:
-        facing = (e.global_position - global_position).normalized()
+        want_face = (e.global_position - global_position).normalized()
     alert_t = 0.8
-    _voice("bark_%d" % (randi() % 3 + 1), -6.0)
+    bark_anim = 0.45
+    # now and then two in a row
+    _voice("bark_4" if randf() < 0.25 else "bark_%d" % (randi() % 3 + 1), -6.0)
     game._emit_ai_sound(global_position, BARK_RADIUS, "dog_bark", 1.0, self)
 
 
@@ -592,7 +670,7 @@ func die(cause: String) -> void:
     remove_from_group("interactable")
     _set_clip("lie", 1)
     if cause != "заражённые":
-        _voice("whine_1", -12.0)
+        _voice("whine_%d" % (randi() % 2 + 1), -12.0)
     if game.has_method("_on_dog_died"):
         game._on_dog_died(self, cause)
 
@@ -667,6 +745,7 @@ func care() -> String:
                 return ""
             game._consume_inventory_item(f, 1)
             food = min(100.0, food + 45.0)
+            eat_t = 1.6
             if n == "adopt":
                 game._adopt_dog(self)
             else:
@@ -682,12 +761,14 @@ func care() -> String:
             game._set_survival_feedback("Вы перевязали %s. %s лижет вам руку." % [_acc(), dog_name], 2.4)
         "water":
             _drink_from_pack()
+            eat_t = 1.6
             game._play_world_sfx("drink", -12.0, 0.03)
             game._set_survival_feedback("%s жадно лакает." % dog_name, 2.0)
         "food":
             var f2 = _first(DogCatalog.FOODS)
             game._consume_inventory_item(f2, 1)
             food = min(100.0, food + 45.0)
+            eat_t = 1.6
             game._set_survival_feedback("%s съедает всё в два глотка." % dog_name, 2.0)
         "call":
             _start_following()
@@ -747,6 +828,7 @@ func drink_at_pump(pump_pos: Vector2) -> bool:
     if dead or mode == "chained" or global_position.distance_to(pump_pos) > 220.0:
         return false
     water = 100.0
+    eat_t = 1.4
     _warned.erase("water")
     return true
 
@@ -770,19 +852,30 @@ func current_clip() -> String:
 
 
 func _animate(move: Vector2) -> void:
+    # the facing is smoothed; the row changes only once it is well past the
+    # middle between two directions, so it never flickers between them
     if facing.length() > 0.1:
-        dir8 = int(round(fposmod(facing.angle(), TAU) / (PI * 0.25))) % 8
+        var cont = fposmod(facing.angle(), TAU) / (PI * 0.25)
+        var diff = abs(fposmod(cont - dir8 + 4.0, 8.0) - 4.0)
+        if diff > 0.62:
+            dir8 = int(round(cont)) % 8
     var t = Time.get_ticks_msec() / 1000.0
-    if move.length() > 5.0:
+    if bark_anim > 0.0 and move.length() < 30.0:
+        _set_clip("bark", clamp(int((0.45 - bark_anim) / 0.45 * 4.0), 0, 3))
+    elif move.length() > 8.0:
         var clip = "run" if move.length() > TROT_SPEED * 1.08 else "walk"
         var n = FRAMES[clip]
         # a limp: the stride drags
         var stride = STRIDE[clip] * (1.3 if limping() else 1.0)
         _set_clip(clip, int(fposmod(walk_dist / stride, 1.0) * n) % n)
-    elif mode == "wait":
-        _set_clip("sit", int(t * 3.0) % FRAMES["sit"])
+    elif eat_t > 0.0 or sniff_t > 0.0:
+        _set_clip("sniff", int(t * 7.0) % FRAMES["sniff"])
     elif alert_t > 0.0 or sensed != null:
         _set_clip("alert", int(t * 8.0) % FRAMES["alert"])
+    elif still_t > REST_AFTER:
+        _set_clip("rest", int(t * 2.5) % FRAMES["rest"])
+    elif mode == "wait" or still_t > SIT_AFTER:
+        _set_clip("sit", int(t * 3.0) % FRAMES["sit"])
     else:
         _set_clip("idle", int(t * 5.0 + get_instance_id() % 5) % FRAMES["idle"])
     sprite.position = SPRITE_OFFSET

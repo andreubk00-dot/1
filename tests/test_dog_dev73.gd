@@ -179,7 +179,30 @@ func run():
     await secs(2.0)
     lag = d.global_position.distance_to(game.player.global_position)
     check(lag < d.GAP + 24.0 and lag > 10.0, "it did not settle behind: %.0f" % lag)
-    check(d.current_clip() in ["idle", "alert"], "a dog at rest is not standing: %s" % d.current_clip())
+    check(d.current_clip() in ["idle", "alert", "sniff"], "a dog at rest is not standing: %s" % d.current_clip())
+    # at heel: beside him, not on his heels; facing his way
+    var heel_off = d.global_position - game.player.global_position
+    check(abs(heel_off.dot(Vector2(1, 0))) > 10.0, "at rest it stands behind him, not at his side: %s" % heel_off)
+    check(d.facing.dot(Vector2(0, -1)) > 0.5, "at heel it does not look where he looks")
+    # it picks up speed, it does not jump to it
+    var p0 = game.player.global_position
+    game.player.global_position = p0 + Vector2(0, -160)
+    await physics_frame
+    await physics_frame
+    check(d.velocity.length() < d.TROT_SPEED * 0.8, "it jumped to full speed")
+    game.player.global_position = p0
+    d.global_position = p0 + Vector2(24, 8)
+    await secs(2.5)
+    check(d.velocity.length() < 8.0, "at heel it keeps shuffling: %.1f" % d.velocity.length())
+    # standing about it sits, and later lies down
+    d.still_t = d.SIT_AFTER + 0.5
+    d.sniff_t = 0.0
+    await frames(2)
+    check(d.current_clip() == "sit", "standing about, it does not sit: %s" % d.current_clip())
+    d.still_t = d.REST_AFTER + 0.5
+    await frames(2)
+    check(d.current_clip() == "rest", "a long halt, it does not lie down: %s" % d.current_clip())
+    d.still_t = 0.0
     # far away and out of sight it closes up
     game.player.global_position += Vector2(900, 0)
     await frames(4)
@@ -251,6 +274,9 @@ func run():
     e2.global_position = d.global_position + Vector2(110, 10)
     d._sense()
     check(d.bark_cd > 0.0, "it did not bark at an infected coming in sight")
+    d.velocity = Vector2.ZERO
+    d._animate(Vector2.ZERO)
+    check(d.current_clip() == "bark", "a bark has no bark on the sprite")
     check(float(e3.get_meta("suspicion", 0.0)) > 0.0 and str(e3.get_meta("ai_state", "idle")) != "idle", "the bark was not heard")
     # bitten: it yelps, bolts and is hurt
     var hp0 = d.hp
@@ -283,6 +309,9 @@ func run():
     check(d.need() == "food", "a hungry dog does not ask for food")
     d.care()
     check(d.food > 50.0 and game._inventory_count("canned_meat") == cans - 1, "feeding it did not work")
+    d.bark_anim = 0.0
+    d._animate(Vector2.ZERO)
+    check(d.current_clip() == "sniff", "it eats without lowering its head")
     d.hp = 20.0
     check(d.limping(), "a hurt dog does not limp")
     give(game, "bandage", 1)

@@ -46,8 +46,8 @@ lost. It adds decisions and a bond, not a cheat.
 ## Built from
 - Art: `tools/dog3d.py` on the same small 3D rig renderer as the survivor
   and the infected (8 directions; trot, run, idle, sit, alert, lie).
-- Voice: `tools/build_dog_audio.py` (bark, growl, yelp, whine; synthesized,
-  source-filter).
+- Voice: real recordings, CC0 (OpenGameArt; authors in `audio/CREDITS_CC0.md`),
+  cut and levelled by `tools/import_dog_audio.py`.
 - Code: `world/dog.gd` (the animal), `world/dog_catalog.gd` (the yards, names,
   needs), the yard in `main_script_mod.gd` (`_build_dog_yard`), save key
   `dog`. Test: `tests/test_dog_dev73.gd`.
