@@ -175,6 +175,13 @@ GUNS = {
 
 
 # ---------------------------------------------------------------- math ----
+# thigh, shin. 1.38 dev74: a touch shorter than the pelvis height asks (the
+# old 9.2 + 9.0 left the knees bent even standing, and the walk's dip made it
+# a squat-walk); now the leg is near straight at mid-stance and flexes at the
+# heel-strike and in the swing, as a man's does
+LEG = (8.9, 8.7)
+
+
 def two_bone(a, target, l1, l2, pole):
     d = target - a
     dist = np.linalg.norm(d)
@@ -265,7 +272,7 @@ def build(pose):
         hip = pelvis + P.r * (2.7 * sg) + P.z * (-1.2) + P.f * P.hip_f[side]
         ff, fr, fz = P.feet.get(side, (0.6, 2.7 * sg, 3.0))
         ankle = P.L(ff, fr, fz)
-        knee, ankle = two_bone(hip, ankle, 9.2, 9.0, P.f * 1.0 + P.z * 0.1)
+        knee, ankle = two_bone(hip, ankle, LEG[0], LEG[1], P.f * 1.0 + P.z * 0.1)
         pts['hip' + side], pts['knee' + side], pts['ankle' + side] = hip, knee, ankle
     # --- torso anchor points
     chest = U(0, 0, 13.0)
@@ -302,8 +309,8 @@ def build(pose):
             hands['L'] = U(*hl) if len(hl) == 3 else hl
     else:
         hands = {k: U(*v) for k, v in P.hands.items()}
-        hands.setdefault('L', U(0.8, -6.9, -0.6))
-        hands.setdefault('R', U(0.8, 6.9, -0.6))
+        hands.setdefault('L', U(0.8, -7.3, -0.6))
+        hands.setdefault('R', U(0.8, 7.3, -0.6))
 
     if P.weapon:
         arm_pole = {'L': -rU * 0.8 - zU * 0.6 - fU * 0.2, 'R': rU * 0.8 - zU * 0.6 - fU * 0.2}
@@ -330,7 +337,7 @@ def build(pose):
         # knee pad on the front of the knee
         kfront = norm(P.f - norm(knee - hip) * np.dot(P.f, norm(knee - hip)))
         if KNEEPADS:
-            s.ball(knee + kfront * 1.9 + V(0, 0, 0.2), 1.65, KNEEPAD, bias=0.6)
+            s.ball(knee + kfront * 1.8 + V(0, 0, 0.2), 1.3, KNEEPAD, bias=0.6)
         if STRIPES:
             s.capsule(hip + P.r * (2.3 * sg), ankle + P.r * (1.6 * sg) + V(0, 0, 1.0), 0.45, 0.4, STRIPES, edge=False)
         s.capsule(ankle + V(0, 0, 1.3), ankle + V(0, 0, 0.3), 2.05, 2.1, JEANS_D, bias=0.2, edge=False)
@@ -454,7 +461,8 @@ def build(pose):
     # arms: rounded sleeves, elbow patch, cuff, fingerless gloves
     for side, sg in (('L', -1), ('R', 1)):
         el, wr = pts['el' + side], pts['wr' + side]
-        JK = darker(JACKET, 0.82) if far(rU * sg) else JACKET
+        # sleeves a shade off the body so the arm reads against the chest
+        JK = darker(JACKET, 0.72) if far(rU * sg) else darker(JACKET, 0.88)
         s.capsule(sh[side], el, 2.35, 2.05, JK)
         s.ball(sh[side] + zU * 0.4, 2.3, JK, bias=0.1)                                     # shoulder cap
         s.capsule(el, wr, 2.0, 1.65, JK)
@@ -463,8 +471,8 @@ def build(pose):
         s.ball(el, 1.45, JACKET_D, bias=0.2)                                               # elbow patch
         s.capsule(wr - norm(wr - el) * 1.4, wr - norm(wr - el) * 0.3, 1.8, 1.8, JACKET_D, bias=0.1, edge=False)
         hand = wr + norm(wr - el) * 0.9
-        s.ball(hand, 1.75, GLOVE, bias=0.4)
-        s.ball(hand + norm(wr - el) * 0.9, 1.0, SKIN, bias=0.5)                             # fingers
+        s.ball(hand, 1.9, GLOVE, bias=0.4)
+        s.ball(hand + norm(wr - el) * 1.0, 1.15, SKIN, bias=0.5)                             # fingers
 
     # weapon
     if gun:
@@ -534,10 +542,10 @@ GAITS = {
     # the swing, a clearer heel-strike and toe-off, more spring in the body
     # and a stronger hip / shoulder counter-swing (the old cycle read as a glide,
     # worst walking toward or away from the camera where the stride foreshortens)
-    'walk': dict(S=0.60, A=6.6,
-                 swing=[(0.0, -1.0, 1.8, -0.65), (0.32, -0.5, 4.4, -0.4), (0.68, 0.6, 3.2, 0.1), (1.0, 1.0, 0.0, 0.4)],
+    'walk': dict(S=0.60, A=5.8,
+                 swing=[(0.0, -1.0, 1.3, -0.6), (0.34, -0.45, 3.0, -0.3), (0.7, 0.55, 2.0, 0.1), (1.0, 1.0, 0.0, 0.4)],
                  stance=[(0.0, 0.4), (0.16, 0.0), (0.66, 0.0), (1.0, -0.65)],
-                 heel=1.8, bob=1.05, hip=0.85, twist=0.14, shift=0.7, lean=0.07),
+                 heel=1.8, bob=0.62, hip=0.85, twist=0.14, shift=0.7, lean=0.04),
     'run': dict(S=0.36, A=7.8,
                 swing=[(0.0, -0.8, 2.8, -0.8), (0.3, -1.1, 9.4, -0.95), (0.62, 0.4, 7.6, 0.0), (1.0, 0.6, 0.0, 0.2)],
                 stance=[(0.0, 0.2), (0.25, 0.0), (0.7, -0.1), (1.0, -0.8)],
@@ -612,7 +620,7 @@ def unarmed_swing(P, t, amp, run=False):
         if run:
             P.hands[side] = (1.6 + amp * c, 5.0 * sg, 7.0 + 2.2 * max(0.0, c))
         else:
-            P.hands[side] = (0.8 + amp * c, 6.9 * sg, -0.8 + abs(c) * 0.6 + max(0.0, c) * 0.9)
+            P.hands[side] = (0.8 + amp * c, 7.3 * sg, -0.8 + abs(c) * 0.6 + max(0.0, c) * 0.9)
 
 
 def carry_sway(P, t, k):

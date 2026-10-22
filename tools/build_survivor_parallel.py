@@ -28,6 +28,11 @@ def _build_one(task: tuple[str, str, str]) -> str:
     return target.name
 
 
+# guns that share another gun's hold and silhouette at sprite size: their
+# sheets are the other gun's (the game picks them by anim_prefix)
+ALIASES = {"tt33": "makarov", "sks": "akm", "toz34": "shotgun"}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("project")
@@ -46,6 +51,13 @@ def main() -> int:
     with Pool(processes=max(1, args.jobs)) as pool:
         for index, result in enumerate(pool.imap_unordered(_build_one, tasks), 1):
             print(f"[{index:03d}/{len(tasks):03d}] {result}", flush=True)
+    import shutil
+    for alias, source in ALIASES.items():
+        if source not in names:
+            continue
+        for clip in S.CLIPS:
+            shutil.copyfile(Path(project) / f"survivor_{source}_{clip}.png", Path(project) / f"survivor_{alias}_{clip}.png")
+        print(f"aliased survivor_{alias}_* <- survivor_{source}_*", flush=True)
     return 0
 
 
