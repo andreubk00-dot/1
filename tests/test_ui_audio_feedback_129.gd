@@ -67,5 +67,7 @@ func run()->void:
     game.queue_free()
     await process_frame
     await process_frame
+    # AudioServer releases stopped streams on its mixing thread.
+    await create_timer(0.1).timeout
     print("UI AUDIO FEEDBACK 1.29-dev4: ",checks," checks / ",failures," failures")
-    quit(1 if failures else 0)
+    preload("res://tests/qa_teardown_1381.gd").finish(self,1 if failures else 0)

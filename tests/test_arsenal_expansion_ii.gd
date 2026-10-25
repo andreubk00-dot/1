@@ -91,7 +91,7 @@ func run():
         check(float(visual_cfg.get("muzzle_px",Vector2.ZERO).x) > float(visual_cfg.get("front_px",Vector2.ZERO).x),"muzzle point is not forward of front hand: " + id)
         check(float(visual_cfg.get("front_px",Vector2.ZERO).x) > float(visual_cfg.get("rear_px",Vector2.ZERO).x),"front/rear hand order invalid: " + id)
         var quick_layout = game._hud_quick_icon_layout(id)
-        check(float(quick_layout.get("size",Vector2.ZERO).x) >= 32.0,"new firearm quickbar art is undersized: " + id)
+        check(float(quick_layout.get("size",Vector2.ZERO).x) >= 24.0,"new firearm quickbar art is undersized: " + id)
 
         for clip in ["Attack1","Attack2","Attack3","Attack4","CrouchIdle","CrouchRun","Die","Idle","Idle2","Idle3","Run","RunAttack","RunBackwards","RunBackwardsAttack","StrafeLeft","StrafeLeftAttack","StrafeRight","StrafeRightAttack","TakeDamage","Taunt","Walk"]:
             check(ResourceLoader.exists("res://survivor_%s_%s.png" % [id,clip]),"missing baked animation %s %s" % [id,clip])

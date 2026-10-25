@@ -1,0 +1,5 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+FAIL average chunk refresh exceeded 150 ms: 193084 us
+FAIL single chunk refresh exceeded 750 ms: 918492 us
+LONG SESSION CHUNK CHURN 1.31-dev1: 201 checks / 2 failures / visits=96 max_loaded=9 max_pending=0 nodes=7649->7649 peak=7904 roofs=35->35 refresh_us(avg/max)=193084/918492

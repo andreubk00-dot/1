@@ -415,7 +415,7 @@ var current_weapon_instance_id = ""
 var equipped_melee_id = ""
 # 1.18-dev3: quickbar is a real loadout instead of a hard-coded showcase of the old arsenal.
 # Any firearm or melee item can occupy any of the six slots; bindings persist in saves.
-var quick_slot_ids = ["makarov","shotgun","akm","combat_knife","steel_pipe","fire_axe"]
+var quick_slot_ids = ["makarov","","","combat_knife","",""]
 var melee_cooldown = 0.0
 var melee_swing_time = 0.0
 var melee_swing_duration = 0.22
@@ -992,6 +992,7 @@ var inventory_drag_candidate_index = -1
 var inventory_drag_candidate_source = ""
 var inventory_drag_candidate_id = ""
 var inventory_drag_press_position = Vector2.ZERO
+var inventory_drag_grab_cell = Vector2i.ZERO
 var inventory_drag_active = false
 var inventory_drag_preview = null
 
@@ -1333,10 +1334,10 @@ func _run_static_self_tests():
     _record_test(int(_base_build_costs("rain_collector").get("scrap",0)) == 2,"Неверная цена дождесборника")
     _record_test(_make_item_icon("firewood") != null,"Нет inventory art дров")
     _record_test(_make_world_loot_texture("firewood") != null,"Нет world-loot art дров")
-    _record_test(abs(_gait_cycle_distance(false) - 72.0) < 0.01,"Неверная длина walk-cycle")
-    _record_test(abs(_gait_cycle_distance(true) - 88.0) < 0.01,"Неверная длина run-cycle")
-    _record_test(abs(_gait_phase_delta_for_distance(72.0,false) - TAU) < 0.001,"Distance gait не даёт полный walk-cycle")
-    _record_test(abs(_gait_phase_delta_for_distance(88.0,true) - TAU) < 0.001,"Distance gait не даёт полный run-cycle")
+    _record_test(abs(_gait_cycle_distance(false) - 34.0) < 0.01,"Неверная длина walk-cycle")
+    _record_test(abs(_gait_cycle_distance(true) - 44.0) < 0.01,"Неверная длина run-cycle")
+    _record_test(abs(_gait_phase_delta_for_distance(34.0,false) - TAU) < 0.001,"Distance gait не даёт полный walk-cycle")
+    _record_test(abs(_gait_phase_delta_for_distance(44.0,true) - TAU) < 0.001,"Distance gait не даёт полный run-cycle")
     _record_test(abs(ENEMY_SPEED - ENEMY_BASE_SPEED) < 0.001,"Скорость заражённого не должна оставаться в dev-замедлении")
     _record_test(MOVE_SPEED > ENEMY_SPEED,"Игрок должен быть немного быстрее заражённого на обычном шаге")
     _record_test(abs(SPRINT_SPEED_MULT - 1.32) < 0.001,"Sprint multiplier сломан")
@@ -1901,7 +1902,7 @@ func _run_runtime_smoke_tests():
                 missing_asset_files.append(path_75)
     _record_test(missing_asset_files.is_empty(),"Не хватает файлов персонажа: %d (распакуйте ВСЕ части архива)" % missing_asset_files.size())
     var surv76 = load("res://survivor_akm_Walk.png")
-    _record_test(surv76 == null or surv76.get_size() == Vector2(SURVIVOR_CELL * 12,SURVIVOR_CELL * 8),"0.76: Walk sheet должен быть 12x8 кадров по 128px")
+    _record_test(surv76 == null or surv76.get_size() == Vector2(SURVIVOR_CELL * 24,SURVIVOR_CELL * 8),"1.38.1: Walk sheet должен быть 24x8 кадров по 128px")
     var surv76i = load("res://survivor_akm_Idle.png")
     _record_test(surv76i == null or surv76i.get_size() == Vector2(SURVIVOR_CELL * 8,SURVIVOR_CELL * 8),"0.76: Idle sheet должен быть 8x8 кадров по 128px")
     for weapon_id_74 in ["makarov","shotgun","akm"]:
@@ -2519,10 +2520,10 @@ func _run_runtime_smoke_tests():
     if native_side_legs != null:
         _record_test(native_side_legs.get_width() == 576,"Native leg atlas width должен быть 576")
         _record_test(native_side_legs.get_height() == 240,"Native leg atlas height должен быть 240")
-    _record_test(abs(_gait_cycle_distance(false) - 72.0) < 0.01,"Walk cycle distance сломан")
-    _record_test(abs(_gait_cycle_distance(true) - 88.0) < 0.01,"Run cycle distance сломан")
-    _record_test(abs(_gait_phase_delta_for_distance(36.0,false) - PI) < 0.001,"Walk half-cycle sync сломан")
-    _record_test(abs(_gait_phase_delta_for_distance(44.0,true) - PI) < 0.001,"Run half-cycle sync сломан")
+    _record_test(abs(_gait_cycle_distance(false) - 34.0) < 0.01,"Walk cycle distance сломан")
+    _record_test(abs(_gait_cycle_distance(true) - 44.0) < 0.01,"Run cycle distance сломан")
+    _record_test(abs(_gait_phase_delta_for_distance(17.0,false) - PI) < 0.001,"Walk half-cycle sync сломан")
+    _record_test(abs(_gait_phase_delta_for_distance(22.0,true) - PI) < 0.001,"Run half-cycle sync сломан")
     _record_test(MOVE_SPEED > ENEMY_SPEED,"Player walk speed должен немного превышать infected speed")
     _record_test(abs(MOVE_SPEED - 64.0) < 0.001,"Неверная базовая скорость игрока")
     _record_test(abs(SPRINT_SPEED_MULT - 1.32) < 0.001,"Неверный sprint multiplier")
@@ -3073,9 +3074,14 @@ func _ready():
     _run_runtime_smoke_tests()
     self_test_silent = false
     _apply_ui_scale(float(get_meta("settings",{}).get("ui_scale",1.0)))
+    preload("res://world/interface_polish.gd").apply(self)
     _on_bindings_changed()
     _refresh_inventory_ui()
     _restore_loaded_high_risk_floor_if_needed()
+
+    for preview_arg in OS.get_cmdline_user_args():
+        if str(preview_arg).begins_with("--qa-ui-polish="):
+            call_deferred("_qa_ui_polish_preview",str(preview_arg).trim_prefix("--qa-ui-polish="))
 
     # Graphics QA launch modes. They are inert in normal play and exist only
     # for engine-side visual verification of the new art pipeline.
@@ -3449,10 +3455,23 @@ func _qa_move_to_high_risk(poi_id:String,floor_index:int,overview = false):
             var viewport_size = get_viewport_rect().size
             var zx = viewport_size.x / max(1.0,floor_size.x + 120.0)
             var zy = viewport_size.y / max(1.0,floor_size.y + 120.0)
-            var z = clamp(min(zx,zy),0.48,1.05)
+            var z = clamp(min(zx,zy),0.10,1.05)
             camera.zoom = Vector2(z,z)
+            set_meta("qa_camera_anchor",high_risk_floor_root.global_position)
         else:
-            camera.zoom = Vector2(0.38,0.38)
+            var bounds = Rect2()
+            var anchor:Vector2i = poi.get("coord",Vector2i.ZERO)
+            var first = true
+            for off in PoiCatalog.footprint(poi_id):
+                var coord = anchor + off
+                if not loaded_chunks.has(coord): _load_chunk(coord)
+                var r = Rect2(Vector2(coord)*CHUNK_SIZE,Vector2.ONE*CHUNK_SIZE)
+                bounds = r if first else bounds.merge(r)
+                first = false
+            var view = get_viewport_rect().size
+            var z = min(view.x/(bounds.size.x+120.0),view.y/(bounds.size.y+120.0))
+            camera.zoom = Vector2.ONE*z
+            set_meta("qa_camera_anchor",bounds.get_center())
         for child in get_children():
             if child is CanvasLayer:
                 child.visible = false
@@ -3870,7 +3889,7 @@ func _input(event):
         return
 
     if event is InputEventMouseMotion:
-        if inventory_drag_candidate_index >= 0 and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+        if inventory_drag_candidate_index >= 0 and (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
             if not inventory_drag_active and event.position.distance_to(inventory_drag_press_position) >= 4.0:
                 _start_inventory_drag()
 
@@ -4453,7 +4472,7 @@ func _process(delta):
 # to a ghost and come back the moment they do - a vital changes or runs low,
 # the place / weather / goal changes, the survivor sneaks or runs, a gun is
 # used, an infected is close, the mouse goes over a panel, the inventory opens.
-const HUD_IDLE_ALPHA = 0.26
+const HUD_IDLE_ALPHA = 0.6
 var hud_focus = {}
 var hud_focus_last = {}
 
@@ -4516,7 +4535,7 @@ func _quick_slot_valid_item(id):
     if not item_defs.has(id):
         return false
     var category = str(item_defs[id].get("category",""))
-    return category == "weapon" or category == "melee"
+    return category in ["weapon","melee","gear"] or str(item_defs[id].get("use","")) != ""
 
 func _sanitize_quick_slot_ids(raw):
     var defaults = ["makarov","shotgun","akm","combat_knife","steel_pipe","fire_axe"]
@@ -4527,6 +4546,9 @@ func _sanitize_quick_slot_ids(raw):
     var used = {}
     for i in range(6):
         var id = str(raw[i]) if i < raw.size() else ""
+        if id == "":
+            result.append("")
+            continue
         if not _quick_slot_valid_item(id) or used.has(id):
             id = str(defaults[i])
             if used.has(id):
@@ -4629,9 +4651,30 @@ func _select_quick_slot(slot):
         if category == "melee":
             _switch_melee(id)
             return true
+        var previous_selection = selected_inventory_index
+        for i in range(inventory_entries.size()):
+            if str(inventory_entries[i].get("id","")) == id:
+                selected_inventory_index = i
+                _use_selected_inventory()
+                selected_inventory_index = previous_selection if previous_selection < inventory_entries.size() else -1
+                return true
 
     _set_survival_feedback("Предмет быстрого слота отсутствует в инвентаре",1.4)
     return false
+
+func _clear_quick_slot(index:int):
+    if index < 0 or index >= 6: return
+    quick_slot_ids[index] = ""
+    _refresh_hud_quick_slot_binding(index)
+
+func _quick_slot_gui_input(event,index:int):
+    if not _inventory_item_action_mode() or not (event is InputEventMouseButton): return
+    if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+        _clear_quick_slot(index)
+        get_viewport().set_input_as_handled()
+    elif event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+        var id = str(quick_slot_ids[index])
+        if id != "": _begin_inventory_drag_candidate("quickbar",index,id,event.global_position)
 
 func _rig_quick_valid_item(id):
     return item_defs.has(id) and bool(item_defs[id].get("rig_quick",false))
@@ -5828,7 +5871,7 @@ func _gait_variant_for_phase(phase_value):
 func _gait_cycle_distance(running):
     # Distance-driven cycle: animation speed follows actual travelled distance.
     # 0.60 anatomical cadence: longer planted phase and slower visual cycle for a grounded step.
-    return 88.0 if running else 72.0
+    return 44.0 if running else 34.0
 
 func _gait_phase_delta_for_distance(distance,running):
     var cycle_distance = max(1.0,_gait_cycle_distance(running))
@@ -6191,7 +6234,7 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         return clamp(int(floor(attack_p * 8.0)),0,7)
     if movement_anim_blend <= 0.05 and not moving:
         return 0
-    # 0.76: locomotion sheets carry 12 frames per cycle (count comes from the sheet width).
+    # 1.38.1: locomotion sheets carry 24 frames per cycle (count comes from sheet width).
     var normalized = fposmod(walk_phase,TAU) / TAU
     return int(floor(normalized * float(count))) % count
 
@@ -6633,8 +6676,9 @@ func _create_player():
     muzzle_flash.z_index = 5
 
     camera = Camera2D.new()
-    camera.zoom = Vector2(1.42,1.42)
-    camera.position_smoothing_enabled = true
+    camera.zoom = Vector2.ONE
+    camera.position_smoothing_enabled = false
+    camera.process_callback = Camera2D.CAMERA2D_PROCESS_IDLE
     camera.position_smoothing_speed = 8.0
     player.add_child(camera)
 
@@ -7120,17 +7164,9 @@ func _update_player_visuals(delta):
     pv_pose_front.z_index = 4
 
     if camera != null:
-        var desired = aim_direction * 34.0 + Vector2(
-            0,
-            -11 + body_bob * 0.12
-        )
-        # the frame leads where the survivor is heading, a little more at a run
-        desired += player.velocity * (0.22 if is_sprinting else 0.14)
-        camera.position = camera.position.lerp(
-            desired,
-            min(1.0,delta * 6.0 + 0.2)
-        )
-        # a blow jolts the view away from the attacker, settling fast
+        # One stable camera anchor: aiming and changing speed do not translate
+        # the entire environment. Only actual impact feedback moves the view.
+        camera.global_position = Vector2(get_meta("qa_camera_anchor",player.global_position + Vector2(0,-11))).snapped(Vector2.ONE * 0.5)
         camera.offset = camera_kick.round()
 
 func _melee_model_texture(id):
@@ -7323,11 +7359,7 @@ func _body_state_offset(phase:float,blend:float) -> Vector2:
     var off = Vector2.ZERO
     var t = Time.get_ticks_msec() * 0.001
     var px = 0.5 / PLAYER_VISUAL_SCALE          # one screen pixel in visual space
-    # truly chilled (below 35.6 degC): short shivering fits, one pixel wide,
-    # with calm between them
-    var cold = clamp((35.6 - body_temperature) / 1.4,0.0,1.0)
-    if cold > 0.0 and sin(t * 1.3) > 0.55 - cold * 0.5:
-        off.x += px * (1.0 if sin(t * 52.0) > 0.0 else 0.0)
+    # Cold is shown by breath only; no shivering displacement.
     # a badly hurt leg: the body sinks a pixel onto the good one every other step
     var legs = float(body_condition.get("legs",100.0))
     if legs < 45.0 and blend > 0.1 and sin(phase) > 0.35:
@@ -8356,6 +8388,15 @@ func _shutdown_ambience_audio_layer():
 
 func _exit_tree():
     _shutdown_ambience_audio_layer()
+    # Detach one-shot playbacks too before their owning scene disappears.
+    for voice in find_children("*","AudioStreamPlayer",true,false):
+        voice.stop()
+        voice.stream = null
+    for voice in find_children("*","AudioStreamPlayer2D",true,false):
+        voice.stop()
+        voice.stream = null
+    weapon_audio_cache.clear()
+    world_audio_cache.clear()
 
 func _ambience_selection():
     var base = "interior" if is_sheltered else ("night" if _time_night_factor() >= 0.50 else "day")
@@ -11252,6 +11293,10 @@ func _hud_set_fitted_text(label,text,base_size,min_size,_compact_threshold = 999
     while size > min_size and _hud_text_width(label,text,size) > allowed_width * lines - (base_size * 3.0 if lines > 1 else 0.0):
         size -= 1
     _hud_set_label_font_size(label,size)
+    if label.autowrap_mode != TextServer.AUTOWRAP_OFF:
+        var font = label.get_theme_font("font")
+        var line_h = font.get_height(size) + label.get_theme_constant("line_spacing")
+        label.size.y = max(label.size.y,float(label.get_line_count()) * line_h + 2.0)
 
 func _hud_single_line_label_fits(label):
     if label == null or not label.visible or label.text == "":
@@ -11624,6 +11669,7 @@ func _hud_make_vital_row(parent,key,y,label_text,color):
     hud_vital_values[key] = value_label
 
 func _hud_display_texture(item_id):
+    if item_id == "" or not item_defs.has(item_id): return null
     var cache_key = "hud_model:" + str(item_id)
     if hud_model_icon_cache.has(cache_key):
         return hud_model_icon_cache[cache_key]
@@ -11686,22 +11732,8 @@ func _hud_set_pixel_glyph_color(root,color):
         if child is ColorRect:
             child.color = color
 
-func _hud_quick_icon_layout(item_id):
-    if item_id in ["makarov","tt33"]:
-        return {"pos":Vector2(4,12),"size":Vector2(32,19)}
-    if item_id in ["shotgun","toz34","izh81","sks","mosin"]:
-        return {"pos":Vector2(3,15),"size":Vector2(34,12)}
-    if item_id in ["akm","aks74u"]:
-        return {"pos":Vector2(3,14),"size":Vector2(34,14)}
-    if item_id == "pps43":
-        return {"pos":Vector2(3,13),"size":Vector2(34,16)}
-    if item_id == "combat_knife":
-        return {"pos":Vector2(3,14),"size":Vector2(34,13)}
-    if item_id == "steel_pipe" or item_id == "crowbar":
-        return {"pos":Vector2(3,14),"size":Vector2(34,13)}
-    if item_id == "fire_axe":
-        return {"pos":Vector2(3,12),"size":Vector2(34,18)}
-    return {"pos":Vector2(7,12),"size":Vector2(24,19)}
+func _hud_quick_icon_layout(_item_id):
+    return {"pos":Vector2(3,11),"size":Vector2(26,15)}
 
 func _hud_apply_quick_slot_icon(icon,item_id):
     if icon == null:
@@ -13032,7 +13064,7 @@ func _refresh_home_journal_ui():
     var readiness = _expedition_readiness()
     var lines = ["СОСТОЯНИЕ",
         "Здоровье %d%% • выносливость %d%%" % [int(health),int(stamina)],
-        "Голод %d%% • жажда %d%% • усталость %d%%" % [int(hunger),int(thirst),int(fatigue)],
+        "Сытость %d%% • вода %d%% • усталость %d%%" % [int(hunger),int(thirst),int(fatigue)],
         "Температура %.1f°C • сырость %d%%" % [body_temperature,int(wetness)],
         "Вес %.1f / %.1f кг" % [_inventory_weight(),_carry_limit()]]
     lines.append("\nСНАРЯЖЕНИЕ")
@@ -13645,7 +13677,7 @@ func _apply_ui_scale(sc:float) -> void:
                 c.set_meta("ui_pivot_frac",Vector2(fx,fy))
             c.item_rect_changed.connect(_hud_scale_pivot.bind(c))
         _hud_scale_pivot(c)
-        c.scale = Vector2(hud_ui_scale,hud_ui_scale)
+        c.scale = Vector2.ONE * hud_ui_scale
 
 # 1.38-dev69: where the current goal lies. A small chevron circles the
 # survivor and points at it, so "reach the Lazaret" means something before the
@@ -13735,7 +13767,7 @@ func _quick_slot_keys_text() -> String:
 
 func _quick_slot_tooltip(index:int,id:String) -> String:
     var key = InputBindings.key("quick_slot_%d" % (index + 1))
-    return "%s — %s\nИнвентарь: выберите оружие и нажмите %s, чтобы заменить слот." % [key,str(item_defs.get(id,{}).get("name",id)),key]
+    return "%s — %s\nПеретащите предмет в слот. ПКМ — освободить. В рюкзаке: выберите предмет и нажмите %s." % [key,str(item_defs.get(id,{}).get("name","Пустой слот")),key]
 
 func _on_bindings_changed() -> void:
     # the key badge on the interaction prompt shows the bound key
@@ -13837,8 +13869,8 @@ func _create_hud():
 
     _hud_make_vital_row(vitals_panel,"health",11,"ЗДОРОВЬЕ",danger)
     _hud_make_vital_row(vitals_panel,"stamina",24,"ВЫНОСЛ.",stamina_color)
-    _hud_make_vital_row(vitals_panel,"hunger",37,"ГОЛОД",food_color)
-    _hud_make_vital_row(vitals_panel,"thirst",50,"ЖАЖДА",water_color)
+    _hud_make_vital_row(vitals_panel,"hunger",37,"СЫТОСТЬ",food_color)
+    _hud_make_vital_row(vitals_panel,"thirst",50,"ВОДА",water_color)
     _hud_make_vital_row(vitals_panel,"temperature",63,"ТЕМП.",temp_color)
     _hud_make_vital_row(vitals_panel,"infection",76,"ИНФЕКЦИЯ",infection_color)
     _hud_make_vital_row(vitals_panel,"fatigue",89,"УСТАЛ.",Color(0.64,0.58,0.48))
@@ -13869,7 +13901,7 @@ func _create_hud():
     var env_panel = Panel.new()
     env_panel.name = "EnvironmentPanel"
     env_panel.position = Vector2(480,8)
-    env_panel.size = Vector2(152,146)
+    env_panel.size = Vector2(152,160)
     env_panel.add_theme_stylebox_override("panel",_hud_panel_style())
     env_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     env_panel.clip_contents = true
@@ -13898,7 +13930,7 @@ func _create_hud():
     hud_objective_checkbox_root = _hud_make_checkbox_icon(env_panel,Vector2(9,111),Color(0.88,0.90,0.84))
     hud_objective_label = _hud_make_row_label(env_panel,28,115.5,116,14,"",5,Color(0.91,0.90,0.83))
     hud_objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    hud_objective_sub_label = _hud_make_row_label(env_panel,28,131.5,116,14,"",5,text_muted)
+    hud_objective_sub_label = _hud_make_row_label(env_panel,28,139.0,116,24,"",5,text_muted)
     hud_objective_sub_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
     # BOTTOM LEFT — compact stance/stealth block in the same hierarchy as the reference.
@@ -13983,6 +14015,7 @@ func _create_hud():
         slot_button.add_theme_stylebox_override("pressed",hud_quick_style_active)
         slot_button.add_theme_stylebox_override("focus",hud_quick_style_active)
         slot_button.pressed.connect(_select_quick_slot.bind(i + 1))
+        slot_button.gui_input.connect(_quick_slot_gui_input.bind(i))
         quick_root.add_child(slot_button)
         if i > 0:
             _hud_add_accent_strip(quick_root,Vector2(i * 41 - 1,4),Vector2(1,32),Color(0.15,0.18,0.18,0.88))
@@ -14050,7 +14083,7 @@ func _create_hud():
 
     hud_interaction_panel = Panel.new()
     hud_interaction_panel.name = "InteractionPrompt"
-    hud_interaction_panel.position = Vector2(240,204)
+    hud_interaction_panel.position = Vector2(240,260)
     hud_interaction_panel.size = Vector2(160,22)
     hud_interaction_panel.add_theme_stylebox_override("panel",_hud_panel_style(true))
     hud_interaction_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14131,7 +14164,7 @@ func _update_hud():
             var width = clamp(w + 24.0,120.0,300.0)
             var lines = 1 if w + 24.0 <= 300.0 else 2
             hud_feedback_panel.size = Vector2(width,16.0 if lines == 1 else 24.0)
-            hud_feedback_panel.position = Vector2(round(320.0 - width * 0.5),66)
+            hud_feedback_panel.position = Vector2(round(320.0 - width * 0.5),232)
             hud_feedback_label.position = Vector2(8,1)
             hud_feedback_label.size = hud_feedback_panel.size - Vector2(16,2)
             _hud_set_label_font_size(hud_feedback_label,6)
@@ -14172,10 +14205,10 @@ func _update_hud():
             continue
         bar.modulate = Color(1.0,0.55 + 0.45 * pulse,0.55 + 0.45 * pulse) if float(pair[1]) < 20.0 else Color.WHITE
 
-    hud_vital_values["health"].text = "%d/100" % int(health)
+    hud_vital_values["health"].text = "%d/100" % int(health_pct)
     hud_vital_values["stamina"].text = "%d/100" % int(stamina_pct)
-    hud_vital_values["hunger"].text = "%d/100" % int(hunger)
-    hud_vital_values["thirst"].text = "%d/100" % int(thirst)
+    hud_vital_values["hunger"].text = "%d/100" % int(hunger_pct)
+    hud_vital_values["thirst"].text = "%d/100" % int(thirst_pct)
     hud_vital_values["temperature"].text = ("%.1f" % body_temperature).replace(".",",") + "°C"
     hud_vital_values["infection"].text = "%d%%" % int(wound_infection)
     hud_vital_values["fatigue"].text = "%d%%" % int(fatigue)
@@ -14266,7 +14299,8 @@ func _update_hud():
     var active_id = equipped_melee_id if equipped_melee_id != "" else current_weapon_id
     if hud_weapon_icon_id != active_id:
         hud_weapon_icon_id = active_id
-        _hud_fit_texture_rect(hud_weapon_icon,_hud_display_texture(active_id),Vector2(10,25),Vector2(84,26))
+        var compact_weapon = hud_world_root.has_meta("ui_polish_ready")
+        _hud_fit_texture_rect(hud_weapon_icon,_hud_display_texture(active_id),Vector2(10,22) if compact_weapon else Vector2(10,25),Vector2(40,10) if compact_weapon else Vector2(84,26))
 
     for slot in hud_quick_slots:
         var slot_id = str(slot.get("id",""))
@@ -14276,7 +14310,7 @@ func _update_hud():
             continue
 
         var owned = _inventory_has_item(slot_id)
-        slot_button.disabled = not owned
+        slot_button.disabled = not owned and not _inventory_item_action_mode()
         slot_button.modulate = Color.WHITE if owned else Color(0.68,0.70,0.68,0.88)
 
         var active = slot_id == active_id
@@ -14357,6 +14391,8 @@ func _update_hud():
                 diagnostic_lines.append("• … ещё %d" % (self_test_failures.size() - 4))
             debug_label.text = "\n".join(diagnostic_lines)
 
+    preload("res://world/interface_polish.gd").refresh(self)
+
 func _create_hover_inspector():
     var canvas = CanvasLayer.new()
     canvas.layer = 40
@@ -14365,6 +14401,7 @@ func _create_hover_inspector():
 
     hover_panel = Panel.new()
     hover_panel.size = Vector2(248,184)
+    hover_panel.scale = Vector2.ONE * 0.78
     hover_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     hover_panel.visible = false
     canvas.add_child(hover_panel)
@@ -14387,6 +14424,7 @@ func _create_hover_inspector():
     hover_icon = TextureRect.new()
     hover_icon.position = Vector2(10,10)
     hover_icon.size = Vector2(42,42)
+    hover_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
     hover_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
     hover_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     hover_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14447,13 +14485,17 @@ func _layout_hover_inspector(body_text):
     if hover_panel == null or hover_body == null or hover_footer == null:
         return
     var wrapped_lines = _hover_wrapped_line_count(body_text,hover_body.size.x)
-    var line_height = 11.0
+    var font = hover_body.get_theme_font("font")
+    var font_size = hover_body.get_theme_font_size("font_size")
+    var line_height = font.get_height(font_size) + hover_body.get_theme_constant("line_spacing")
+    wrapped_lines = max(wrapped_lines,hover_body.get_line_count())
     # Keep a generous base height: localized gear stat lines can
     # wrap at word boundaries more than a raw width estimate predicts.
-    var body_height = max(154.0,float(wrapped_lines + 3) * line_height)
+    var body_height = max(44.0,float(wrapped_lines) * line_height + 4.0)
     var viewport_height = max(240.0,get_viewport_rect().size.y)
-    var max_body_height = max(154.0,viewport_height - 95.0)
+    var max_body_height = max(60.0,viewport_height / 0.78 - 95.0)
     var content_min_height = hover_body.get_combined_minimum_size().y
+    hover_body.clip_text = true
     body_height = max(body_height,content_min_height + 4.0)
     body_height = min(body_height,max_body_height)
     hover_body.size.y = body_height
@@ -14596,15 +14638,16 @@ func _update_hover_position():
 
     var mouse = get_viewport().get_mouse_position()
     var viewport_size = get_viewport_rect().size
-    var pos = mouse + Vector2(16,16)
+    var extent = hover_panel.size * hover_panel.scale
+    var pos = mouse + Vector2(12,12)
 
-    if pos.x + hover_panel.size.x > viewport_size.x - 6:
-        pos.x = mouse.x - hover_panel.size.x - 16
-    if pos.y + hover_panel.size.y > viewport_size.y - 6:
-        pos.y = mouse.y - hover_panel.size.y - 16
+    if pos.x + extent.x > viewport_size.x - 6:
+        pos.x = mouse.x - extent.x - 16
+    if pos.y + extent.y > viewport_size.y - 6:
+        pos.y = mouse.y - extent.y - 16
 
-    pos.x = clamp(pos.x,6.0,max(6.0,viewport_size.x - hover_panel.size.x - 6.0))
-    pos.y = clamp(pos.y,6.0,max(6.0,viewport_size.y - hover_panel.size.y - 6.0))
+    pos.x = clamp(pos.x,6.0,max(6.0,viewport_size.x - extent.x - 6.0))
+    pos.y = clamp(pos.y,6.0,max(6.0,viewport_size.y - extent.y - 6.0))
     hover_panel.position = pos
 
 
@@ -14985,20 +15028,27 @@ func _remove_weapon_mod(slot):
     _refresh_inventory_ui()
     _rebuild_weapon_mod_ui()
 
-func _begin_inventory_drag_candidate(source,index,id):
+func _begin_inventory_drag_candidate(source,index,id,press_position = null):
     if index < 0:
         return
 
     inventory_drag_candidate_source = source
     inventory_drag_candidate_index = index
     inventory_drag_candidate_id = id
-    inventory_drag_press_position = get_viewport().get_mouse_position()
+    inventory_drag_press_position = get_viewport().get_mouse_position() if press_position == null else Vector2(press_position)
+    inventory_drag_grab_cell = Vector2i.ZERO
+    var grid = inv_grid_control if source == "inventory" else cont_grid_control
+    var entries = inventory_entries if source == "inventory" else container_states.get(active_container_key,{}).get("items",[])
+    if source in ["inventory","container"] and grid != null and index < entries.size():
+        var e = entries[index]
+        inventory_drag_grab_cell = _grid_cell_from_mouse(grid,inventory_drag_press_position) - Vector2i(int(e.get("x",0)),int(e.get("y",0)))
 
 func _start_inventory_drag():
     if inventory_drag_candidate_index < 0 or inventory_drag_candidate_id == "":
         return
 
     inventory_drag_active = true
+    _hover_hide_item()
 
     if inventory_drag_preview != null and is_instance_valid(inventory_drag_preview):
         inventory_drag_preview.queue_free()
@@ -15006,13 +15056,17 @@ func _start_inventory_drag():
     inventory_drag_preview = TextureRect.new()
     inventory_drag_preview.texture = _make_item_icon(inventory_drag_candidate_id)
     inventory_drag_preview.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    inventory_drag_preview.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+    inventory_drag_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    inventory_drag_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
     inventory_drag_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
     inventory_drag_preview.modulate = Color(1.0,1.0,1.0,0.82)
     inventory_drag_preview.z_index = 200
 
     var tex_size = inventory_drag_preview.texture.get_size()
-    inventory_drag_preview.size = tex_size + Vector2(6,6)
+    var def = item_defs[inventory_drag_candidate_id]
+    var box = Vector2(float(def.get("w",1)),float(def.get("h",1))) * CELL * 0.68
+    var fit = min(1.0,min(box.x / max(1.0,tex_size.x),box.y / max(1.0,tex_size.y)))
+    inventory_drag_preview.size = tex_size * fit
 
     var canvas = inventory_panel.get_parent()
     canvas.add_child(inventory_drag_preview)
@@ -15038,7 +15092,7 @@ func _clear_inventory_drag():
     inventory_drag_candidate_id = ""
 
 func _grid_cell_from_mouse(control,mouse_pos):
-    var local_pos = mouse_pos - control.global_position
+    var local_pos = control.get_global_transform_with_canvas().affine_inverse() * mouse_pos
     return Vector2i(
         int(floor(local_pos.x / CELL)),
         int(floor(local_pos.y / CELL))
@@ -15323,9 +15377,40 @@ func _finish_inventory_drag(mouse_pos):
     var source = inventory_drag_candidate_source
     var source_index = inventory_drag_candidate_index
     var moved = false
+    # The hotbar remains an editable surface while the inventory is open.
+    for i in range(hud_quick_slots.size()):
+        var b = hud_quick_slots[i].get("button")
+        if b != null and b.get_global_rect().has_point(mouse_pos):
+            if source == "equipment":
+                _clear_inventory_drag()
+                return
+            if source == "container":
+                var space = _find_grid_space(inventory_entries,inventory_drag_candidate_id,INV_W,INV_H)
+                if space.x < 0 or not _drag_container_to_inventory(source_index,space.x,space.y):
+                    _clear_inventory_drag()
+                    return
+            moved = _assign_quick_slot(i + 1,inventory_drag_candidate_id)
+            _clear_inventory_drag()
+            if moved: call_deferred("_refresh_inventory_ui")
+            return
+    if source == "quickbar":
+        if inv_grid_control != null and inv_grid_control.get_global_rect().has_point(mouse_pos):
+            _clear_quick_slot(source_index)
+        _clear_inventory_drag()
+        return
+
+    if source == "inventory" and equipment_panel.visible:
+        for slot in equipment_buttons:
+            if equipment_buttons[slot].get_global_rect().has_point(mouse_pos):
+                var id = inventory_drag_candidate_id
+                if str(item_defs.get(id,{}).get("slot","")) == slot:
+                    _equip_item(id)
+                    call_deferred("_refresh_inventory_ui")
+                _clear_inventory_drag()
+                return
 
     if inv_grid_control != null and inv_grid_control.get_global_rect().has_point(mouse_pos):
-        var cell = _grid_cell_from_mouse(inv_grid_control,mouse_pos)
+        var cell = _grid_cell_from_mouse(inv_grid_control,mouse_pos) - inventory_drag_grab_cell
 
         if source == "inventory":
             selected_inventory_index = source_index
@@ -15333,9 +15418,21 @@ func _finish_inventory_drag(mouse_pos):
             moved = true
         elif source == "container":
             moved = _drag_container_to_inventory(source_index,cell.x,cell.y)
+        elif source == "equipment":
+            var slot = str(EQUIPMENT_SLOT_IDS[source_index])
+            var id = str(equipment.get(slot,""))
+            var def = item_defs.get(id,{})
+            if id != "" and _can_place_excluding(inventory_entries,cell.x,cell.y,int(def.get("w",1)),int(def.get("h",1)),[]):
+                if _grid_add(inventory_entries,id,1,INV_W,INV_H) == 0:
+                    var entry = inventory_entries.back()
+                    entry["x"] = cell.x
+                    entry["y"] = cell.y
+                    equipment[slot] = ""
+                    if slot == "utility": flashlight_on = false
+                    moved = true
 
     elif container_panel != null and container_panel.visible and cont_grid_control != null and cont_grid_control.get_global_rect().has_point(mouse_pos):
-        var cell = _grid_cell_from_mouse(cont_grid_control,mouse_pos)
+        var cell = _grid_cell_from_mouse(cont_grid_control,mouse_pos) - inventory_drag_grab_cell
 
         if source == "container":
             moved = _move_container_entry_to_cell(source_index,cell.x,cell.y)
@@ -15354,7 +15451,7 @@ func _inventory_item_gui_input(event,index,id):
         return
 
     if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-        _begin_inventory_drag_candidate("inventory",index,id)
+        _begin_inventory_drag_candidate("inventory",index,id,event.global_position)
         return
 
     if event.button_index != MOUSE_BUTTON_RIGHT or not event.pressed:
@@ -15374,6 +15471,11 @@ func _inventory_item_gui_input(event,index,id):
     elif use_type == "weapon_mod" and weapon_defs.has(current_weapon_id):
         selected_inventory_index = index
         _open_weapon_mod_panel(current_weapon_id,current_weapon_instance_id)
+
+func _equipment_slot_gui_input(event,slot:String):
+    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+        var id = str(equipment.get(slot,""))
+        if id != "": _begin_inventory_drag_candidate("equipment",EQUIPMENT_SLOT_IDS.find(slot),id,event.global_position)
 
 func _create_inventory_ui():
     var canvas = CanvasLayer.new()
@@ -15453,6 +15555,8 @@ func _create_inventory_ui():
     equipment_buttons["rig"] = _make_button(equipment_panel,Vector2(14,161),Vector2(210,34),"",_unequip_slot.bind("rig"))
     equipment_buttons["backpack"] = _make_button(equipment_panel,Vector2(14,197),Vector2(210,34),"",_unequip_slot.bind("backpack"))
     equipment_buttons["utility"] = _make_button(equipment_panel,Vector2(14,233),Vector2(210,34),"",_unequip_slot.bind("utility"))
+    for slot in equipment_buttons:
+        equipment_buttons[slot].gui_input.connect(_equipment_slot_gui_input.bind(str(slot)))
 
     equipment_info = Label.new()
     equipment_info.position = Vector2(14,270)
@@ -15805,7 +15909,7 @@ func _hd_prop_sprite(kind:String,parent,pos:Vector2,z_value:int,scale_value:floa
     var old_bottom = pos.y + old_region.size.y * _integrated_sprite_scale(scale_value) * 0.5
     var idx = int(PROP_HD_KINDS[kind])
     var tex = AtlasTexture.new()
-    tex.atlas = load("res://art/world_hd/props_hd.png")
+    tex.atlas = _world_cached_resource("res://art/world_hd/props_hd.png")
     tex.region = Rect2((idx % 4) * 128,int(idx / 4) * 128,128,128)
     var sprite = Sprite2D.new()
     sprite.texture = tex
@@ -15825,7 +15929,7 @@ func _litter_decal_sprite(kind:String,parent,pos:Vector2,z_value:int):
     # flat litter is drawn from the HD pixel decals at the world's texel density
     # (scale 0.5); flipped by position so neighbouring heaps differ
     var tex = AtlasTexture.new()
-    tex.atlas = load("res://art/world_hd/ground_decals_hd.png")
+    tex.atlas = _world_cached_resource("res://art/world_hd/ground_decals_hd.png")
     tex.region = Rect2(int(LITTER_TO_DECAL[kind]) * 96,0,96,64)
     var sprite = Sprite2D.new()
     sprite.texture = tex
@@ -15844,7 +15948,7 @@ func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value =
         return _litter_decal_sprite(str(kind),parent,pos,z_value)
     if PROP_HD_KINDS.has(str(kind)) and _hd_exists("res://art/world_hd/props_hd.png"):
         return _hd_prop_sprite(str(kind),parent,pos,z_value,scale_value)
-    var atlas = load("res://world_props_v19.png")
+    var atlas = _world_cached_resource("res://world_props_v19.png")
     if atlas == null:
         return null
     var region = _world_prop_region(kind)
@@ -15878,7 +15982,7 @@ func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value =
 func _set_world_prop_sprite_kind(sprite,kind):
     if not is_instance_valid(sprite):
         return false
-    var atlas = load("res://world_props_v19.png")
+    var atlas = _world_cached_resource("res://world_props_v19.png")
     if atlas == null:
         return false
     var region = _world_prop_region(kind)
@@ -15894,7 +15998,7 @@ func _set_world_prop_sprite_kind(sprite,kind):
 func _interior_wall_band_texture(index,allow_hd = false):
     # allow_hd: the caller draws the region at scale 0.5 (HD twin at 2x)
     var hd = allow_hd and _hd_exists("res://art/world_hd/interior_wall_band_hd.png")
-    var atlas = load("res://art/world_hd/interior_wall_band_hd.png") if hd else load("res://interior_wall_band_v4.png")
+    var atlas = _world_cached_resource("res://art/world_hd/interior_wall_band_hd.png") if hd else _world_cached_resource("res://interior_wall_band_v4.png")
     if atlas == null:
         return null
     var safe_index = clamp(int(index),0,7)
@@ -15948,7 +16052,7 @@ func _roof_style_index(sign_text):
     return 0
 
 func _facade_style_tile_texture(style_index,variant):
-    var atlas = load("res://facade_wall_tiles_v4.png")
+    var atlas = _world_cached_resource("res://facade_wall_tiles_v4.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -16017,7 +16121,7 @@ func _facade_atlas_sprite(parent,path,region,pos,scale_value = 1.0):
         path = twin
         region = Rect2(region.position * 2.0,region.size * 2.0)
         scale_value *= 0.5
-    var atlas = load(path)
+    var atlas = _world_cached_resource(path)
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -16435,7 +16539,7 @@ func _scatter_vegetation(chunk,coord,district_id):
     chunk.set_meta("vegetation_count",placed)
 
 func _facade_wall_tile_texture(index):
-    var atlas = load("res://facade_wall_tiles_v3.png")
+    var atlas = _world_cached_resource("res://facade_wall_tiles_v3.png")
     if atlas == null:
         return null
     var safe_index = clamp(int(index),0,7)
@@ -16445,7 +16549,7 @@ func _facade_wall_tile_texture(index):
     return tex
 
 func _wall_corner_texture(index):
-    var atlas = load("res://wall_corner_v2.png")
+    var atlas = _world_cached_resource("res://wall_corner_v2.png")
     if atlas == null:
         return null
     var safe_index = clamp(int(index),0,3)
@@ -16455,7 +16559,7 @@ func _wall_corner_texture(index):
     return tex
 
 func _window_texture(state):
-    var atlas = load("res://window_v3.png")
+    var atlas = _world_cached_resource("res://window_v3.png")
     if atlas == null:
         return null
     var safe_state = clamp(int(state),0,2)
@@ -16529,7 +16633,7 @@ func _decorate_building_wall_texture(building,sign_text,size):
     _native_arch_sprite(building,_wall_corner_texture(1),Vector2(size.x*0.5-8.0,-size.y*0.5+8.0),1)
 
 func _facade_detail_texture(index):
-    var atlas = load("res://facade_detail_v2.png")
+    var atlas = _world_cached_resource("res://facade_detail_v2.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -16611,7 +16715,7 @@ func _decorate_facade_wall_texture(facade,sign_text,size,building_id):
         _world_prop_sprite("med_sign",facade,Vector2(0,-1),4,0.42)
 
 func _interior_floor_detail_sprite(parent,index,pos,rotation_value,scale_value):
-    var atlas = load("res://floor_detail_v5.png")
+    var atlas = _world_cached_resource("res://floor_detail_v5.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -16898,7 +17002,7 @@ func _decorate_building_art(building,sign_text,size,building_id):
         _add_detail_light(building,Vector2(size.x*0.28,-size.y*0.18),Color(1.0,0.66,0.34),0.24,0.64)
 
 func _roof_surface_texture(sign_text):
-    var atlas = load("res://roof_surface_v2.png")
+    var atlas = _world_cached_resource("res://roof_surface_v2.png")
     if atlas == null:
         return null
     var s = str(sign_text).to_upper()
@@ -16916,10 +17020,10 @@ func _roof_surface_sprite(parent,sign_text,size):
     var style = _roof_style_index(sign_text)
     var hd_path = "res://art/world_hd/roof_tile_s%d_hd.png" % style
     var hd = _hd_exists(hd_path)
-    var tex = load(hd_path) if hd else load("res://roof_tile_s%d_v3.png" % style)
+    var tex = _world_cached_resource(hd_path) if hd else _world_cached_resource("res://roof_tile_s%d_v3.png" % style)
     if tex == null:
         hd = false
-        tex = load("res://roof_tile_v2.png")
+        tex = _world_cached_resource("res://roof_tile_v2.png")
     if tex == null:
         tex = _roof_surface_texture(sign_text)
     if tex == null:
@@ -16947,8 +17051,8 @@ func _roof_surface_sprite(parent,sign_text,size):
 
 func _roof_edge_strips(parent,style,center,area):
     var hd = _hd_exists("res://art/world_hd/roof_edge_h_s%d_hd.png" % style) and _hd_exists("res://art/world_hd/roof_edge_v_s%d_hd.png" % style)
-    var h_tex = load(("res://art/world_hd/roof_edge_h_s%d_hd.png" if hd else "res://roof_edge_h_s%d_v1.png") % style)
-    var v_tex = load(("res://art/world_hd/roof_edge_v_s%d_hd.png" if hd else "res://roof_edge_v_s%d_v1.png") % style)
+    var h_tex = _world_cached_resource(("res://art/world_hd/roof_edge_h_s%d_hd.png" if hd else "res://roof_edge_h_s%d_v1.png") % style)
+    var v_tex = _world_cached_resource(("res://art/world_hd/roof_edge_v_s%d_hd.png" if hd else "res://roof_edge_v_s%d_v1.png") % style)
     if h_tex == null or v_tex == null:
         return
     var k = 2.0 if hd else 1.0
@@ -17013,7 +17117,7 @@ func _chimney_texture():
 
 func _roof_prop_texture(index):
     var hd = _hd_exists("res://art/world_hd/roof_props_hd.png")
-    var atlas = load("res://art/world_hd/roof_props_hd.png" if hd else "res://roof_props_v4.png")
+    var atlas = _world_cached_resource("res://art/world_hd/roof_props_hd.png" if hd else "res://roof_props_v4.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -17096,7 +17200,7 @@ func _interior_floor_row(sign_text):
     return 3
 
 func _interior_trim_texture(region):
-    var atlas = load("res://interior_trim_v4.png")
+    var atlas = _world_cached_resource("res://interior_trim_v4.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -17110,7 +17214,7 @@ func _interior_trim_piece(parent,region,pos,scale_vec = Vector2.ONE,z_value = 0)
     var tex = null
     if hd:
         tex = AtlasTexture.new()
-        tex.atlas = load("res://art/world_hd/interior_trim_hd.png")
+        tex.atlas = _world_cached_resource("res://art/world_hd/interior_trim_hd.png")
         tex.region = Rect2(region.position * 2.0,region.size * 2.0)
     else:
         tex = _interior_trim_texture(region)
@@ -17153,7 +17257,7 @@ func _decorate_interior_trim(root,inner_w,inner_h):
 func _interior_floor_sprite(parent,sign_text,size):
     # 1.38: HD floor (tools/wa_interior_floor_hd.py), same layout at 2x
     var hd_floor = _hd_exists("res://art/world_hd/interior_floor_hd.png")
-    var atlas = load("res://art/world_hd/interior_floor_hd.png") if hd_floor else load("res://interior_floor_tiles_v5.png")
+    var atlas = _world_cached_resource("res://art/world_hd/interior_floor_hd.png") if hd_floor else _world_cached_resource("res://interior_floor_tiles_v5.png")
     var fk = 2.0 if hd_floor else 1.0
     if atlas == null:
         return null
@@ -17331,7 +17435,7 @@ func _puddle_material():
 
 func _make_puddle(chunk,local_pos:Vector2,variant:int,big:bool = false):
     var tex = AtlasTexture.new()
-    tex.atlas = load(PUDDLE_TEX)
+    tex.atlas = _world_cached_resource(PUDDLE_TEX)
     # row 0: 112 x 56 cells; row 1: large 160 x 80 cells for under the lamps
     tex.region = Rect2((variant % 4) * 160,56,160,80) if big else Rect2((variant % 4) * 112,0,112,56)
     var p = Sprite2D.new()
@@ -17414,7 +17518,7 @@ var _puddle_image = null
 func _puddle_water_span(region:Rect2,col:int,flip:bool):
     # first and last water rows of a puddle cell in one texel column
     if _puddle_image == null:
-        _puddle_image = load(PUDDLE_TEX).get_image()
+        _puddle_image = _world_cached_resource(PUDDLE_TEX).get_image()
     var w = int(region.size.x)
     var x = clampi(col,0,w - 1)
     if flip:
@@ -17576,7 +17680,7 @@ func _add_ground_decals(chunk,coord):
     # flipped, never rotated by an arbitrary angle (that breaks it into jaggies).
     var rng = RandomNumberGenerator.new()
     rng.seed = int(abs(coord.x*198491 + coord.y*65497 + 32001)) + 1
-    var atlas = load("res://art/world_hd/ground_decals_hd.png") if _hd_exists("res://art/world_hd/ground_decals_hd.png") else null
+    var atlas = _world_cached_resource("res://art/world_hd/ground_decals_hd.png") if _hd_exists("res://art/world_hd/ground_decals_hd.png") else null
     for i in range(10):
         var p = Vector2(rng.randi_range(35,765),rng.randi_range(35,765))
         var roll = rng.randf()
@@ -17787,7 +17891,8 @@ func _decorate_item_button(button,id,qty,instance_id = ""):
     var icon_box = TextureRect.new()
     icon_box.texture = texture
     icon_box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    icon_box.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+    icon_box.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    icon_box.stretch_mode = TextureRect.STRETCH_SCALE
     icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
     var native_size = texture.get_size()
@@ -17864,7 +17969,8 @@ func _decorate_equipment_button(button,slot,id):
 
     var icon_frame = ColorRect.new()
     icon_frame.position = Vector2(5,3)
-    icon_frame.size = Vector2(34,32)
+    button.clip_contents = true
+    icon_frame.size = Vector2(34,28)
     icon_frame.color = Color(0.020,0.025,0.026,0.95)
     icon_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
     button.add_child(icon_frame)
@@ -17891,11 +17997,12 @@ func _decorate_equipment_button(button,slot,id):
         var icon_box = TextureRect.new()
         icon_box.texture = _make_item_icon(id)
         icon_box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-        icon_box.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+        icon_box.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        icon_box.stretch_mode = TextureRect.STRETCH_SCALE
         var native_size = icon_box.texture.get_size()
-        var fit_scale = min(1.0,min(32.0 / native_size.x,30.0 / native_size.y))
+        var fit_scale = min(1.0,min(30.0 / native_size.x,26.0 / native_size.y))
         icon_box.size = Vector2(floor(native_size.x * fit_scale),floor(native_size.y * fit_scale))
-        icon_box.position = Vector2(6,6) + (Vector2(38,36) - icon_box.size) * 0.5
+        icon_box.position = Vector2(5,3) + (Vector2(34,28) - icon_box.size) * 0.5
         icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
         button.add_child(icon_box)
     else:
@@ -18464,7 +18571,7 @@ func _container_item_gui_input(event,index,id):
         return
 
     if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-        _begin_inventory_drag_candidate("container",index,id)
+        _begin_inventory_drag_candidate("container",index,id,event.global_position)
 
 
 func _select_container_entry(index):
@@ -20054,7 +20161,7 @@ func _set_tall_window_state(sprite,style,state):
     if twin != "" and sprite.scale.x < 0.75:
         path = twin
         k = 2.0
-    var atlas = load(path)
+    var atlas = _world_cached_resource(path)
     if atlas == null:
         return
     var tex = AtlasTexture.new()
@@ -20246,7 +20353,7 @@ func _create_door(chunk, coord, local_pos, door_id):
     visual.position = Vector2(-19,0)
     node.add_child(visual)
     var door_sprite = Sprite2D.new()
-    door_sprite.texture = load("res://door_topdown_v2.png")
+    door_sprite.texture = _world_cached_resource("res://door_topdown_v2.png")
     door_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     door_sprite.position = Vector2(19,0)
     door_sprite.scale = Vector2.ONE
@@ -20524,7 +20631,7 @@ func _apply_door_state(node, open, snap=false):
 
 func _make_world_loot_texture(id):
     if loot_atlas_texture == null:
-        loot_atlas_texture = load("res://loot_sprites_v30.png")
+        loot_atlas_texture = _world_cached_resource("res://loot_sprites_v30.png")
 
     if loot_atlas_texture != null and loot_icon_cells.has(id):
         var cell = loot_icon_cells[id]
@@ -21814,6 +21921,9 @@ func _refresh_chunks(force):
 func _unload_chunk(coord):
     var chunk = loaded_chunks.get(coord)
     if is_instance_valid(chunk):
+        for voice in chunk.find_children("*","AudioStreamPlayer2D",true,false):
+            voice.stop()
+            voice.stream = null
         for i in range(roof_records.size() - 1,-1,-1):
             var rec = roof_records[i]
             if rec.get("chunk") == chunk:
@@ -22188,7 +22298,7 @@ func _spawn_player_body(chunk,coord,rec:Dictionary):
     for c in node.get_children():
         c.queue_free()
     # the survivor as they fell: the last frame of the death clip
-    var tex = load(str(rec.get("sheet","res://survivor_Die.png")))
+    var tex = _world_cached_resource(str(rec.get("sheet","res://survivor_Die.png")))
     if tex != null:
         var at = AtlasTexture.new()
         at.atlas = tex
@@ -22331,7 +22441,7 @@ func _ensure_world_hd_preloaded():
     paths.append(PUDDLE_TEX)
     for path in paths:
         if _hd_exists(str(path)):
-            _world_hd_keep.append(load(str(path)))
+            _world_hd_keep.append(_world_cached_resource(str(path)))
     _world_hd_keep.append(true)
 
 func _build_ground(chunk,coord):
@@ -22339,11 +22449,11 @@ func _build_ground(chunk,coord):
     var ground_sprite = Sprite2D.new()
     var district_ground = _district_ground_path(coord)
     if district_ground != "":
-        ground_sprite.texture = load(district_ground)
+        ground_sprite.texture = _world_cached_resource(district_ground)
         ground_sprite.scale = Vector2(0.5,0.5)
         ground_sprite.set_meta("district_ground",district_ground)
     else:
-        ground_sprite.texture = load("res://ground_chunk_v12.png")
+        ground_sprite.texture = _world_cached_resource("res://ground_chunk_v12.png")
     ground_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     ground_sprite.position = Vector2(CHUNK_SIZE*0.5,CHUNK_SIZE*0.5)
     ground_sprite.z_index = -20
@@ -22527,7 +22637,7 @@ func _add_ground_edge_blends(chunk,coord,own_path):
         var fam = _ground_family(nb)
         if int(GROUND_EDGE_RANK.get(fam,0)) <= own_rank:
             continue
-        var tex = load("res://art/world_hd/ground_%s_hd.png" % fam)
+        var tex = _world_cached_resource("res://art/world_hd/ground_%s_hd.png" % fam)
         if tex == null:
             continue
         var k = float(tex.get_width()) / CHUNK_SIZE
@@ -22664,7 +22774,7 @@ func _decorate_region_ground(chunk,coord,profile):
         # (tools/wa_rail_hd.py), tiled along the chunk, world-anchored.
         if _hd_exists("res://art/world_hd/rail_track_hd.png"):
             var track = Sprite2D.new()
-            track.texture = load("res://art/world_hd/rail_track_hd.png")
+            track.texture = _world_cached_resource("res://art/world_hd/rail_track_hd.png")
             track.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
             track.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
             track.region_enabled = true
@@ -22794,7 +22904,7 @@ func _build_showcase_chunk(chunk,coord):
 
 
 func _street_detail_texture(index):
-    var atlas = load("res://street_detail_v2.png")
+    var atlas = _world_cached_resource("res://street_detail_v2.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -22819,7 +22929,7 @@ func _street_detail_sprite(parent,index,pos,rotation_value = 0.0,scale_value = 1
     return sprite
 
 func _wet_surface_texture(index):
-    var atlas = load("res://wet_surface_v2.png")
+    var atlas = _world_cached_resource("res://wet_surface_v2.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -23011,6 +23121,12 @@ func _tree_overlaps_building(chunk,pos):
 func _tree_position_forbidden(chunk,pos):
     if _point_on_road_or_sidewalk(pos):
         return true
+    if _tree_placement_context.get("chunk") == chunk:
+        for r in _tree_placement_context["rects"]:
+            if r.has_point(pos): return true
+        for d in _tree_placement_context["doors"]:
+            if pos.distance_squared_to(d) < 8464.0: return true
+        return false
     if _tree_overlaps_building(chunk,pos):
         return true
     if chunk != null:
@@ -23032,7 +23148,7 @@ func _yard_family(g:String) -> String:
     return "city"
 
 func _compound_yard_sprite(chunk,coord,g:String,path:String):
-    var tex = load(path)
+    var tex = _world_cached_resource(path)
     var k = float(tex.get_width()) / CHUNK_SIZE
     var yard = Sprite2D.new()
     yard.name = "CompoundSurface"
@@ -23436,6 +23552,8 @@ func _talk_faction_npc(node):
         "mechanics_storekeeper": line = "Склад не резиновый. Завалишь нас одним товаром — цена просядет."
         "lazaret_doctor": line = "Тяжёлые случаи лечатся запасами, а запасы сами себя не пополняют."
         "lazaret_researcher": line = "Образцы и реагенты интересуют нас больше оружия."
+    var banter = preload("res://world/npc_conversation.gd").line(npc_id,int(FactionNpcState.record(faction_state,npc_id,world_day).get("interaction_count",0)))
+    if banter != "": line = banter
     var settlement = SettlementCrisis.faction_status(faction_state,faction_id)
     var settlement_stage = str(settlement.get("stage","stable"))
     var shortage_name = SettlementCrisis.resource_label(str(settlement.get("worst_resource","food")))
@@ -23475,6 +23593,7 @@ func _talk_faction_npc(node):
             line += " Но после прежних дел к тебе пока присматриваются."
     _record_named_npc_interaction(npc_id,"talk","Разговор в поселении.",0)
     _set_survival_feedback("%s • %s • %s\n%s" % [name,role,relation_text,line],5.2 if doctor_debrief else 4.4)
+    preload("res://world/npc_chat.gd").show_line(self,name,role,line)
 
 func _build_major_poi_chunk(chunk,coord,profile) -> bool:
     var poi = profile.get("poi",{})
@@ -23782,7 +23901,7 @@ func _vehicle_hd():
     if not _vehicle_hd_checked:
         _vehicle_hd_checked = true
         if ResourceLoader.exists("res://world/vehicle_hd_atlas.gd"):
-            var scr = load("res://world/vehicle_hd_atlas.gd")
+            var scr = _world_cached_resource("res://world/vehicle_hd_atlas.gd")
             if scr != null and ResourceLoader.exists(str(scr.ATLAS)):
                 _vehicle_hd_atlas = scr
     return _vehicle_hd_atlas
@@ -24580,7 +24699,7 @@ const SETTLEMENT_GROUND_TEX = {
 func _settlement_tex(parent,material:String,rect:Rect2,origin:Vector2,vertical:bool = false):
     # Seamless world-anchored texture fill: the region follows world coordinates,
     # so a street continues without a seam into the next sector.
-    var tex = load("res://settlement_ground_%s_v1.png" % material)
+    var tex = _world_cached_resource("res://settlement_ground_%s_v1.png" % material)
     if tex == null:
         return null
     var sprite = Sprite2D.new()
@@ -24778,7 +24897,7 @@ func _settlement_crossing_paint(layer,rng,keep_out:float,col:Color,zebra:bool):
 const SETTLEMENT_DECALS = ["puddle_a","puddle_b","pothole","mud","oil","patch","ruts","drain"]
 
 func _settlement_decal(parent,kind:String,pos:Vector2,rot:float = 0.0,scale_value:float = 1.0):
-    var atlas = load("res://settlement_ground_decals_v1.png")
+    var atlas = _world_cached_resource("res://settlement_ground_decals_v1.png")
     var index = SETTLEMENT_DECALS.find(kind)
     if atlas == null or index < 0:
         return null
@@ -26251,6 +26370,7 @@ func _build_procedural_chunk(chunk,coord):
             rng.randf_range(-0.15,0.15)
         )
 
+    _begin_tree_placement(chunk)
     for i in range(tree_count):
         var tree_pos = _safe_tree_position(chunk,rng)
         if tree_pos.x > -9000.0:
@@ -26259,6 +26379,7 @@ func _build_procedural_chunk(chunk,coord):
                 tree_pos,
                 rng.randf_range(0.75,1.18)
             )
+    _tree_placement_context.clear()
     if not authored_poi and world_event.is_empty():
         _plant_forest_edges(chunk,coord,zone)
         _place_water_pump(chunk,coord,zone)
@@ -27376,7 +27497,7 @@ func _build_generic_roof(roof,sign_text,size,building_id,archetype_id,archetype_
         _decorate_archetype_roof(roof,archetype_id,archetype_data,size)
 
 func _settlement_model_sprite(parent,model:Dictionary,region_key:String,pos:Vector2):
-    var atlas = load(str(model.get("atlas","")))
+    var atlas = _world_cached_resource(str(model.get("atlas","")))
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -27397,7 +27518,7 @@ func _build_settlement_model_facade(facade,model:Dictionary,size:Vector2,door_x:
     _settlement_model_sprite(facade,model,"facade_region",model.get("facade_pos",Vector2.ZERO) - Vector2(0,size.y * 0.5))
     # the authored model already carries drainpipes, lamps, signs and weathering
     facade.set_meta("facade_dressed",true)
-    var leaf_tex = load("res://settlement_door_leaves_v1.png")
+    var leaf_tex = _world_cached_resource("res://settlement_door_leaves_v1.png")
     if leaf_tex != null:
         var tex = AtlasTexture.new()
         tex.atlas = leaf_tex
@@ -27457,7 +27578,9 @@ func _settlement_smoke_emitter(parent,pos:Vector2,kind:String = "smoke"):
     p.local_coords = false
     p.amount = 18 if kind != "fire_smoke" else 12
     p.lifetime = 4.2 if kind == "smoke" else (2.6 if kind == "steam" else 3.0)
-    p.preprocess = p.lifetime
+    # Fill naturally after a sector appears; do not simulate several seconds
+    # of every chimney synchronously during a chunk transition.
+    p.preprocess = 0.0
     p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
     p.emission_sphere_radius = 1.5
     p.direction = Vector2(0.15,-1.0)
@@ -28005,27 +28128,31 @@ func _create_tree(chunk,pos,scale_factor,force = false):
 # weather's wind speed. One shared material.
 const TREE_SWAY_SHADER = """shader_type canvas_item;
 uniform float wind = 0.3;
-uniform float base_row = 140.0;   // cell row where the plant stops moving
-uniform float span = 110.0;       // rows over which the sway builds up
-uniform float amp = 3.0;          // texels at full wind, at the very top
-uniform float hide = 0.0;         // sun shadow fade (baked shadow texels)
-varying float phase;
+uniform float base_row = 186.0;
+uniform float half_height = 102.0;
+uniform float span = 160.0;
+uniform float amp = 1.1;
+uniform float hide = 0.0;
 varying vec4 tint;
 void vertex() {
-    vec2 wp = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xy;
-    phase = wp.x * 0.031 + wp.y * 0.017;
     tint = COLOR;
+    vec2 wp = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xy;
+    float phase = wp.x * 0.031 + wp.y * 0.017;
+    float height = max(0.0, base_row - (VERTEX.y + half_height));
+    float bend = clamp(height / span, 0.0, 1.0);
+    float gust = sin(TIME * 0.75 + phase) * 0.8 + sin(TIME * 1.35 + phase) * 0.2;
+    float angle = gust * wind * amp * 0.012 * bend;
+    VERTEX.x += sin(angle) * height;
+    VERTEX.y += (1.0 - cos(angle)) * height;
 }
 void fragment() {
-    float ly = UV.y / TEXTURE_PIXEL_SIZE.y;
-    float k = clamp((base_row - ly) / span, 0.0, 1.0);   // atlases are one cell row tall
-    k = k * sqrt(k);
-    float s = sin(TIME * 1.1 + phase) * 0.65 + sin(TIME * 2.7 + phase * 1.7) * 0.35;
-    float shift = floor(s * wind * amp * k + 0.5);
-    vec4 c = texture(TEXTURE, UV - vec2(shift * TEXTURE_PIXEL_SIZE.x, 0.0));
-    if (c.a > 0.0 && c.a < 0.95) c.a *= 1.0 - hide;   // the baked ground shadow
-    COLOR = c * tint;
+    // Sampling stays fixed inside its atlas cell: no sliding rows or bleeding
+    // from the neighbouring tree. The root and baked shadow stay still.
+    vec4 c = texture(TEXTURE, UV) * tint;
+    if (c.a > 0.0 && c.a < 0.95) c.a *= 1.0 - hide;
+    COLOR = c;
 }"""
+
 # Baked ground shadows (flat alpha steps below 0.95 in the prop, tree, shrub
 # and car atlases) follow the sun: full by day, softer under cloud, rain or
 # fog, almost gone at night but for a faint contact shadow.
@@ -28065,13 +28192,14 @@ func _sway_material(base_row:float,span:float,amp:float):
     var m = ShaderMaterial.new()
     m.shader = _sway_shader
     m.set_shader_parameter("base_row",base_row)
+    m.set_shader_parameter("half_height",102.0 if base_row > 100.0 else 32.0)
     m.set_shader_parameter("span",span)
     m.set_shader_parameter("amp",amp)
     return m
 
 func _tree_sway_material():
     if _tree_sway_mat == null:
-        _tree_sway_mat = _sway_material(140.0,110.0,3.0)
+        _tree_sway_mat = _sway_material(186.0,160.0,1.1)
     return _tree_sway_mat
 
 # bushes give a little at the crown, weeds and tall grass bend more; leaf piles
@@ -32347,18 +32475,10 @@ func _update_weather_visuals(delta):
     var hour = world_minutes / 60.0
     if hour >= 20.0 or hour < 6.0:
         fog_target *= 1.35
+    # The world-anchored fog shader already supplies atmosphere. The legacy
+    # camera-parented solid strips made pale bands slide across the screen.
     for fog in fog_bands:
-        if not is_instance_valid(fog):
-            continue
-        var c = fog.color
-        c.a = lerpf(c.a,fog_target,min(1.0,delta*2.0 + 0.06))
-        fog.color = c
-        var speed = float(fog.get_meta("fog_speed",4.0))
-        var phase = float(fog.get_meta("fog_phase",0.0))
-        fog.position.x += speed * delta
-        fog.position.y += sin(t * 0.18 + phase) * 0.05
-        if fog.position.x > 240.0:
-            fog.position.x = -240.0
+        if is_instance_valid(fog): fog.visible = false
 
     for i in range(rain_splashes.size()):
         var splash = rain_splashes[i]
@@ -32683,7 +32803,11 @@ func _base_build_allowed(kind):
     return _base_build_block_reason(kind) == ""
 
 
+var _base_radial_texture:Texture2D
+
 func _make_base_radial_texture():
+    if _base_radial_texture != null:
+        return _base_radial_texture
     var gradient = Gradient.new()
     gradient.offsets = PackedFloat32Array([0.0,0.62,1.0])
     gradient.colors = PackedColorArray([
@@ -32699,6 +32823,7 @@ func _make_base_radial_texture():
     texture.fill = GradientTexture2D.FILL_RADIAL
     texture.fill_from = Vector2(0.5,0.5)
     texture.fill_to = Vector2(1.0,0.5)
+    _base_radial_texture = texture
     return texture
 
 func _create_base_system():
@@ -35946,3 +36071,70 @@ func _ensure_input(action_name,key_code):
         var ev = InputEventKey.new()
         ev.physical_keycode = key_code
         InputMap.action_add_event(action_name,ev)
+
+func _qa_ui_polish_preview(mode:String):
+    qa_visual_mode = true
+    _qa_prepare_visual_state()
+    _qa_force_daylight()
+    _qa_clear_infected()
+    if mode == "status":
+        bleeding = true
+        body_temperature = 34.9
+        wetness = 75.0
+        wound_contamination = 55.0
+        pain = 40.0
+    elif mode in ["inventory","tooltip"]:
+        for id in ["ballistic_helmet","military_vest","expedition_pack","insulated_parka","assault_rig"]:
+            _grid_add(inventory_entries,id,1,INV_W,INV_H)
+            _equip_item(id)
+        _toggle_inventory()
+        if mode == "tooltip": _hover_show_item("military_vest",1,"equipment")
+    elif mode == "trader":
+        faction_state["factions"]["lazaret"]["resources"]["medicine"] = 12.0
+        _open_trader("lazaret_supplier")
+    elif mode == "contract": _open_contract_board("lazaret","Доктор Миронова","lazaret_doctor")
+    elif mode == "home": _open_home_journal()
+    elif mode == "map": _open_region_map()
+    elif mode == "base": _open_base_build()
+    elif mode == "craft": _open_crafting()
+    elif mode == "dialogue": preload("res://world/npc_chat.gd").show_line(self,"Доктор Миронова","Врач Лазарета",preload("res://world/npc_conversation.gd").line("lazaret_doctor",0))
+    _update_hud()
+
+func _talk_from_service_panel(kind:String):
+    preload("res://world/interface_polish.gd").talk_from_panel(self,kind)
+
+# Keep a bounded set of immutable world textures across chunk boundaries.
+# ResourceLoader's default cache holds weak references, so unloaded district
+# textures otherwise have to be reopened when the player doubles back.
+var _world_resource_cache = {}
+func _world_cached_resource(path:String):
+    if _world_resource_cache.has(path):
+        return _world_resource_cache[path]
+    var resource = load(path)
+    if resource is Texture2D:
+        if _world_resource_cache.size() >= 128:
+            _world_resource_cache.erase(_world_resource_cache.keys()[0])
+        _world_resource_cache[path] = resource
+    return resource
+
+# Snapshot only immutable blockers while planting one sector. Keep the same
+# random stream and exclusion geometry; do not scan hundreds of decor nodes
+# and every loaded door for each of the 48 candidate attempts.
+var _tree_placement_context = {}
+func _begin_tree_placement(chunk):
+    var rects = []
+    var doors = []
+    for child in chunk.get_children():
+        if child.has_meta("world_building"):
+            var size = child.get_meta("building_size",Vector2.ZERO)
+            if typeof(size) == TYPE_VECTOR2 and size != Vector2.ZERO:
+                var clearance = Vector2(30,42)
+                rects.append(Rect2(child.position-size*0.5-clearance,size+clearance*2.0))
+        if bool(child.get_meta("world_event_root",false)):
+            rects.append(_world_event_rect(child).grow(22.0))
+    var area = Rect2(Vector2(-92,-92),Vector2(CHUNK_SIZE+184,CHUNK_SIZE+184))
+    for door in get_tree().get_nodes_in_group("doors"):
+        if is_instance_valid(door):
+            var point = door.global_position-chunk.global_position
+            if area.has_point(point): doors.append(point)
+    _tree_placement_context = {"chunk":chunk,"rects":rects,"doors":doors}

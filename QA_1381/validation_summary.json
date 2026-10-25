@@ -1,0 +1,20 @@
+{
+  "status": "REVIEW_CANDIDATE",
+  "engine": "4.7.2.stable.official.ed1daf0bf",
+  "base": "f2790685e75d99d39c9c73402b025c1febbda118",
+  "jobs": 201,
+  "clean_passed": 197,
+  "checks": 65698,
+  "assertion_failures": 2,
+  "godot_errors": 0,
+  "warning_suites": [
+    "test_vertical_slice_recovery_runtime_123",
+    "test_vertical_slice_recovery_save_runtime_123",
+    "test_vertical_slice_runtime_123"
+  ],
+  "clean_import_errors": 0,
+  "clean_import_warnings": 0,
+  "captures": 23,
+  "stage_checks_passed": 7,
+  "ui_checks": 436
+}

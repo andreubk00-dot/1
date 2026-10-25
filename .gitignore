@@ -2,3 +2,6 @@
 *.tmp
 __pycache__/
 build/
+
+# Local QA profiles must never change the shipped save directory.
+override.cfg

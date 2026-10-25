@@ -15,7 +15,7 @@ func run() -> void:
     await process_frame; await process_frame
     var viewport_size = main.get_viewport_rect().size
     check(main.trader_panel.position.y >= 0.0,"trader panel starts above viewport")
-    check(main.trader_panel.position.y + main.trader_panel.size.y <= viewport_size.y,"trader panel extends below viewport")
+    check(main.trader_panel.get_global_rect().end.y <= viewport_size.y,"trader panel extends below viewport")
     check(main.trader_stock_list.position.y + main.trader_stock_list.size.y <= main.trader_status.position.y,"trader stock list overlaps status")
     check(main.trader_inventory_list.position.y + main.trader_inventory_list.size.y <= main.trader_status.position.y,"trader inventory list overlaps status")
     check(main.trader_status.position.y + main.trader_status.size.y <= 298.0,"trader status reaches action buttons")

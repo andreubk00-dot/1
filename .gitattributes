@@ -1,0 +1,2 @@
+# Keep native engine logs verbatim, including Windows console line endings.
+QA_1381/**/*.log -text -whitespace

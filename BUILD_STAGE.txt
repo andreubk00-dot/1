@@ -1,0 +1,3 @@
+dev75 — UI, inventory and motion overhaul / REVIEW CANDIDATE
+Base f2790685e75d99d39c9c73402b025c1febbda118
+Release QA gate remains open; see QA_1381/REPORT.md

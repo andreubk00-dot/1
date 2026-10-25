@@ -182,11 +182,11 @@ func run():
     # panel rather than drawing text/footer over each other or outside the frame.
     game._create_hover_inspector()
     game._hover_show_item("military_vest",1,"container")
-    check(game.hover_panel.size.y >= 220.0, "military-vest tooltip did not grow for extra stat rows")
+    check(game.hover_body.get_visible_line_count() >= game.hover_body.get_line_count(), "military-vest tooltip clips stat rows")
     check(game.hover_footer.position.y >= game.hover_body.position.y + game.hover_body.size.y + 4.0, "gear tooltip footer overlaps body")
     check(game.hover_footer.position.y + game.hover_footer.size.y + 4.0 <= game.hover_panel.size.y, "gear tooltip footer leaves panel")
     game._hover_show_item("akm",1,"container")
-    check(game.hover_panel.size.y >= 220.0, "AKM tooltip did not reserve enough height")
+    check(game.hover_body.get_visible_line_count() >= game.hover_body.get_line_count(), "AKM tooltip clips stat rows")
     check(game.hover_footer.position.y >= game.hover_body.position.y + game.hover_body.size.y + 4.0, "weapon tooltip footer overlaps body")
 
     # QA crate remains the permanent test surface for the complete catalogue.

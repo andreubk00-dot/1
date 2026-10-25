@@ -47,8 +47,10 @@ func run() -> void:
         check(text.find(str(row[5])) >= 0,route_id + " NPC talk does not mention the opened route consequence")
         check(text.find(str(row[6])) >= 0,route_id + " NPC talk does not preserve cross-faction sandbox contrast")
         game._update_hud()
-        check(game.hud_feedback_panel != null and game.hud_feedback_panel.visible,route_id + " NPC reaction is not rendered on the HUD")
-        check(game.hud_feedback_label != null and str(game.hud_feedback_label.text).find(str(row[5])) >= 0,route_id + " HUD feedback does not render the route-specific NPC line")
+        var chat = game.get_node_or_null("NpcChat")
+        check(chat != null or (game.hud_feedback_panel != null and game.hud_feedback_panel.visible),route_id + " NPC reaction is not rendered")
+        var shown_line = str(chat.get_meta("line","")) if chat != null else str(game.hud_feedback_label.text)
+        check(shown_line.find(str(row[5])) >= 0,route_id + " dialogue does not render the route-specific NPC line")
 
         game.faction_state["world_chronicle"] = []
         game._record_contract_world_news({"ok":true,"faction":faction_id,"title":"QA ROUTE","opened_route":route_id,"personal":false})

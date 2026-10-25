@@ -11,7 +11,7 @@ const Nav = preload("res://world/local_navigation.gd")
 const CELL = 128
 const SPRITE_SCALE = 0.5
 const SPRITE_OFFSET = Vector2(0, -7.5)
-const FRAMES = {"Idle": 8, "Walk": 12, "Run": 12, "Attack1": 8, "TakeDamage": 8, "Die": 8}
+const FRAMES = {"Idle": 8, "Walk": 24, "Run": 24, "Attack1": 8, "TakeDamage": 8, "Die": 8}
 const WALK_SPEED = 36.0
 const COMBAT_SPEED = 56.0
 const RUN_SPEED = 74.0
@@ -971,7 +971,12 @@ func _update_lamp() -> void:
         return
     var night = game._time_night_factor()
     lamp.energy = 0.55 * night if state != "flee" else 0.0
-    lamp.offset = facing * 26.0
+    # Use the same quantized direction as the body sheet. The cone texture
+    # points right in its local space and must rotate with the actor.
+    var lamp_facing = Vector2.RIGHT.rotated(float(dir8) * PI * 0.25)
+    lamp.rotation = lamp_facing.angle()
+    lamp.position = lamp_facing * 12.0 + Vector2(0,-12)
+    lamp.offset = Vector2(26,0)
 
 
 # ------------------------------------------------------------- dev64 additions --
