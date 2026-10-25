@@ -81,4 +81,4 @@ func run()->void:
     await process_frame
     await process_frame
     print("AMBIENCE AUDIO 1.29-dev3: ",checks," checks / ",failures," failures")
-    quit(1 if failures else 0)
+    preload("res://tests/qa_teardown_1381.gd").finish(self,1 if failures else 0)

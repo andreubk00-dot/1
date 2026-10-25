@@ -1,0 +1,30 @@
+[
+  {
+    "name": "SELFTEST",
+    "passed": true
+  },
+  {
+    "name": "test_ui_motion_1381",
+    "passed": true
+  },
+  {
+    "name": "test_input_drag_1381",
+    "passed": true
+  },
+  {
+    "name": "test_home_preparation_finalization",
+    "passed": true
+  },
+  {
+    "name": "test_settlement_crisis_ui_122",
+    "passed": true
+  },
+  {
+    "name": "test_spawn_safety",
+    "passed": true
+  },
+  {
+    "name": "test_high_risk_visual_multifloor",
+    "passed": true
+  }
+]

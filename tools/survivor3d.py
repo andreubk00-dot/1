@@ -105,7 +105,7 @@ MOVE_CLIPS = ('Walk', 'Run', 'RunBackwards', 'StrafeLeft', 'StrafeRight', 'Crouc
 
 def frame_count(clip):
     # 0.76: locomotion cycles use 12 frames for smoother, more anatomical motion
-    return 12 if clip in MOVE_CLIPS else 8
+    return 24 if clip in MOVE_CLIPS else 8
 
 
 WEAPONS = [None, 'makarov', 'shotgun', 'akm', 'pps43', 'izh81', 'aks74u', 'mosin', 'knife', 'pipe', 'axe']
@@ -603,11 +603,11 @@ def gait(P, t, move, style='walk', amp_scale=1.0, pitch_scale=1.0):
 
     def twist_at(tt):
         return -g['twist'] * math.cos(2 * math.pi * tt) * mf
-    lag = 0.085 if style == 'run' else 0.11
-    swing = 1.35 if style == 'run' else 1.0
+    lag = 0.025 if style == 'run' else 0.035
+    swing = 0.32 if style == 'run' else 0.3
     pz = (bob_at(t - lag) - P.bob) * 0.95 * swing
-    pr = (shift_at(t - lag) - P.shift_r) * 0.9 * swing + (twist_at(t - lag) - P.twist) * 5.5
-    pf = -abs(pz) * 0.25 - (0.35 if style == 'run' else 0.0)
+    pr = (shift_at(t - lag) - P.shift_r) * 0.35 * swing + (twist_at(t - lag) - P.twist) * 0.6
+    pf = -abs(pz) * 0.08
     P.pack = (pf, pr, pz)
     P.head_yaw = -0.6 * P.twist
     P.head_dz = (bob_at(t - 0.05) - P.bob) * 0.35

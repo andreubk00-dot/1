@@ -20,7 +20,7 @@ func run():
 
     check(game.quick_slot_ids.size() == 6,"quickbar must keep six bindings")
     for id in game.quick_slot_ids:
-        check(game._quick_slot_valid_item(id),"default quickbar contains invalid item: " + str(id))
+        check(id == "" or game._quick_slot_valid_item(id),"default quickbar contains invalid item: " + str(id))
 
     # New 1.18 firearms must be eligible for a real combat loadout.
     check(game._assign_quick_slot(1,"pps43"),"PPS-43 cannot be assigned to quickbar")

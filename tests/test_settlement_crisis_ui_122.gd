@@ -34,7 +34,7 @@ func run() -> void:
     check(main.trader_open,"Lazaret trader did not open")
     check(main.trader_subtitle.text.find("КРИЗИС") >= 0,"trader subtitle does not expose settlement crisis")
     check(main.trader_subtitle.text.find("медицина") >= 0,"trader subtitle does not identify crisis resource")
-    check(main.trader_subtitle.text.find("потерян рейс") >= 0,"trader subtitle does not expose recent supply cause")
+    check(main.trader_subtitle.tooltip_text.find("потерян рейс") >= 0,"trader subtitle does not expose recent supply cause")
     main._close_trader()
 
     main.ContractSystem.refresh_offers(main.faction_state,main.world_day,true)

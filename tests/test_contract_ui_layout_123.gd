@@ -24,7 +24,7 @@ func run() -> void:
 
     var viewport_size = main.get_viewport_rect().size
     check(main.contract_panel.position.y >= 0.0,"contract panel starts above viewport")
-    check(main.contract_panel.position.y + main.contract_panel.size.y <= viewport_size.y,"contract panel extends below viewport")
+    check(main.contract_panel.get_global_rect().end.y <= viewport_size.y,"contract panel extends below viewport")
     check(main.contract_status.position.y + main.contract_status.size.y <= main.contract_accept_button.position.y,"contract status overlaps action buttons")
     check(main.contract_accept_button.position.y + main.contract_accept_button.size.y <= main.contract_panel.size.y,"accept button extends below panel")
     check(main.contract_close_button.position.y + main.contract_close_button.size.y <= main.contract_panel.size.y,"close button extends below panel")

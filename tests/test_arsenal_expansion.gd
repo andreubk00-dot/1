@@ -178,6 +178,7 @@ func run():
         {"id":"akm","qty":1,"x":5,"y":0}
     ]
     game.inventory_open = false
+    game.quick_slot_ids = ["makarov","shotgun","akm","combat_knife","",""]
     check(game._select_quick_slot(1) and game.current_weapon_id == "makarov", "quickbar slot 1 changed")
     check(game._select_quick_slot(2) and game.current_weapon_id == "shotgun", "quickbar slot 2 changed")
     check(game._select_quick_slot(3) and game.current_weapon_id == "akm", "quickbar slot 3 changed")

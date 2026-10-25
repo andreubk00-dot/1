@@ -1,0 +1,2017 @@
+{
+  "jobs": 201,
+  "passed": 197,
+  "checks": 65698,
+  "results": [
+    {
+      "name": "SELFTEST",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 0,
+      "seconds": 9.5
+    },
+    {
+      "name": "test_ambience_audio_129",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 43,
+      "seconds": 7.2
+    },
+    {
+      "name": "test_ambience_audio_save_boundary_129",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 6,
+      "seconds": 7.9
+    },
+    {
+      "name": "test_arsenal_combat_roles",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 26,
+      "seconds": 7.8
+    },
+    {
+      "name": "test_arsenal_expansion",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 414,
+      "seconds": 9.5
+    },
+    {
+      "name": "test_arsenal_expansion_ii",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 303,
+      "seconds": 9.2
+    },
+    {
+      "name": "test_audio_closure_save_boundary_129",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 6,
+      "seconds": 8.0
+    },
+    {
+      "name": "test_audio_mix_dev69",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 111,
+      "seconds": 20.0
+    },
+    {
+      "name": "test_audit_regressions",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 24,
+      "seconds": 8.4
+    },
+    {
+      "name": "test_clinical_complex_endgame",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 377,
+      "seconds": 10.1
+    },
+    {
+      "name": "test_combat_gear_balance",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 96,
+      "seconds": 8.3
+    },
+    {
+      "name": "test_contract_field_dev70",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 91,
+      "seconds": 21.5
+    },
+    {
+      "name": "test_contract_save_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 10,
+      "seconds": 12.7
+    },
+    {
+      "name": "test_contract_ui_layout_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 11.1
+    },
+    {
+      "name": "test_contract_ui_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 18,
+      "seconds": 10.2
+    },
+    {
+      "name": "test_contracts_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 52,
+      "seconds": 1.8
+    },
+    {
+      "name": "test_crisis_season_pressure_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 17,
+      "seconds": 1.3
+    },
+    {
+      "name": "test_crisis_season_pressure_save_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 1.2
+    },
+    {
+      "name": "test_crowbar_locks_dev72",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 33,
+      "seconds": 32.4
+    },
+    {
+      "name": "test_developer_mode",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 118,
+      "seconds": 11.8
+    },
+    {
+      "name": "test_discovery_progression",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 102,
+      "seconds": 8.7
+    },
+    {
+      "name": "test_district_survey_context_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 29,
+      "seconds": 1.7
+    },
+    {
+      "name": "test_district_survey_context_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 8,
+      "seconds": 9.3
+    },
+    {
+      "name": "test_district_survey_context_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 6,
+      "seconds": 16.8
+    },
+    {
+      "name": "test_dog_dev73",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 91,
+      "seconds": 31.9
+    },
+    {
+      "name": "test_encounter_balance_1210",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 82,
+      "seconds": 9.0
+    },
+    {
+      "name": "test_encounter_scene_variety_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 283,
+      "seconds": 0.7
+    },
+    {
+      "name": "test_encounter_scene_variety_runtime_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 27,
+      "seconds": 9.0
+    },
+    {
+      "name": "test_encounter_scene_variety_save_runtime_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 16.8
+    },
+    {
+      "name": "test_environmental_storytelling_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 239,
+      "seconds": 1.2
+    },
+    {
+      "name": "test_environmental_storytelling_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 48,
+      "seconds": 8.8
+    },
+    {
+      "name": "test_environmental_storytelling_save_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 18.1
+    },
+    {
+      "name": "test_equipment_item_expansion",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 86,
+      "seconds": 10.2
+    },
+    {
+      "name": "test_equipment_survival_gear_ii",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 31,
+      "seconds": 10.0
+    },
+    {
+      "name": "test_established_route_map_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 26,
+      "seconds": 1.5
+    },
+    {
+      "name": "test_established_route_map_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 10,
+      "seconds": 9.6
+    },
+    {
+      "name": "test_established_route_map_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 18.2
+    },
+    {
+      "name": "test_expedition_save",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 54,
+      "seconds": 16.6
+    },
+    {
+      "name": "test_expeditions",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 45,
+      "seconds": 10.0
+    },
+    {
+      "name": "test_faction_endgame_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 87,
+      "seconds": 2.3
+    },
+    {
+      "name": "test_faction_endgame_save_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 14.8
+    },
+    {
+      "name": "test_faction_relations_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 65,
+      "seconds": 1.7
+    },
+    {
+      "name": "test_faction_relations_save_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 13.9
+    },
+    {
+      "name": "test_faction_settlement_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 169,
+      "seconds": 22.8
+    },
+    {
+      "name": "test_factions_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 244,
+      "seconds": 1.6
+    },
+    {
+      "name": "test_feature_lock_release_surface_133",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 17.8
+    },
+    {
+      "name": "test_field_map",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 24,
+      "seconds": 10.0
+    },
+    {
+      "name": "test_fire_access",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 9.0
+    },
+    {
+      "name": "test_first_minutes_dev69",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 21.4
+    },
+    {
+      "name": "test_fog_marauders_dev70",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 11,
+      "seconds": 14.0
+    },
+    {
+      "name": "test_fractures_dev67",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 46,
+      "seconds": 50.5
+    },
+    {
+      "name": "test_freeplay_handoff_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 11,
+      "seconds": 1.3
+    },
+    {
+      "name": "test_freeplay_handoff_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 13,
+      "seconds": 11.5
+    },
+    {
+      "name": "test_full_playthrough_beta_baseline_134",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 196,
+      "seconds": 26.2
+    },
+    {
+      "name": "test_full_playthrough_beta_strained_134",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 197,
+      "seconds": 20.9
+    },
+    {
+      "name": "test_full_playthrough_beta_unsupported_134",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 197,
+      "seconds": 21.0
+    },
+    {
+      "name": "test_high_risk_farming_soak_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 440,
+      "seconds": 8.4
+    },
+    {
+      "name": "test_high_risk_locations",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 382,
+      "seconds": 12.9
+    },
+    {
+      "name": "test_high_risk_locations_ii_integration",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 170,
+      "seconds": 8.4
+    },
+    {
+      "name": "test_high_risk_locations_ii_skeleton",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 26,
+      "seconds": 0.8
+    },
+    {
+      "name": "test_high_risk_mechanics_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 92,
+      "seconds": 8.1
+    },
+    {
+      "name": "test_high_risk_mechanics_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 17,
+      "seconds": 11.7
+    },
+    {
+      "name": "test_high_risk_reception_model",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 10,
+      "seconds": 8.2
+    },
+    {
+      "name": "test_high_risk_storytelling_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 220,
+      "seconds": 0.8
+    },
+    {
+      "name": "test_high_risk_storytelling_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 12,
+      "seconds": 9.4
+    },
+    {
+      "name": "test_high_risk_storytelling_save_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 5,
+      "seconds": 14.9
+    },
+    {
+      "name": "test_high_risk_visual_closure_130",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 494,
+      "seconds": 7.5
+    },
+    {
+      "name": "test_high_risk_visual_multifloor",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 130,
+      "seconds": 8.1
+    },
+    {
+      "name": "test_home_preparation_finalization",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 53,
+      "seconds": 7.8
+    },
+    {
+      "name": "test_home_supplies",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 42,
+      "seconds": 8.2
+    },
+    {
+      "name": "test_idle_animation_polish_127",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 54,
+      "seconds": 7.4
+    },
+    {
+      "name": "test_idle_animation_save_boundary_127",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 4,
+      "seconds": 11.1
+    },
+    {
+      "name": "test_infected_combat_sfx_129",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 44,
+      "seconds": 8.2
+    },
+    {
+      "name": "test_infected_navigation",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 17,
+      "seconds": 69.4
+    },
+    {
+      "name": "test_infected_variety_carrier",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 73,
+      "seconds": 7.9
+    },
+    {
+      "name": "test_infected_variety_screamer",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 49,
+      "seconds": 7.4
+    },
+    {
+      "name": "test_infected_variety_spitter",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 71,
+      "seconds": 7.5
+    },
+    {
+      "name": "test_input_drag_1381",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 13.0
+    },
+    {
+      "name": "test_inventory_art_contract",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 201,
+      "seconds": 7.4
+    },
+    {
+      "name": "test_inventory_detail_readability_128",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 24,
+      "seconds": 10.3
+    },
+    {
+      "name": "test_load_bearing_rig",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 31,
+      "seconds": 7.5
+    },
+    {
+      "name": "test_locomotion_save_boundary_127",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 6,
+      "seconds": 10.9
+    },
+    {
+      "name": "test_locomotion_transition_sync_127",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 684,
+      "seconds": 7.9
+    },
+    {
+      "name": "test_long_session_chunk_churn_131",
+      "passed": false,
+      "exit": 1,
+      "errors": 2,
+      "warnings": 0,
+      "failures": 2,
+      "checks": 201,
+      "seconds": 31.1
+    },
+    {
+      "name": "test_long_session_entity_cleanup_131",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 170,
+      "seconds": 11.5
+    },
+    {
+      "name": "test_long_session_save_stress_131",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 50,
+      "seconds": 11.0
+    },
+    {
+      "name": "test_long_term_gear_progression",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 34,
+      "seconds": 7.8
+    },
+    {
+      "name": "test_loot_rarity_risk",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 946,
+      "seconds": 8.2
+    },
+    {
+      "name": "test_marauder_base_dev65",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 446,
+      "seconds": 60.8
+    },
+    {
+      "name": "test_marauder_memory_dev66",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 38,
+      "seconds": 18.5
+    },
+    {
+      "name": "test_marauders_dev63",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 161,
+      "seconds": 34.0
+    },
+    {
+      "name": "test_minor_poi_dressing_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 158,
+      "seconds": 0.7
+    },
+    {
+      "name": "test_minor_poi_dressing_runtime_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 48,
+      "seconds": 8.3
+    },
+    {
+      "name": "test_minor_poi_dressing_save_runtime_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 14.8
+    },
+    {
+      "name": "test_mixed_long_session_closure_131",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 82,
+      "seconds": 37.8
+    },
+    {
+      "name": "test_multi_route_economy_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 23,
+      "seconds": 1.5
+    },
+    {
+      "name": "test_multi_route_economy_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 14.0
+    },
+    {
+      "name": "test_multi_route_economy_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 15.7
+    },
+    {
+      "name": "test_multi_route_economy_soak_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 29419,
+      "seconds": 100.3
+    },
+    {
+      "name": "test_named_npc_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 14,
+      "seconds": 11.1
+    },
+    {
+      "name": "test_named_npc_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 8,
+      "seconds": 11.1
+    },
+    {
+      "name": "test_named_npc_state_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 105,
+      "seconds": 1.4
+    },
+    {
+      "name": "test_personal_contract_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 17,
+      "seconds": 17.7
+    },
+    {
+      "name": "test_personal_contract_soak_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 31,
+      "seconds": 11.0
+    },
+    {
+      "name": "test_personal_contract_ui_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 23,
+      "seconds": 10.9
+    },
+    {
+      "name": "test_personal_contracts_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 136,
+      "seconds": 2.3
+    },
+    {
+      "name": "test_poi_storytelling_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 197,
+      "seconds": 0.7
+    },
+    {
+      "name": "test_poi_storytelling_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 48,
+      "seconds": 8.7
+    },
+    {
+      "name": "test_poi_storytelling_save_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 5,
+      "seconds": 16.5
+    },
+    {
+      "name": "test_portable_bedroll",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 23,
+      "seconds": 9.4
+    },
+    {
+      "name": "test_quickbar_loadout",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 33,
+      "seconds": 6.8
+    },
+    {
+      "name": "test_region_map_action_strip_128",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 12,
+      "seconds": 11.5
+    },
+    {
+      "name": "test_regional_consequence_ending_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 11,
+      "seconds": 1.1
+    },
+    {
+      "name": "test_regional_consequence_production_save_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 16.1
+    },
+    {
+      "name": "test_regional_consequence_runtime_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 8.6
+    },
+    {
+      "name": "test_regional_consequence_save_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 8,
+      "seconds": 1.2
+    },
+    {
+      "name": "test_regional_endgame_closure_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 1.2
+    },
+    {
+      "name": "test_regional_endgame_lifecycle_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 1.2
+    },
+    {
+      "name": "test_regional_endgame_runtime_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 9.5
+    },
+    {
+      "name": "test_regional_endgame_save_runtime_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 1.1
+    },
+    {
+      "name": "test_regional_endgame_soak_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 42,
+      "seconds": 1.5
+    },
+    {
+      "name": "test_regional_stability_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 20,
+      "seconds": 1.3
+    },
+    {
+      "name": "test_regional_stability_runtime_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 3,
+      "seconds": 8.2
+    },
+    {
+      "name": "test_regional_stability_save_runtime_126",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 4,
+      "seconds": 1.1
+    },
+    {
+      "name": "test_release_candidate_balance_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 8107,
+      "seconds": 16.5
+    },
+    {
+      "name": "test_release_candidate_save_migration_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 15,
+      "seconds": 16.2
+    },
+    {
+      "name": "test_rest",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 38,
+      "seconds": 9.9
+    },
+    {
+      "name": "test_reusable_water_containers",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 39,
+      "seconds": 8.3
+    },
+    {
+      "name": "test_sandbox_route_consequences_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 87,
+      "seconds": 1.5
+    },
+    {
+      "name": "test_sandbox_route_consequences_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 36,
+      "seconds": 12.2
+    },
+    {
+      "name": "test_sandbox_route_consequences_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 14,
+      "seconds": 17.6
+    },
+    {
+      "name": "test_sandbox_route_identity_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 54,
+      "seconds": 8.0
+    },
+    {
+      "name": "test_sandbox_route_identity_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 13,
+      "seconds": 12.8
+    },
+    {
+      "name": "test_sandbox_routes_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 80,
+      "seconds": 2.5
+    },
+    {
+      "name": "test_sandbox_routes_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 12.7
+    },
+    {
+      "name": "test_save_current_schema_matrix_132",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 42,
+      "seconds": 18.8
+    },
+    {
+      "name": "test_save_malformed_matrix_132",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 39,
+      "seconds": 12.1
+    },
+    {
+      "name": "test_save_migration_boundaries_132",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 42,
+      "seconds": 46.2
+    },
+    {
+      "name": "test_save_recovery",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 18,
+      "seconds": 16.6
+    },
+    {
+      "name": "test_settings_dev69",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 293,
+      "seconds": 10.2
+    },
+    {
+      "name": "test_settlement_crisis_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 31,
+      "seconds": 1.8
+    },
+    {
+      "name": "test_settlement_crisis_ui_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 8,
+      "seconds": 10.2
+    },
+    {
+      "name": "test_settlement_layout_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 674,
+      "seconds": 16.3
+    },
+    {
+      "name": "test_shelter_assault_dynamics",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 27,
+      "seconds": 9.9
+    },
+    {
+      "name": "test_shelter_assault_polish",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 21,
+      "seconds": 8.5
+    },
+    {
+      "name": "test_shelter_defense_breach",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 27,
+      "seconds": 9.0
+    },
+    {
+      "name": "test_shelter_defense_status",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 20,
+      "seconds": 7.1
+    },
+    {
+      "name": "test_shelter_integrity",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 22,
+      "seconds": 8.4
+    },
+    {
+      "name": "test_shelter_pressure",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 35,
+      "seconds": 9.9
+    },
+    {
+      "name": "test_shelter_visual_damage",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 22,
+      "seconds": 9.1
+    },
+    {
+      "name": "test_soundscape_dev67",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 32,
+      "seconds": 18.9
+    },
+    {
+      "name": "test_spawn_safety",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 905,
+      "seconds": 21.4
+    },
+    {
+      "name": "test_stable_release_gate_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 23,
+      "seconds": 12.3
+    },
+    {
+      "name": "test_story_ether_dev68",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 93,
+      "seconds": 20.6
+    },
+    {
+      "name": "test_story_thread_echoes_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 122,
+      "seconds": 0.5
+    },
+    {
+      "name": "test_story_thread_echoes_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 5,
+      "seconds": 8.6
+    },
+    {
+      "name": "test_story_thread_echoes_save_runtime_125",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 5,
+      "seconds": 17.2
+    },
+    {
+      "name": "test_strategic_projects_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 153,
+      "seconds": 1.3
+    },
+    {
+      "name": "test_strategic_projects_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 75,
+      "seconds": 11.3
+    },
+    {
+      "name": "test_strategic_projects_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 23,
+      "seconds": 20.8
+    },
+    {
+      "name": "test_strategic_projects_soak_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 178,
+      "seconds": 1.9
+    },
+    {
+      "name": "test_supply_event_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 15,
+      "seconds": 9.9
+    },
+    {
+      "name": "test_supply_event_save_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 8,
+      "seconds": 10.3
+    },
+    {
+      "name": "test_supply_events_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 35,
+      "seconds": 1.2
+    },
+    {
+      "name": "test_survival_gear_integration",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 9.2
+    },
+    {
+      "name": "test_target_farming_layout",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 1338,
+      "seconds": 19.6
+    },
+    {
+      "name": "test_trader_ui_layout_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 13,
+      "seconds": 9.9
+    },
+    {
+      "name": "test_trader_ui_runtime_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 9.7
+    },
+    {
+      "name": "test_trading_economy_122",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 527,
+      "seconds": 2.1
+    },
+    {
+      "name": "test_ui_audio_feedback_129",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 35,
+      "seconds": 8.9
+    },
+    {
+      "name": "test_ui_motion_1381",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 436,
+      "seconds": 10.4
+    },
+    {
+      "name": "test_ui_ux_final_closure_128",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 145,
+      "seconds": 7.4
+    },
+    {
+      "name": "test_vector_endgame",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 444,
+      "seconds": 11.4
+    },
+    {
+      "name": "test_vertical_slice_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 55,
+      "seconds": 1.8
+    },
+    {
+      "name": "test_vertical_slice_clinical_polish_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 23,
+      "seconds": 1.2
+    },
+    {
+      "name": "test_vertical_slice_clinical_polish_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 16.3
+    },
+    {
+      "name": "test_vertical_slice_postrun_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 31,
+      "seconds": 1.5
+    },
+    {
+      "name": "test_vertical_slice_postrun_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 22,
+      "seconds": 11.4
+    },
+    {
+      "name": "test_vertical_slice_postrun_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 9.7
+    },
+    {
+      "name": "test_vertical_slice_recovery_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 39,
+      "seconds": 1.8
+    },
+    {
+      "name": "test_vertical_slice_recovery_runtime_123",
+      "passed": false,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 1,
+      "failures": 0,
+      "checks": 36,
+      "seconds": 18.5
+    },
+    {
+      "name": "test_vertical_slice_recovery_save_runtime_123",
+      "passed": false,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 1,
+      "failures": 0,
+      "checks": 17,
+      "seconds": 18.6
+    },
+    {
+      "name": "test_vertical_slice_runtime_123",
+      "passed": false,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 1,
+      "failures": 0,
+      "checks": 28,
+      "seconds": 11.8
+    },
+    {
+      "name": "test_vertical_slice_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 22,
+      "seconds": 17.0
+    },
+    {
+      "name": "test_weapon_action_cycles",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 48,
+      "seconds": 9.7
+    },
+    {
+      "name": "test_weapon_audio",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 113,
+      "seconds": 7.6
+    },
+    {
+      "name": "test_weapon_instances",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 28,
+      "seconds": 7.7
+    },
+    {
+      "name": "test_world_audio_save_boundary_129",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 8.3
+    },
+    {
+      "name": "test_world_chronicle_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 14,
+      "seconds": 1.5
+    },
+    {
+      "name": "test_world_chronicle_save_runtime_123",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7,
+      "seconds": 9.9
+    },
+    {
+      "name": "test_world_content_poi",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 286,
+      "seconds": 7.5
+    },
+    {
+      "name": "test_world_content_variety_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 664,
+      "seconds": 0.5
+    },
+    {
+      "name": "test_world_content_variety_runtime_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 8.7
+    },
+    {
+      "name": "test_world_content_variety_save_runtime_124",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 9,
+      "seconds": 13.7
+    },
+    {
+      "name": "test_world_events_encounters",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 1810,
+      "seconds": 8.2
+    },
+    {
+      "name": "test_world_geometry_final_audit_130",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 7234,
+      "seconds": 27.8
+    },
+    {
+      "name": "test_world_interaction_sfx_129",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 68,
+      "seconds": 7.2
+    },
+    {
+      "name": "test_world_persistence",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 16,
+      "seconds": 7.1
+    },
+    {
+      "name": "test_world_placement",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 12,
+      "seconds": 7.0
+    },
+    {
+      "name": "test_world_scenes_dev71",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 275,
+      "seconds": 27.3
+    },
+    {
+      "name": "test_world_survival_polish",
+      "passed": true,
+      "exit": 0,
+      "errors": 0,
+      "warnings": 0,
+      "failures": 0,
+      "checks": 114,
+      "seconds": 10.4
+    }
+  ]
+}

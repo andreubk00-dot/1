@@ -64,6 +64,9 @@ func run() -> void:
     check(not bool(loaded_rec.get("recovery_pending",true)),"dev8 migration invented regroup state")
     check(not bool(loaded_rec.get("recovery_aid_issued",true)),"dev8 migration invented consumed aid")
     legacy.queue_free(); await process_frame
+    await create_timer(0.5).timeout
+    await physics_frame
+    await process_frame
 
     print("VERTICAL SLICE RECOVERY SAVE 1.23-dev11: ",checks," checks, ",failures," failures")
-    quit(1 if failures else 0)
+    preload("res://tests/qa_teardown_1381.gd").finish(self,1 if failures else 0)
