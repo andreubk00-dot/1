@@ -268,7 +268,8 @@ func run():
     game._update_hud()
     await process_frame
     var fb = game.hud_world_root.get_node("SurvivalFeedback").get_global_rect()
-    check(abs((fb.position.x + fb.size.x * 0.5) - 320.0) < 1.0, "the feedback line drifted off centre: " + str(fb))
+    # dev75: its centre is the middle of the gap between the side panels
+    check(abs((fb.position.x + fb.size.x * 0.5) - game.FEEDBACK_CENTER_X) < 1.0, "the feedback line drifted off centre: " + str(fb))
     game._apply_ui_scale(1.0)
 
     menu.close()
