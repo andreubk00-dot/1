@@ -14102,6 +14102,9 @@ func _create_hud():
     canvas.add_child(debug_label)
 
 
+const FEEDBACK_MAX_W = 280.0
+const FEEDBACK_CENTER_X = 334.0
+
 func _update_hud():
     if hud == null or hud_world_root == null:
         return
@@ -14128,10 +14131,13 @@ func _update_hud():
             # a compact card sized to its message, high above the player
             var font = hud_feedback_label.get_theme_font("font")
             var w = font.get_string_size(survival_feedback,HORIZONTAL_ALIGNMENT_LEFT,-1,6).x if font != null else 200.0
-            var width = clamp(w + 24.0,120.0,300.0)
-            var lines = 1 if w + 24.0 <= 300.0 else 2
-            hud_feedback_panel.size = Vector2(width,16.0 if lines == 1 else 24.0)
-            hud_feedback_panel.position = Vector2(round(320.0 - width * 0.5),66)
+            # dev75: it sits in the gap between the vitals (to x 188) and the
+            # weather card (from x 480) - a 300 px card centred on the screen
+            # ran over both; a long message wraps instead
+            var width = clamp(w + 24.0,120.0,FEEDBACK_MAX_W)
+            var lines = int(ceil((w + 24.0) / FEEDBACK_MAX_W))
+            hud_feedback_panel.size = Vector2(width,8.0 + 8.0 * clamp(lines,1,3))
+            hud_feedback_panel.position = Vector2(round(FEEDBACK_CENTER_X - width * 0.5),66)
             hud_feedback_label.position = Vector2(8,1)
             hud_feedback_label.size = hud_feedback_panel.size - Vector2(16,2)
             _hud_set_label_font_size(hud_feedback_label,6)
@@ -25506,7 +25512,7 @@ func _build_dog_yard(chunk,coord:Vector2i) -> void:
     if dog_state.get("sites",{}).has(k) or _chunk_has_player_base(coord):
         return
     var yard = DogCatalog.YARD.duplicate(true)
-    var center = _world_event_anchor(chunk,yard,coord)
+    var center = _dog_yard_spot(chunk,coord,yard["footprint"])
     if center.x < -9000.0:
         yard["placement"] = "road"
         center = _world_event_anchor(chunk,yard,coord)
@@ -25521,11 +25527,17 @@ func _build_dog_yard(chunk,coord:Vector2i) -> void:
     root.set_meta("world_event_root",true)
     root.set_meta("world_event_id","dog_yard")
     root.set_meta("world_event_label",str(yard["label"]))
-    root.set_meta("world_event_footprint",yard["footprint"])
+    # trees keep further off than the yard itself: a crown grows up from its
+    # trunk and would hide a dog lying below it
+    root.set_meta("world_event_footprint",Vector2(yard["footprint"].x + 40.0,yard["footprint"].y + 110.0))
     root.set_meta("dog_yard",k)
     root.add_to_group("world_events")
     chunk.add_child(root)
-    var kennel = _settlement_piece(chunk,{"kind":"dog_kennel","pos":center + Vector2(-14,-12),"solid":Vector2(22,10),"scale":0.55})
+    # the kennel needs a spot clear of door swings: one round the yard
+    var kennel = null
+    var koff = _kennel_offset(chunk,center)
+    if koff != Vector2.INF:
+        kennel = _settlement_piece(chunk,{"kind":"dog_kennel","pos":center + koff,"solid":Vector2(22,10),"scale":0.55})
     if kennel != null:
         kennel.set_meta("world_scene_piece",true)
     _event_prop(root,"cardboard_boxes",Vector2(26,-16),0.34,3)
@@ -25534,9 +25546,49 @@ func _build_dog_yard(chunk,coord:Vector2i) -> void:
         "hp":DogCatalog.MAX_HP * 0.75,"food":20.0,"water":40.0})
     # on a short chain from the kennel's corner
     var stake = (kennel.position if kennel != null else center + Vector2(-14,-12)) + Vector2(8,4)
-    d.position = stake + Vector2(18,16)
+    d.position = stake + Vector2(20,9)
     d.set_meta("stake",chunk.to_global(stake) if chunk is Node2D else stake)
     chunk.add_child(d)
+
+const KENNEL_OFFSETS = [Vector2(-14,-12),Vector2(14,-12),Vector2(-18,6),Vector2(18,6),Vector2(0,-18),Vector2(-24,-4),Vector2(-14,10),Vector2(14,10)]
+
+func _kennel_offset(chunk,center:Vector2) -> Vector2:
+    for off in KENNEL_OFFSETS:
+        if _settlement_spot_clear(chunk,center + off,14.0):
+            return off
+    return Vector2.INF
+
+func _dog_yard_spot(chunk,coord:Vector2i,size:Vector2) -> Vector2:
+    # dev75: a yard, not a crossroads - the scenes' four plot corners are
+    # often taken by houses, so look over the whole sector for open ground
+    # off the road and the pavement, clear of houses, and pick one by the
+    # sector's own hash (the same yard every time)
+    var spots = []
+    for gx in range(3,21):
+        for gy in range(3,21):
+            var pos = Vector2(gx * 32.0 + 16.0,gy * 32.0 + 16.0)
+            var rect = Rect2(pos - size * 0.5,size)
+            if rect.position.x < 40.0 or rect.position.y < 40.0 or rect.end.x > CHUNK_SIZE - 40.0 or rect.end.y > CHUNK_SIZE - 40.0:
+                continue
+            if _point_on_road_or_sidewalk(pos) or _point_on_road_or_sidewalk(rect.position) or _point_on_road_or_sidewalk(rect.end) \
+                    or _point_on_road_or_sidewalk(Vector2(rect.position.x,rect.end.y)) or _point_on_road_or_sidewalk(Vector2(rect.end.x,rect.position.y)):
+                continue
+            if _world_event_intersects(chunk,rect) or _kennel_offset(chunk,pos) == Vector2.INF:
+                continue
+            spots.append(pos)
+    if spots.is_empty():
+        # a built-up block: then the verge by a house, never the crossroads
+        var verge = [(TREE_ROAD_MIN + DIRT_TRACK_MIN) * 0.5,(DIRT_TRACK_MAX + TREE_ROAD_MAX) * 0.5]
+        var small = Vector2(36,36)
+        for v in verge:
+            for t in range(80,240,20) + range(540,700,20):
+                for pos in [Vector2(v,float(t)),Vector2(float(t),v)]:
+                    # never in front of a door: the kennel must find room
+                    if not _world_event_intersects(chunk,Rect2(pos - small * 0.5,small)) and _kennel_offset(chunk,pos) != Vector2.INF:
+                        spots.append(pos)
+    if spots.is_empty():
+        return Vector2(-9999,-9999)
+    return spots[SceneCatalog.mix(coord,7309) % spots.size()]
 
 func _adopt_dog(node) -> void:
     if not is_instance_valid(node):

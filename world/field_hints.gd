@@ -116,6 +116,7 @@ func _show(entry: Dictionary) -> void:
     _text.text = InputBindings.fill(str(entry["text"]))
     (_panel.get_theme_stylebox("panel") as StyleBoxFlat).border_color = RED if entry["warn"] else GOLD
     _panel.set_meta("warn", entry["warn"])
+    _panel.set_meta("id", entry["id"])
     _panel.reset_size()
     _panel.position = Vector2(round(320.0 - _panel.size.x * 0.5), 6)
     _panel.visible = true
@@ -128,6 +129,16 @@ func update(delta: float) -> void:
     if game == null or game.player == null:
         return
     _age += delta
+    # dev75: a card never sits over the map, the inventory or a menu - it waits
+    # underneath and comes back after; and a warning whose danger has passed
+    # (bandaged, drunk, a new survivor after a death) goes at once
+    if _panel != null and _panel.visible and _menu_open():
+        _panel.modulate.a = 0.0
+        return
+    if _panel != null and _panel.visible and bool(_panel.get_meta("warn", false)) and not _danger(str(_panel.get_meta("id", ""))):
+        _time_left = min(_time_left, 0.35)
+    while not _queue.is_empty() and bool(_queue[0]["warn"]) and not _danger(str(_queue[0]["id"])):
+        _queue.pop_front()
     if _panel != null and _panel.visible:
         _time_left -= delta
         var a = clamp(min(_time_left, HINT_TIME - _time_left + 0.35) / 0.35, 0.0, 1.0)
@@ -149,7 +160,28 @@ func _menu_open() -> bool:
     return bool(game.inventory_open) or bool(game.region_map_open) or bool(game.trader_open) or get_tree().paused
 
 
+func _danger(id: String) -> bool:
+    if game.player_death_time > 0.0:
+        return false
+    match id:
+        "thirst":
+            return float(game.thirst) < 15.0
+        "hunger":
+            return float(game.hunger) < 10.0
+        "health":
+            return float(game.health) < 25.0
+        "bleeding":
+            return bool(game.bleeding)
+        "fracture":
+            return game.has_method("_broken_limb") and game._broken_limb() != ""
+        "cold":
+            return float(game.body_temperature) < 35.2
+    return true
+
+
 func _check_warnings() -> void:
+    if game.player_death_time > 0.0:
+        return
     if float(game.thirst) < 15.0:
         warn("thirst", "ОБЕЗВОЖИВАНИЕ", "Вы умираете от жажды. Выпейте воду немедленно ({inventory} → ПКМ по воде).")
     if float(game.hunger) < 10.0:
