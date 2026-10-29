@@ -4217,6 +4217,7 @@ func _process(delta):
         _update_player_death(delta)
         return
     _update_death_fade_in(delta)
+    _update_npc_sprites(delta)
     if field_hints != null:
         field_hints.update(delta)
     _update_lock_work(delta)
@@ -16310,20 +16311,120 @@ func _build_tall_facade(facade,sign_text,size,building_id,door_x,fh,profile = ""
     _rect(Vector2(w*0.5 - 5.0,-fh*0.5),Vector2(10.0,fh),Color(0.0,0.0,0.0,0.22),facade)
     _rect(Vector2(0,1.5),Vector2(w,3.0),Color(0.0,0.0,0.0,0.30),facade)
 
-    # sign board on the cornice above the entrance
-    var sign_w = min(w * 0.5,104.0)
-    var sign_x = clamp(door_x,-w*0.5 + sign_w*0.5 + 4.0,w*0.5 - sign_w*0.5 - 4.0)
-    var sign_bg = ColorRect.new()
-    sign_bg.position = Vector2(sign_x - sign_w*0.5,-fh + 0.0)
-    sign_bg.size = Vector2(sign_w,11)
-    sign_bg.color = Color("171b1b")
-    facade.add_child(sign_bg)
-    var sign = Label.new()
-    sign.position = sign_bg.position + Vector2(5,-2)
-    sign.text = sign_text
-    sign.add_theme_font_size_override("font_size",7)
-    sign.modulate = Color("c9c3a8")
-    facade.add_child(sign)
+    _facade_signage(facade,sign_text,w,fh,door_x,building_id)
+
+const ADDRESS_STREETS = ["МИРА","ЛЕНИНА","САДОВАЯ","ШКОЛЬНАЯ","ЗАРЕЧНАЯ","СОВЕТСКАЯ","ГАГАРИНА","ЛЕСНАЯ","ПОБЕДЫ","ОКТЯБРЬСКАЯ","МОЛОДЁЖНАЯ","ПОЧТОВАЯ"]
+
+# What a building wears on its cornice: a shop has its board, a block of flats
+# only the blue enamel address plate on the corner, a store or a works the name
+# stencilled on the wall, a dacha a hand-painted number, a shed nothing.
+func _facade_sign_kind(t:String) -> String:
+    for k in ["ЛЕСНИК","КОРДОН","СТОРОЖК","ДОМ ЕГЕРЯ","БАНЯ","СНАСТИ"]:
+        if t.begins_with(k):
+            return "wood"
+    for k in ["ДОМ","ЖИЛ","ПОДЪЕЗД"]:
+        if t.begins_with(k):
+            return "home"
+    if t.begins_with("ДАЧ"):
+        return "dacha"
+    for k in ["САРАЙ","ХОЗБЛОК","ДРОВЯНИК","НАВЕС","ТЕПЛИЦ","БУДКА"]:
+        if t.begins_with(k):
+            return "none"
+    for k in ["СКЛАД","ГАРАЖ","ЦЕХ","ПЧ","РЕМЗОНА","РЕМОНТНЫЙ","НАСОСНАЯ","КОМПРЕССОР","ЩИТОВАЯ","ЭЛЕКТРОЩИТ","ВЕСОВАЯ","АВТОПАРК","АВТОХОЗ","ЗИП","ЭНЕРГОЦЕХ","ВЕНТУЗЕЛ","ЛОКОМОТИВ","ХОЗСКЛАД","ХОЛОДИЛЬН","ГРУЗОВОЙ","МАТЕРИАЛЬН","ПУТЕВОЙ","ДЕПО","МАСТЕРСКАЯ","ТРАНСПОРТН"]:
+        if t.begins_with(k):
+            return "stencil"
+    return "board"
+
+func _facade_board_colors(t:String) -> Array:
+    # [board, trim, text]
+    if t.find("АПТЕК") >= 0 or t.find("ПОЛИКЛИН") >= 0 or t.find("БОЛЬНИЦ") >= 0:
+        return [Color("24493a"),Color("4f8a6c"),Color("e6efe4")]
+    if t.find("ПРОДУКТ") >= 0 or t.find("МАГАЗ") >= 0:
+        return [Color("5a2621"),Color("9a4a3a"),Color("eedfc4")]
+    if t.find("КАФЕ") >= 0 or t.find("СТОЛОВ") >= 0 or t.find("ПРАЧЕЧ") >= 0:
+        return [Color("4d3420"),Color("a0703c"),Color("f0dfb8")]
+    if t.find("ПОЛИЦ") >= 0 or t.find("СВЯЗ") >= 0 or t.find("ПОЧТ") >= 0:
+        return [Color("223a58"),Color("4f6f96"),Color("e4ebf2")]
+    if t.find("СЕРВИС") >= 0 or t.find("ШИНО") >= 0 or t.find("ЗАПЧАСТ") >= 0:
+        return [Color("2c2f31"),Color("b08a2e"),Color("e9d9a6")]
+    return [Color("181c1c"),Color("3c4442"),Color("c9c3a8")]
+
+func _facade_label(facade,text:String,pos:Vector2,font_size:int,col:Color):
+    var l = Label.new()
+    l.text = text
+    l.position = pos
+    l.add_theme_font_size_override("font_size",font_size)
+    l.modulate = col
+    facade.add_child(l)
+    return l
+
+func _facade_text_width(text:String,font_size:int) -> float:
+    var font = ThemeDB.fallback_font
+    if font == null:
+        return float(text.length() * font_size) * 0.62
+    return font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size).x
+
+func _facade_signage(facade,sign_text:String,w:float,fh:float,door_x:float,building_id):
+    var t = str(sign_text)
+    var kind = _facade_sign_kind(t)
+    # one address per house, wherever in the world it stands
+    var where = facade.position
+    if facade.get_parent() is Node2D:
+        where += facade.get_parent().position
+    var h = abs(hash(str(Vector2i(where.round())) + ":" + str(building_id)))
+    match kind:
+        "none":
+            return
+        "home":
+            var num = str(1 + h % 47)
+            var hash_pos = t.find("№")
+            if hash_pos >= 0:
+                num = t.substr(hash_pos + 1).strip_edges()
+            var text = "%s, %s" % [ADDRESS_STREETS[(h / 47) % ADDRESS_STREETS.size()],num]
+            var pw = _facade_text_width(text,5) + 6.0
+            var px = -w * 0.5 + 5.0
+            _rect(Vector2(px + pw * 0.5,-fh + 5.5),Vector2(pw + 2.0,10.0),Color(0.02,0.03,0.04,0.55),facade)
+            _rect(Vector2(px + pw * 0.5,-fh + 5.0),Vector2(pw,9.0),Color("2b4c78"),facade)
+            _rect(Vector2(px + pw * 0.5,-fh + 5.0),Vector2(pw - 2.0,7.0),Color("33598a"),facade)
+            _facade_label(facade,text,Vector2(px + 3.0,-fh - 0.5),5,Color("eef2f4"))
+            if t.begins_with("ПОДЪЕЗД"):
+                # the stairwell plate over the door: which flats it serves
+                var first = 1 + (h % 6) * 18
+                var flats = "%d-%d" % [first,first + 17]
+                var fw = _facade_text_width(flats,5) + 4.0
+                _rect(Vector2(door_x,-fh + 5.0),Vector2(fw,9.0),Color("2b4c78"),facade)
+                _facade_label(facade,flats,Vector2(door_x - fw * 0.5 + 2.0,-fh - 0.5),5,Color("eef2f4"))
+        "dacha":
+            var num = str(1 + h % 40)
+            var hash_pos = t.find("№")
+            if hash_pos >= 0:
+                num = t.substr(hash_pos + 1).strip_edges()
+            var text = "№ " + num
+            var pw = _facade_text_width(text,6) + 6.0
+            var px = clamp(door_x + 16.0,-w * 0.5 + 4.0,w * 0.5 - pw - 4.0)
+            _rect(Vector2(px + pw * 0.5,-fh + 6.0),Vector2(pw,10.0),Color("5b3f26"),facade)
+            _rect(Vector2(px + pw * 0.5,-fh + 2.0),Vector2(pw,1.0),Color("7d5a37"),facade)
+            _facade_label(facade,text,Vector2(px + 3.0,-fh - 2.0),6,Color("e8d9b4"))
+        "stencil":
+            # painted straight on the wall by hand, half worn off
+            var tw = _facade_text_width(t,7)
+            var sx = clamp(door_x - tw * 0.5,-w * 0.5 + 6.0,w * 0.5 - tw - 6.0)
+            var a = 0.62 + float(h % 20) * 0.01
+            _facade_label(facade,t,Vector2(sx,-fh - 2.0),7,Color(0.86,0.84,0.77,a))
+        _:
+            var cols = _facade_board_colors(t)
+            var fs = 7 if t.length() <= 16 else 6
+            var sign_w = min(max(w * 0.5,_facade_text_width(t,fs) + 14.0),min(w - 8.0,150.0))
+            var sign_x = clamp(door_x,-w*0.5 + sign_w*0.5 + 4.0,w*0.5 - sign_w*0.5 - 4.0)
+            var top = -fh
+            if kind == "wood":
+                cols = [Color("4a3424"),Color("6e4f33"),Color("e5d4ae")]
+            _rect(Vector2(sign_x,top + 6.5),Vector2(sign_w,11.0),Color(0.0,0.0,0.0,0.45),facade)
+            _rect(Vector2(sign_x,top + 5.5),Vector2(sign_w,11.0),cols[0],facade)
+            _rect(Vector2(sign_x,top + 0.5),Vector2(sign_w,1.0),cols[1],facade)
+            _rect(Vector2(sign_x,top + 10.5),Vector2(sign_w,1.0),cols[1].darkened(0.35),facade)
+            var tw = _facade_text_width(t,fs)
+            _facade_label(facade,t,Vector2(sign_x - tw * 0.5,top - 2.0 + (0.0 if fs == 7 else 0.5)),fs,cols[2])
 
 const FACADE_DETAIL_KINDS = ["drainpipe","ivy","grime","ac_unit","wires","graffiti_a","graffiti_b","wall_lamp"]
 const VEGETATION_KINDS = ["bush_orange","bush_yellow","bush_olive","weeds","tall_grass","leaf_pile","fallen_branch","bush_bare"]
@@ -17423,8 +17524,11 @@ func _place_puddles(chunk,coord):
     var spots = []
     # in front of lit entrances / under lamps, where the reflection falls
     for src in sources:
-        # street lamps always get one: the wet pool under a lamp is the point
+        # about half the street lamps keep a wet pool under the head (the night
+        # reflection); one at the foot of every post read as a pattern by day
         if src["light"].is_in_group("street_lights"):
+            if rng.randf() >= 0.45:
+                continue
             # right under the head: the mirrored lamp lands on the water just
             # below the foot of the post, a little out toward the arm
             var side = signf(src["light"].position.x) if src["light"].position.x != 0.0 else 1.0
@@ -23379,16 +23483,17 @@ func _create_faction_npc(chunk,record:Dictionary):
     node.add_to_group("faction_npcs")
     chunk.add_child(node)
 
-    var faction_color = _faction_npc_color(str(record.get("faction_id","")))
-    _ellipse(Vector2(0,4),11.0,4.0,Color(0.01,0.012,0.012,0.34),node)
-    _rect(Vector2(0,-11),Vector2(13,22),faction_color,node)
-    _rect(Vector2(-5,-1),Vector2(5,13),faction_color.darkened(0.18),node)
-    _rect(Vector2(5,-1),Vector2(5,13),faction_color.darkened(0.18),node)
-    _ellipse(Vector2(0,-27),6.0,7.0,Color("b89a79"),node)
-    _rect(Vector2(0,-20),Vector2(15,3),faction_color.lightened(0.12),node)
+    _ellipse(Vector2(0,4),9.0,3.5,Color(0.01,0.012,0.012,0.30),node)
+    if not _attach_npc_sprite(node,npc_id):
+        var faction_color = _faction_npc_color(str(record.get("faction_id","")))
+        _rect(Vector2(0,-11),Vector2(13,22),faction_color,node)
+        _rect(Vector2(-5,-1),Vector2(5,13),faction_color.darkened(0.18),node)
+        _rect(Vector2(5,-1),Vector2(5,13),faction_color.darkened(0.18),node)
+        _ellipse(Vector2(0,-27),6.0,7.0,Color("b89a79"),node)
+        _rect(Vector2(0,-20),Vector2(15,3),faction_color.lightened(0.12),node)
 
     var name_label = Label.new()
-    name_label.position = Vector2(-48,-48)
+    name_label.position = Vector2(-48,-39)
     name_label.size = Vector2(96,13)
     name_label.text = str(record.get("name",npc_id)).to_upper()
     name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -23399,7 +23504,7 @@ func _create_faction_npc(chunk,record:Dictionary):
 
     var state_label = Label.new()
     state_label.name = "NpcStatusLabel"
-    state_label.position = Vector2(-34,-58)
+    state_label.position = Vector2(-34,-48)
     state_label.size = Vector2(68,10)
     state_label.text = "РАНЕН" if npc_status == "wounded" else ""
     state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -23411,7 +23516,7 @@ func _create_faction_npc(chunk,record:Dictionary):
 
     if trader_id != "" or not contract_board.is_empty():
         var role_label = Label.new()
-        role_label.position = Vector2(-30,-37)
+        role_label.position = Vector2(-30,-30)
         role_label.size = Vector2(60,11)
         if trader_id != "":
             role_label.text = "ТОРГОВЕЦ"
@@ -23425,6 +23530,80 @@ func _create_faction_npc(chunk,record:Dictionary):
         role_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         node.add_child(role_label)
     return node
+
+# dev78: the settlement people are drawn on the survivor's rig in their own
+# clothes (tools/survivor3d.py NPC_OUTFITS): they breathe, shift their weight
+# now and then, and turn to face a survivor who walks up to them.
+const NPC_SPRITE_DIR = "res://art/npcs/"
+const NPC_SPRITE_OFFSET = Vector2(0,-11)
+const NPC_FACE_RADIUS = 150.0
+const NPC_IDLE_FPS = 7.0
+# the second clip plays once at the end of a 14 s round: 12 frames at 7 fps
+const NPC_IDLE2_AT = 14.0 - 12.0 / NPC_IDLE_FPS
+
+func _npc_outfit_for(npc_id:String) -> String:
+    if ResourceLoader.exists(NPC_SPRITE_DIR + npc_id + "_Idle.png"):
+        return npc_id
+    return "resident_a" if abs(hash(npc_id)) % 2 == 0 else "resident_b"
+
+func _attach_npc_sprite(node,npc_id:String) -> bool:
+    var outfit = _npc_outfit_for(npc_id)
+    var path = NPC_SPRITE_DIR + outfit + "_Idle.png"
+    if not ResourceLoader.exists(path):
+        return false
+    var sprite = Sprite2D.new()
+    sprite.name = "NpcSprite"
+    sprite.texture = load(path)
+    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    sprite.region_enabled = true
+    sprite.scale = Vector2(SURVIVOR_SPRITE_SCALE,SURVIVOR_SPRITE_SCALE)
+    sprite.position = NPC_SPRITE_OFFSET
+    node.add_child(sprite)
+    var alt = NPC_SPRITE_DIR + outfit + "_Idle2.png"
+    node.set_meta("npc_idle",sprite.texture)
+    node.set_meta("npc_idle2",load(alt) if ResourceLoader.exists(alt) else sprite.texture)
+    var h = abs(hash(npc_id))
+    node.set_meta("npc_phase",float(h % 1000) * 0.001 * 12.0)
+    node.set_meta("npc_home_dir",2)
+    node.set_meta("npc_dir",2)
+    node.add_to_group("npc_sprites")
+    _set_npc_frame(node,sprite,0.0)
+    return true
+
+func _set_npc_frame(node,sprite,frame_pos:float):
+    var tex = sprite.texture
+    var n = max(1,int(tex.get_width() / SURVIVOR_CELL)) if tex != null else 12
+    var k = int(floor(frame_pos)) % n
+    sprite.region_rect = Rect2(k * SURVIVOR_CELL,int(node.get_meta("npc_dir",2)) * SURVIVOR_CELL,SURVIVOR_CELL,SURVIVOR_CELL)
+
+func _update_npc_sprites(delta:float):
+    var t = float(Time.get_ticks_msec()) * 0.001
+    for node in get_tree().get_nodes_in_group("npc_sprites"):
+        if not is_instance_valid(node):
+            continue
+        var sprite = node.get_node_or_null("NpcSprite")
+        if sprite == null:
+            continue
+        # face whoever comes close; otherwise look down the street again
+        var want = int(node.get_meta("npc_home_dir",2))
+        if player != null:
+            var to = player.global_position - node.global_position
+            if to.length() < NPC_FACE_RADIUS and to.length() > 4.0:
+                var cur = int(node.get_meta("npc_dir",2))
+                var a = fposmod(to.angle(),TAU) / (PI * 0.25)
+                # a little hysteresis so a survivor on a sector edge does not flicker it
+                if abs(fposmod(a - float(cur) + 4.0,8.0) - 4.0) > 0.62:
+                    want = int(round(a)) % 8
+                else:
+                    want = cur
+        node.set_meta("npc_dir",want)
+        # every so often the second breath clip (a weight shift, a look round)
+        var cycle = fposmod(t + float(node.get_meta("npc_phase",0.0)),14.0)
+        var second = cycle >= NPC_IDLE2_AT
+        var tex = node.get_meta("npc_idle2") if second else node.get_meta("npc_idle")
+        if sprite.texture != tex:
+            sprite.texture = tex
+        _set_npc_frame(node,sprite,(cycle - NPC_IDLE2_AT) * NPC_IDLE_FPS if second else cycle * NPC_IDLE_FPS)
 
 func _spawn_faction_npcs(chunk,poi_id:String,cell_offset:Vector2i):
     if not FactionSettlementCatalog.has(poi_id):
@@ -23567,8 +23746,9 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
     var poi_name = str(poi.get("short_name",poi.get("name","ОБЪЕКТ")))
     # settlements: the sector name sits on the street corner, not behind a facade
     var label_origin = Vector2(344,462) if safe_settlement or cell_data.has("settlement_style") else Vector2(292,272)
-    _create_world_label(chunk,label_origin,poi_name,8,Color("c4b77f"))
-    _create_world_label(chunk,label_origin + Vector2(0,14),role.to_upper(),6,Color("8f9686"))
+    if safe_settlement or cell_data.has("settlement_style"):
+        _create_world_label(chunk,label_origin,poi_name,8,Color("c4b77f"))
+        _create_world_label(chunk,label_origin + Vector2(0,14),role.to_upper(),6,Color("8f9686"))
     for access in cell_data.get("access_points",[]):
         var access_kind = str(access.get("kind","access"))
         var access_color = Color("82b894") if access_kind == "entry" else Color("c9a96a")
@@ -23627,6 +23807,9 @@ func _build_major_poi_chunk(chunk,coord,profile) -> bool:
             _create_fence(chunk,fence_data.get("pos",Vector2(384,80)),float(fence_data.get("length",120.0)),float(fence_data.get("rotation",0.0)))
     for lamp_pos in cell_data.get("lamps",[]):
         _create_lamp(chunk,lamp_pos)
+    # the site's plate goes up once its buildings stand, clear of their walls
+    if not (safe_settlement or cell_data.has("settlement_style")):
+        _create_name_sign(chunk,Vector2(262,262),poi_name,role.to_upper(),"site")
     for bench_pos in cell_data.get("workbenches",[]):
         _create_workbench(chunk,bench_pos)
     for prop in cell_data.get("props",[]):
@@ -26274,22 +26457,12 @@ func _build_procedural_chunk(chunk,coord):
             _create_fence(chunk,Vector2(548,516),140)
             _create_barrel(chunk,Vector2(210,250))
             _create_barrel(chunk,Vector2(618,535))
-            _create_world_label(
-                chunk,
-                Vector2(450,278),
-                "ОГРАНИЧЕННАЯ ЗОНА",
-                7,
-                Color("a66a55")
-            )
+            _create_name_sign(chunk,Vector2(470,262),"ОГРАНИЧЕННАЯ ЗОНА","","warning")
 
         elif zone == "woodland":
-            _create_world_label(
-                chunk,
-                Vector2(40,40),
-                "ЛЕСОПОЛОСА",
-                7,
-                Color("879575")
-            )
+            var wc = chunk.get_meta("chunk_coord",Vector2i.ZERO)
+            if abs(wc.x * 7 + wc.y * 13) % 3 == 0:
+                _create_name_sign(chunk,Vector2(56,262),"ЛЕСОПОЛОСА","","wood")
 
         elif zone == "rural":
             _create_fence(chunk,Vector2(118,278),92)
@@ -26394,7 +26567,7 @@ func _decorate_region_identity(chunk,coord,profile):
     var district_name = str(profile.get("name",""))
     var poi = profile.get("poi",{})
     if not poi.is_empty():
-        _create_world_label(chunk,Vector2(300,272),str(poi.get("short_name",poi.get("name","ОБЪЕКТ"))),8,Color("c4b77f"))
+        _create_name_sign(chunk,Vector2(270,262),str(poi.get("short_name",poi.get("name","ОБЪЕКТ"))),"","site")
         var kind = str(poi.get("kind",""))
         if kind == "garage_coop":
             _world_prop_sprite("road_barrier",chunk,Vector2(358,296),4,0.62)
@@ -26420,7 +26593,7 @@ func _decorate_region_identity(chunk,coord,profile):
 
     # Sparse district markers only on deterministic boundary-like chunks.
     if (abs(coord.x * 31 + coord.y * 17) % 5) == 0:
-        _create_world_label(chunk,Vector2(42,286),district_name,6,Color("8f9686"))
+        _create_name_sign(chunk,Vector2(64,262),district_name,"","district")
 
 
 
@@ -26821,7 +26994,18 @@ const INTERIOR_FILL = {
     "military":[["cot",0.52],["locker",0.50],["ammo_crate",0.50],["supply_crate",0.52],["desk",0.46],["chair",0.44]],
     "home":[["chair",0.46],["tipped_chair",0.44],["cabinet",0.48],["old_mattress",0.44],["cardboard_boxes",0.46],["desk",0.46]],
     "retail":[["retail_shelf",0.58],["cardboard_boxes",0.48],["chair",0.44],["tipped_chair",0.44],["crate",0.48]],
-    "work":[["tool_case",0.52],["gas_can",0.48],["barrel",0.50],["crate",0.50],["metal_shelving",0.58],["filing_cabinet",0.48]]
+    "work":[["tool_case",0.52],["gas_can",0.48],["barrel",0.50],["crate",0.50],["metal_shelving",0.58],["filing_cabinet",0.48]],
+    "medical":[["hospital_bed",0.62],["iv_stand",0.56],["medical_shelf",0.62],["filing_cabinet",0.48],["oxygen_cylinder",0.48],["wheelchair",0.52],["medicine_boxes",0.50],["broken_trolley",0.52]]
+}
+# dev78: the open floor of a big hall - a ward's beds, a store's stacks, a
+# barracks' cots - in rows out from the walls
+const INTERIOR_ISLANDS = {
+    "storage":[["crate",0.54],["supply_crate",0.56],["cardboard_boxes",0.52],["barrel",0.50],["crate",0.50]],
+    "military":[["cot",0.54],["ammo_crate",0.52],["supply_crate",0.52],["cot",0.54]],
+    "home":[["old_mattress",0.46],["cardboard_boxes",0.46],["tipped_chair",0.44]],
+    "retail":[["cardboard_boxes",0.48],["shopping_cart",0.50],["crate",0.48]],
+    "work":[["crate",0.52],["barrel",0.50],["tool_case",0.52],["gas_can",0.48]],
+    "medical":[["hospital_bed",0.62],["stretcher",0.56],["broken_trolley",0.52],["med_tray",0.52],["hospital_bed",0.62]]
 }
 const INTERIOR_LITTER = ["floor_papers","newspapers","debris","wooden_debris","shattered_glass"]
 
@@ -26836,6 +27020,8 @@ func _interior_fill_set(layout:String) -> String:
         return "retail"
     if layout in ["garage_row","workshop","repair_bay","service_shop","factory_admin","rail_service","utility"]:
         return "work"
+    if layout == "clinic":
+        return "medical"
     return ""
 
 func _furnish_interior(building,layout:String,size:Vector2,building_id):
@@ -26873,7 +27059,8 @@ func _furnish_interior(building,layout:String,size:Vector2,building_id):
         var t = slots[i]
         slots[i] = slots[j]
         slots[j] = t
-    var wanted = clamp(int(size.x * size.y / 5200.0),2,7)
+    # a hall of 500 x 350 used to get the seven pieces a flat gets
+    var wanted = clamp(int(size.x * size.y / 5200.0),2,16)
     var kinds = INTERIOR_FILL[set_key]
     var placed = 0
     for sp in slots:
@@ -26900,8 +27087,53 @@ func _furnish_interior(building,layout:String,size:Vector2,building_id):
             spr.set_meta("interior_fill",set_key)
             taken.append(sp)
             placed += 1
+    # big halls: rows of pieces out on the floor, the aisles between them open
+    var area = size.x * size.y
+    if area >= 52000.0 and INTERIOR_ISLANDS.has(set_key):
+        var isles = INTERIOR_ISLANDS[set_key]
+        var want_isles = clamp(int(area / 9000.0),3,18)
+        var isle_slots = []
+        var iy = -hy + 84.0
+        while iy < hy - 70.0:
+            var ix = -hx + 70.0
+            while ix < hx - 66.0:
+                isle_slots.append(Vector2(ix,iy))
+                ix += 58.0
+            iy += 62.0
+        for i in range(isle_slots.size() - 1,0,-1):
+            var j = rng.randi_range(0,i)
+            var t = isle_slots[i]
+            isle_slots[i] = isle_slots[j]
+            isle_slots[j] = t
+        var isle_count = 0
+        for sp in isle_slots:
+            if isle_count >= want_isles:
+                break
+            # the walk in from the door stays clear
+            if abs(sp.x - door_x) < 44.0:
+                continue
+            var bad = false
+            for r in walls:
+                if r.grow(6.0).has_point(sp):
+                    bad = true
+                    break
+            if not bad:
+                for q in taken:
+                    if q.distance_to(sp) < 40.0:
+                        bad = true
+                        break
+            if bad:
+                continue
+            var item = isles[rng.randi_range(0,isles.size() - 1)]
+            var spr = _archetype_prop(building,str(item[0]),sp.round(),float(item[1]))
+            if is_instance_valid(spr):
+                spr.flip_h = rng.randf() < 0.5 and not _interior_prop_uses_depth(str(item[0]))
+                spr.set_meta("interior_fill",set_key)
+                taken.append(sp)
+                isle_count += 1
+                placed += 1
     # litter on the open floor
-    for i in range(rng.randi_range(2,4)):
+    for i in range(rng.randi_range(2,4) + int(size.x * size.y / 40000.0)):
         var lp = Vector2(rng.randf_range(-hx + 26.0,hx - 26.0),rng.randf_range(-hy + 40.0,hy - 30.0)).round()
         var bad = false
         for r in walls:
@@ -28569,8 +28801,21 @@ func _place_fire_barrels(chunk,coord,district_id:String):
             chunk.set_meta("fire_barrel",pos)
             return
 
+func _lamp_inside_building(chunk,pos:Vector2) -> bool:
+    for b in chunk.get_children():
+        if not is_instance_valid(b) or not b.has_meta("world_building"):
+            continue
+        var size = b.get_meta("building_size",Vector2.ZERO)
+        if typeof(size) == TYPE_VECTOR2 and size != Vector2.ZERO and Rect2(b.position - size * 0.5,size).grow(4.0).has_point(pos):
+            return true
+    return false
+
 func _create_lamp(chunk,pos):
     pos = _lamp_kerb_position(chunk,pos)
+    # a compound's buildings can cover the street slot a site plan gave its
+    # lamp: a street lamp never stands in a hall
+    if chunk != null and _lamp_inside_building(chunk,pos):
+        return
     # the post's footing is clean: no blood pool or litter decal under it
     if chunk != null:
         for d in chunk.get_children():
@@ -28631,6 +28876,75 @@ func _create_barrel(chunk,pos):
     barrel.z_as_relative = false
     chunk.add_child(barrel)
     _world_prop_sprite("barrel",barrel,Vector2(0,-4),0,1.0)
+
+const NAME_SIGN_STYLES = {
+    "district":[Color("2b4c78"),Color("c9d4de"),Color("eef2f4")],
+    "site":[Color("2e382e"),Color("7a8a66"),Color("e2d8b2")],
+    "wood":[Color("5a3f27"),Color("7d5a37"),Color("eadcb8")],
+    "warning":[Color("e4ded0"),Color("a83a2c"),Color("8c2a20")]
+}
+
+func _name_sign_spot_ok(chunk,p:Vector2) -> bool:
+    if p.x < 18.0 or p.y < 34.0 or p.x > CHUNK_SIZE - 18.0 or p.y > CHUNK_SIZE - 8.0:
+        return false
+    if _point_on_road_or_sidewalk(p):
+        return false
+    for b in chunk.get_children():
+        if not is_instance_valid(b):
+            continue
+        if b.has_meta("world_building"):
+            var size = b.get_meta("building_size",Vector2.ZERO)
+            # the facade stands in front of the footprint and the roof over it
+            # (and the board, standing south of it, must clear the facade)
+            if typeof(size) == TYPE_VECTOR2 and Rect2(b.position - size * 0.5 - Vector2(0,24),size + Vector2(0,24 + 8 + 34)).grow(16.0).has_point(p):
+                return false
+        elif bool(b.get_meta("world_event_root",false)) and _world_event_rect(b).grow(16.0).has_point(p):
+            return false
+        elif bool(b.get_meta("world_name_sign","") != "") and b.position.distance_to(p) < 60.0:
+            return false
+    return not _tree_blocks_door_swing(chunk,p)
+
+# A name on a board on two posts - a district sign at the roadside, a site's
+# plate by its entrance - in place of letters lying loose on the ground.
+func _create_name_sign(chunk,pos:Vector2,title:String,subtitle:String = "",style:String = "district"):
+    var spot = Vector2(INF,INF)
+    for r in range(0,11):
+        for k in range(max(1,r * 8)):
+            var a = TAU * float(k) / float(max(1,r * 8))
+            var p = pos + Vector2(cos(a),sin(a)) * float(r) * 16.0
+            if _name_sign_spot_ok(chunk,p):
+                spot = p
+                break
+        if spot.x < INF:
+            break
+    if spot.x == INF:
+        return null
+    var cols = NAME_SIGN_STYLES.get(style,NAME_SIGN_STYLES["district"])
+    var root = Node2D.new()
+    root.position = spot.round()
+    root.z_index = 5
+    root.z_as_relative = false
+    root.set_meta("world_name_sign",title)
+    chunk.add_child(root)
+    var tw = _facade_text_width(title,6)
+    var sw = _facade_text_width(subtitle,5) if subtitle != "" else 0.0
+    var bw = round(max(tw,sw) + 10.0)
+    var bh = 19.0 if subtitle != "" else 12.0
+    var post_h = 12.0
+    var top = -post_h - bh
+    _ellipse(Vector2(3,0),bw * 0.42,2.5,Color(0,0,0,0.22),root)
+    for px in [-bw * 0.5 + 6.0,bw * 0.5 - 6.0]:
+        _rect(Vector2(px,-post_h * 0.5),Vector2(2.0,post_h),Color("3a3d3c"),root)
+        _rect(Vector2(px - 0.5,-post_h * 0.5),Vector2(1.0,post_h),Color("5a5e5c"),root)
+    _rect(Vector2(1,top + bh * 0.5 + 1.0),Vector2(bw + 2.0,bh + 2.0),Color(0,0,0,0.45),root)
+    _rect(Vector2(0,top + bh * 0.5),Vector2(bw,bh),cols[1],root)
+    _rect(Vector2(0,top + bh * 0.5),Vector2(bw - 2.0,bh - 2.0),cols[0],root)
+    _facade_label(root,title,Vector2(-tw * 0.5,top - 2.0),6,cols[2])
+    if subtitle != "":
+        var c2 = cols[2]
+        c2.a = 0.78
+        _facade_label(root,subtitle,Vector2(-sw * 0.5,top + 6.0),5,c2)
+    return root
 
 func _create_world_label(chunk,pos,txt,size,col):
     var label = Label.new()

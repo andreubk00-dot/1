@@ -48,13 +48,19 @@ NOSE = (176, 128, 96)
 # ---------------------------------------------------------------- outfits --
 # dev63: marauders are drawn on the same rig with their own clothes. An outfit
 # swaps the palette and a few gear switches; the survivor is OUTFITS['survivor'].
-HEADGEAR = 'helmet'      # helmet | cap | beanie | balaclava
+HEADGEAR = 'helmet'      # helmet | cap | beanie | balaclava | hair | bun | scarf | ushanka
 PACK_ON = True
 KNEEPADS = True
 STRIPES = None           # tracksuit stripe colour, or None
 VEST = None              # plate carrier colour, or None
 BEARD_ON = True
 CAPC = (40, 40, 42)
+# dev78: settlement people - a long coat, an apron, bare hair, no belt kit
+HAIR = (70, 52, 38)
+COAT = None              # long coat / dress colour, or None
+APRON = None             # apron colour, or None
+KIT = True               # belt pouch and canteen
+ARMBAND = None           # armband colour on the left sleeve, or None
 
 OUTFITS = {
     'survivor': {},
@@ -72,6 +78,63 @@ OUTFITS = {
                      BOOTS=(34, 30, 26), SKIN=(190, 146, 112), HELMET=(66, 70, 66), VEST=(40, 42, 40),
                      PACK=(70, 72, 56), PACK_D=(54, 56, 44), ROLL=(84, 76, 56), BEARD=(64, 50, 38)),
 }
+
+# dev78: the settlements' named people, each in their own clothes
+def _civ(**kw):
+    base = dict(PACK_ON=False, KNEEPADS=False, KIT=False, BEARD_ON=False, HEADGEAR='hair',
+                GLOVE=(184, 140, 106), GAITER=(92, 84, 72))
+    base.update(kw)
+    return base
+
+
+NPC_OUTFITS = {
+    'perron_steward': _civ(HEADGEAR='scarf', CAPC=(122, 50, 44), JACKET=(78, 70, 62), JACKET_D=(62, 55, 48),
+                           COAT=(84, 74, 64), JEANS=(52, 48, 46), JEANS_D=(42, 38, 36), BOOTS=(44, 36, 30),
+                           SKIN=(204, 160, 128), GAITER=(150, 136, 110)),
+    'perron_trader': _civ(HEADGEAR='cap', CAPC=(66, 56, 42), JACKET=(74, 80, 66), JACKET_D=(58, 63, 52),
+                          APRON=(124, 104, 78), BEARD_ON=True, BEARD=(150, 76, 36), JEANS=(60, 58, 52),
+                          JEANS_D=(48, 46, 42), KIT=True, POUCH=(110, 92, 64)),
+    'perron_cook': _civ(HEADGEAR='scarf', CAPC=(214, 208, 194), JACKET=(92, 100, 118), JACKET_D=(74, 80, 96),
+                        COAT=(96, 104, 122), APRON=(216, 210, 198), JEANS=(62, 60, 64), JEANS_D=(50, 48, 52),
+                        SKIN=(208, 162, 130)),
+    'perron_radio': _civ(HEADGEAR='hair', HAIR=(66, 50, 34), JACKET=(62, 84, 102), JACKET_D=(48, 66, 82),
+                         JEANS=(56, 64, 84), PACK_ON=True, PACK=(70, 74, 70), PACK_D=(56, 58, 56), ROLL=(60, 64, 62)),
+    'rubezh_commander': _civ(HEADGEAR='cap', CAPC=(66, 74, 54), JACKET=(84, 92, 64), JACKET_D=(66, 72, 50),
+                             JEANS=(70, 74, 54), JEANS_D=(56, 60, 44), BOOTS=(30, 28, 26), KIT=True,
+                             ARMBAND=(150, 46, 40), GLOVE=(46, 44, 40)),
+    'rubezh_armorer': _civ(HEADGEAR='beanie', CAPC=(34, 34, 36), JACKET=(60, 62, 56), JACKET_D=(46, 48, 44),
+                           APRON=(96, 72, 50), BEARD_ON=True, BEARD=(70, 58, 46), JEANS=(56, 54, 48), KIT=True),
+    'rubezh_quartermaster': _civ(HEADGEAR='ushanka', CAPC=(84, 70, 54), JACKET=(76, 80, 62), JACKET_D=(60, 64, 48),
+                                 JEANS=(66, 68, 52), PACK_ON=True, KIT=True, BEARD_ON=True, BEARD=(96, 84, 70),
+                                 ARMBAND=(150, 46, 40)),
+    'rubezh_dispatch': _civ(HEADGEAR='bun', HAIR=(98, 64, 40), JACKET=(90, 96, 72), JACKET_D=(72, 76, 56),
+                            JEANS=(66, 70, 54), JEANS_D=(52, 56, 42), SKIN=(206, 162, 130), ARMBAND=(150, 46, 40)),
+    'mechanics_master': _civ(HEADGEAR='cap', CAPC=(40, 52, 74), JACKET=(54, 70, 102), JACKET_D=(42, 54, 80),
+                             JEANS=(52, 66, 96), JEANS_D=(40, 52, 76), BEARD_ON=True, BEARD=(134, 130, 124),
+                             KIT=True, POUCH=(80, 70, 52), GLOVE=(46, 44, 40)),
+    'mechanics_trader': _civ(HEADGEAR='bun', HAIR=(146, 72, 38), JACKET=(66, 80, 106), JACKET_D=(52, 64, 86),
+                             APRON=(92, 86, 74), JEANS=(54, 64, 88), SKIN=(208, 164, 132)),
+    'mechanics_electrician': _civ(HEADGEAR='helmet', HELMET=(196, 140, 40), JACKET=(70, 82, 98), JACKET_D=(54, 64, 78),
+                                  JEANS=(58, 68, 90), KIT=True, POUCH=(70, 60, 44), GLOVE=(46, 44, 40)),
+    'mechanics_storekeeper': _civ(HEADGEAR='beanie', CAPC=(84, 34, 32), JACKET=(52, 46, 42), JACKET_D=(38, 34, 32),
+                                  JEANS=(60, 56, 50), BEARD_ON=True, BEARD=(52, 42, 34), KIT=True),
+    'lazaret_doctor': _civ(HEADGEAR='bun', HAIR=(168, 148, 110), JACKET=(208, 210, 204), JACKET_D=(176, 180, 174),
+                           COAT=(214, 216, 210), JEANS=(52, 52, 58), JEANS_D=(42, 42, 48), BOOTS=(40, 38, 38),
+                           SKIN=(210, 168, 138), GAITER=(170, 176, 170)),
+    'lazaret_supplier': _civ(HEADGEAR='beanie', CAPC=(50, 56, 60), JACKET=(78, 86, 74), JACKET_D=(62, 68, 58),
+                             JEANS=(58, 62, 66), PACK_ON=True, KIT=True, BEARD_ON=True, BEARD=(40, 32, 26),
+                             SKIN=(176, 132, 100)),
+    'lazaret_nurse': _civ(HEADGEAR='scarf', CAPC=(226, 226, 220), JACKET=(150, 170, 176), JACKET_D=(124, 142, 148),
+                          COAT=(156, 176, 182), JEANS=(62, 62, 68), SKIN=(206, 162, 132), ARMBAND=(190, 50, 44)),
+    'lazaret_researcher': _civ(HEADGEAR='hair', HAIR=(92, 82, 72), JACKET=(200, 204, 198), JACKET_D=(168, 172, 166),
+                               COAT=(206, 210, 204), JEANS=(64, 62, 58), GAITER=(90, 96, 104)),
+    # people of no name: a faction's rank and file, for the passing survivors
+    'resident_a': _civ(HEADGEAR='beanie', CAPC=(70, 62, 52), JACKET=(86, 78, 62), JACKET_D=(68, 62, 48),
+                       JEANS=(56, 60, 72), PACK_ON=True, BEARD_ON=True, BEARD=(80, 62, 46)),
+    'resident_b': _civ(HEADGEAR='scarf', CAPC=(88, 90, 110), JACKET=(96, 76, 66), JACKET_D=(76, 60, 52),
+                       COAT=(100, 80, 70), JEANS=(54, 50, 50), SKIN=(204, 160, 128)),
+}
+OUTFITS.update(NPC_OUTFITS)
 _OUTFIT_DEFAULTS = {}
 
 
@@ -80,7 +143,7 @@ def apply_outfit(name):
     if not _OUTFIT_DEFAULTS:
         for k in ('JACKET', 'JACKET_D', 'JEANS', 'JEANS_D', 'BOOTS', 'SKIN', 'BEARD', 'HELMET', 'PACK', 'PACK_D',
                   'ROLL', 'GLOVE', 'POUCH', 'CANTEEN', 'HEADGEAR', 'PACK_ON', 'KNEEPADS', 'STRIPES', 'VEST',
-                  'BEARD_ON', 'CAPC'):
+                  'BEARD_ON', 'CAPC', 'HAIR', 'COAT', 'APRON', 'KIT', 'ARMBAND', 'GAITER'):
             _OUTFIT_DEFAULTS[k] = g[k]
     for k, v in _OUTFIT_DEFAULTS.items():
         g[k] = v
@@ -364,9 +427,10 @@ def build(pose):
     s.box(U(0, 0, 1.0), fU, rU, zU, 3.3, 5.1, 2.5, JEANS)
     s.box(U(0.05, 0, 3.4), fU, rU, zU, 3.45, 5.35, 0.75, BELT, edge=False)
     s.box(U(3.5, 0, 3.4), fU, rU, zU, 0.15, 0.8, 0.6, BRASS, edge=False)
-    s.box(U(1.0, 5.9, 2.2), fU, rU, zU, 1.6, 0.9, 1.6, POUCH)
-    s.box(U(1.0, 6.85, 2.6), fU, rU, zU, 1.5, 0.15, 0.3, darker(POUCH, 0.8), edge=False)
-    s.capsule(U(-1.6, -5.9, 3.0), U(-1.6, -5.9, 0.4), 1.6, 1.6, CANTEEN)
+    if KIT:
+        s.box(U(1.0, 5.9, 2.2), fU, rU, zU, 1.6, 0.9, 1.6, POUCH)
+        s.box(U(1.0, 6.85, 2.6), fU, rU, zU, 1.5, 0.15, 0.3, darker(POUCH, 0.8), edge=False)
+        s.capsule(U(-1.6, -5.9, 3.0), U(-1.6, -5.9, 0.4), 1.6, 1.6, CANTEEN)
     # torso (tapered: hips narrower than shoulders)
     tc = []
     for i in range(8):
@@ -387,7 +451,24 @@ def build(pose):
         if PACK_ON:
             s.box(U(3.9, 3.5 * sg, 12.9), fU, rU, zU, 0.2, 0.75, 1.3, PACK_D, edge=False)      # pack strap
             s.pixel(U(4.1, 3.5 * sg, 12.0), BRASS, bias=0.2)                                  # strap buckle
-    s.box(U(0.0, 0, 4.5), fU, rU, zU, 3.55, 5.45, 0.55, JACKET_D, edge=False)           # hem
+    if COAT:
+        # the coat's skirt hangs from the waist to below the knee, flaring out
+        cc = []
+        for i in range(8):
+            top = i & 4
+            wr_ = 5.55 if top else 6.4
+            dp = 3.6 if top else 4.1
+            zz = 5.0 if top else -7.4
+            cc.append(U((dp if i & 1 else -dp), (wr_ if i & 2 else -wr_), zz))
+        s.block(cc, COAT)
+        s.box(U(0.0, 0, -7.2), fU, rU, zU, 4.15, 6.45, 0.4, darker(COAT, 0.78), edge=False)   # hem
+        s.box(U(3.95, 0, -1.0), fU, rU, zU, 0.12, 0.25, 6.0, darker(COAT, 0.72), edge=False)  # front edge
+    else:
+        s.box(U(0.0, 0, 4.5), fU, rU, zU, 3.55, 5.45, 0.55, JACKET_D, edge=False)       # hem
+    if APRON:
+        bottom = -6.0 if COAT else -2.0
+        s.box(U(3.9 if not COAT else 4.25, 0, (11.0 + bottom) * 0.5), fU, rU, zU, 0.15, 3.5, (11.0 - bottom) * 0.5, APRON, edge=False)
+        s.box(U(3.75, 0, 11.4), fU, rU, zU, 0.15, 2.4, 0.4, darker(APRON, 0.8), edge=False)
     # collar + neck gaiter
     s.box(U(0.3, 0, 14.5), fU, rU, zU, 2.8, 3.4, 0.95, JACKET_D, edge=False)
     if VEST:
@@ -469,6 +550,23 @@ def build(pose):
     elif HEADGEAR == 'cap':
         s.ball(head + zU * 1.4 - fH * 0.2, 4.3, CAPC, bias=0.6)
         s.box(head + zU * 1.0 + fH * 4.3, fH, rH, zU, 1.8, 3.2, 0.3, darker(CAPC, 0.8), edge=False)
+    elif HEADGEAR in ('hair', 'bun'):
+        # bare head: the hair sits back off the brow
+        s.ball(head + zU * 1.3 - fH * 0.75, 4.35, HAIR, bias=0.6)
+        if HEADGEAR == 'bun':
+            s.ball(head - fH * 4.0 + zU * 1.6, 1.9, darker(HAIR, 0.9), bias=0.5)
+    elif HEADGEAR == 'scarf':
+        # a headscarf over the crown, tied under the chin, the ends down the back
+        s.ball(head + zU * 1.1 - fH * 0.55, 4.75, CAPC, bias=0.6)
+        s.box(head + zU * 2.4 + fH * 2.9, fH, rH, zU, 0.6, 3.6, 0.45, darker(CAPC, 0.85), edge=False)
+        s.ball(head + fH * 2.4 + zU * -4.3, 1.1, darker(CAPC, 0.85), bias=0.5)
+        s.ball(head - fH * 3.4 + zU * -2.6, 2.3, darker(CAPC, 0.92), bias=0.3)
+    elif HEADGEAR == 'ushanka':
+        # a fur hat, the ear flaps down
+        s.ball(head + zU * 1.9 - fH * 0.2, 4.7, CAPC, bias=0.7)
+        s.box(head + zU * 1.3 + fH * 3.9, fH, rH, zU, 0.9, 4.2, 1.1, darker(CAPC, 1.12), edge=False)
+        for sg in (-1, 1):
+            s.ball(head + rH * 4.4 * sg + zU * -0.9 - fH * 0.3, 1.9, darker(CAPC, 1.08), bias=0.4)
 
     # arms: rounded sleeves, elbow patch, cuff, fingerless gloves
     for side, sg in (('L', -1), ('R', 1)):
@@ -481,6 +579,8 @@ def build(pose):
         if STRIPES:
             s.capsule(sh[side] + rU * (1.9 * sg), el + rU * (1.5 * sg), 0.4, 0.4, STRIPES, edge=False)
         s.ball(el, 1.45, JACKET_D, bias=0.2)                                               # elbow patch
+        if ARMBAND and side == 'L':
+            s.capsule(sh[side] + norm(el - sh[side]) * 1.6, sh[side] + norm(el - sh[side]) * 3.4, 2.45, 2.4, ARMBAND, bias=0.2, edge=False)
         s.capsule(wr - norm(wr - el) * 1.4, wr - norm(wr - el) * 0.3, 1.8, 1.8, JACKET_D, bias=0.1, edge=False)
         hand = wr + norm(wr - el) * 0.9
         s.ball(hand, 1.9, GLOVE, bias=0.4)
@@ -917,6 +1017,19 @@ def build_marauders(project, outfits=MARAUDER_OUTFITS, weapons=MARAUDER_WEAPONS,
         # bare hands: a raider who threw the gun down to surrender
         for clip in ('Idle', 'Walk', 'Run', 'Die'):
             save_png(sheet(clip, None), os.path.join(out, '%s_none_%s.png' % (o, clip)))
+    apply_outfit('survivor')
+
+
+NPC_CLIPS = ('Idle', 'Idle2')
+
+
+def build_npcs(project, outfits=None, clips=NPC_CLIPS):
+    out = os.path.join(project, 'art', 'npcs')
+    os.makedirs(out, exist_ok=True)
+    for o in (outfits or NPC_OUTFITS):
+        apply_outfit(o)
+        for clip in clips:
+            save_png(sheet(clip, None), os.path.join(out, '%s_%s.png' % (o, clip)))
     apply_outfit('survivor')
 
 
