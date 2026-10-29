@@ -46,7 +46,8 @@ func _check_weapon(game,weapon_id:String,melee:bool)->void:
         var tex=game._modern_survivor_sheet(clip)
         check(tex!=null,"%s missing clip %s" % [weapon_id,clip])
         if tex!=null:
-            check(int(tex.get_width())==1024 and int(tex.get_height())==1024,"%s idle atlas geometry %s" % [weapon_id,clip])
+            # dev77: idle sheets carry 12 frames (smoother breathing)
+            check(int(tex.get_width())==1536 and int(tex.get_height())==1024,"%s idle atlas geometry %s" % [weapon_id,clip])
     # Changing aim/motion must keep the existing direction-based clip mapping.
     game.modern_survivor_idle_time=0.0
     for spec in [

@@ -99,13 +99,25 @@ BLK = (36, 36, 38)
 
 CLIPS = ['Attack1', 'Attack2', 'Attack3', 'Attack4', 'CrouchIdle', 'CrouchRun', 'Die', 'Idle',
          'Idle2', 'Idle3', 'Run', 'RunAttack', 'RunBackwards', 'RunBackwardsAttack', 'StrafeLeft',
-         'StrafeLeftAttack', 'StrafeRight', 'StrafeRightAttack', 'TakeDamage', 'Taunt', 'Walk']
+         'StrafeLeftAttack', 'StrafeRight', 'StrafeRightAttack', 'TakeDamage', 'Taunt', 'Walk',
+         'Pickup', 'Use']
 MOVE_CLIPS = ('Walk', 'Run', 'RunBackwards', 'StrafeLeft', 'StrafeRight', 'CrouchRun')
+# dev77: firing on the move - the same step cycle with the gun held up; the
+# game plays them by the stride like any walk (it used to run a whole step
+# cycle per shot off the recoil timer) and draws the muzzle flash itself
+MOVE_ATTACK_CLIPS = ('RunAttack', 'RunBackwardsAttack', 'StrafeLeftAttack', 'StrafeRightAttack')
 
 
 def frame_count(clip):
-    # 0.76: locomotion cycles use 12 frames for smoother, more anatomical motion
-    return 12 if clip in MOVE_CLIPS else 8
+    # 1.38 dev77: smoother - a step cycle in 16 frames (was 12), breathing and
+    # the fall in 12 (was 8); the game reads the count from the sheet width
+    if clip in MOVE_CLIPS or clip in MOVE_ATTACK_CLIPS:
+        return 16
+    if clip in ('Idle', 'Idle2', 'Idle3', 'CrouchIdle', 'Die'):
+        return 12
+    if clip == 'Pickup':
+        return 10
+    return 8
 
 
 WEAPONS = [None, 'makarov', 'shotgun', 'akm', 'pps43', 'izh81', 'aks74u', 'mosin', 'knife', 'pipe', 'axe']
@@ -480,6 +492,11 @@ def build(pose):
         for (u0, u1, w0, w1, hv, col) in g['parts']:
             c = G + gu * ((u0 + u1) / 2) + gw * ((w0 + w1) / 2)
             s.box(c, gu, gv, gw, (u1 - u0) / 2, hv, (w1 - w0) / 2, col, edge=(u1 - u0) > 2.5)
+        if g['muzzle']:
+            # where the muzzle lands in the cell (the game's moving-shot flash)
+            import char3d as _c3
+            mz = G + gu * g['muzzle'] + gw * g['muzzle_w']
+            LAST_MUZZLE[0] = (_c3.proj(mz), _c3.proj(mz + gu))
         if P.flash and g['muzzle']:
             m = G + gu * g['muzzle'] + gw * g['muzzle_w']
             from char3d import proj
@@ -654,7 +671,7 @@ def make_pose(clip, w, d, k):
         if unarmed:
             P.hands = {'L': (0.6, -6.9, -0.4 + P.bob), 'R': (0.6, 6.9, -0.4 + P.bob)}
     elif clip in ('Walk', 'Run', 'RunAttack'):
-        run = clip != 'Walk'
+        run = clip == 'Run'
         gait(P, t, (1, 0), 'run' if run else 'walk')
         if unarmed:
             unarmed_swing(P, t, 4.6 if run else 3.4, run)
@@ -701,7 +718,7 @@ def make_pose(clip, w, d, k):
         else:
             P.gun_pitch += 0.35 * a
     elif clip == 'Die':
-        a = min(1.0, k / 6.0)
+        a = min(1.0, k / (frame_count('Die') * 0.75))
         P.pelvis_z = 21.0 - 7.0 * min(1.0, a * 1.6)
         P.feet = {'L': (1.8, -3.0, 3.0), 'R': (-0.6, 3.2, 3.0)}
         P.fall = (math.pi * 0.46) * (a ** 1.4)
@@ -712,6 +729,31 @@ def make_pose(clip, w, d, k):
                 P.hands['L'] = (0.0, -7.0, 4.0)
         else:
             P.hands = {'L': (0.0, -7.0, 4.0 + 6 * a), 'R': (0.0, 7.0, 4.0 + 6 * a)}
+    elif clip == 'Pickup':
+        # dev77: down on one knee, the free hand to the floor, and up again
+        # (the game used to borrow the first frames of the fall for this - the
+        # survivor seemed to topple sideways at every crate)
+        a = [0.0, 0.35, 0.7, 0.92, 1.0, 1.0, 0.9, 0.62, 0.3, 0.08][k]
+        reach = [0.0, 0.1, 0.4, 0.8, 1.0, 1.0, 0.75, 0.35, 0.1, 0.0][k]
+        P.pelvis_z = 21.0 - 7.6 * a
+        P.feet = {'L': (0.6 + 3.2 * a, -2.9, 3.0), 'R': (0.6 - 3.4 * a, 3.0, 3.0 + 0.4 * a)}
+        P.foot_pitch = {'L': 0.0, 'R': -0.75 * a}
+        P.lean = 0.42 * a
+        P.head_pitch = 0.3 * a
+        _free_left_hand(P, w, a)
+        P.hands['L'] = (2.0 + 6.0 * reach, -2.6, 2.0 - 13.5 * reach)
+        if cls == 'none':
+            P.hands['R'] = (2.0 + 2.0 * a, 5.6, 0.5 - 2.0 * a)
+    elif clip == 'Use':
+        # dev77: a hand out to a door or a handle - a short push, the body
+        # follows a little; feet stay put
+        p = [0.0, 0.45, 0.85, 1.0, 1.0, 0.7, 0.35, 0.1][k]
+        P.lean = 0.10 * p
+        P.twist = -0.12 * p
+        _free_left_hand(P, w, min(1.0, p * 1.4))
+        P.hands['L'] = (3.0 + 8.0 * p, -3.4 + 0.8 * p, 6.0 + 5.5 * p)
+        if cls == 'none':
+            P.hands['R'] = (0.8, 7.3, -0.6)
     elif clip == 'Taunt':        # reload
         a = math.sin(t * math.pi)
         if cls == 'rifle':
@@ -725,14 +767,13 @@ def make_pose(clip, w, d, k):
             P.hands['L'] = (4.0, 0.0, 4.0 + 3 * (1 - a))
         elif unarmed:
             P.hands = {'L': (3.0, -3.0, 10.0 * a + 2), 'R': (3.0, 3.0, 10.0 * a + 2)}
-    if clip in ('Attack1', 'Attack2') or clip.endswith('Attack'):
+    if clip in ('Attack1', 'Attack2'):
         if cls in ('rifle', 'pistol'):
             kick = [1.8, 1.2, 0.6, 0.25, 0, 0, 0, 0][k]
             f, r, z = P.grip
             P.grip = (f - kick, r, z + kick * 0.3)
             P.gun_pitch += kick * 0.06
-            P.flash = k in (0, 1) and clip in ('Attack1', 'RunAttack', 'StrafeLeftAttack',
-                                               'StrafeRightAttack', 'RunBackwardsAttack')
+            P.flash = k in (0, 1) and clip == 'Attack1'
             # Attack2 is reserved for post-shot mechanical cycling on manually-operated guns.
             if clip == 'Attack2' and w in ('shotgun', 'izh81') and 2 <= k <= 7:
                 # Pump fore-end travels rearward, pauses, then locks forward.
@@ -771,6 +812,55 @@ def make_pose(clip, w, d, k):
             P.twist = -0.3 * ph
             P.lean = 0.12 * ph
     return P
+
+
+def _free_left_hand(P, w, a):
+    # the weapon goes to the right hand alone, muzzle down, so the left is free
+    cls = weapon_class(w)
+    if cls in ('rifle', 'pistol'):
+        P.two_hand = False
+        f, r, z = P.grip
+        low = (2.6, 5.4, 4.6) if cls == 'rifle' else (2.8, 5.6, 3.6)
+        P.grip = (f + (low[0] - f) * a, r + (low[1] - r) * a, z + (low[2] - z) * a)
+        P.gun_pitch = P.gun_pitch + (-0.95 - P.gun_pitch) * a
+    elif cls in ('knife', 'heavy'):
+        P.two_hand = False
+
+
+LAST_MUZZLE = [None]
+
+
+def muzzle_table():
+    """Muzzle point and barrel direction per gun and direction, in cell
+    pixels, for the shot-on-the-move flash (world/muzzle_points.gd)."""
+    out = {}
+    for w in WEAPONS:
+        if weapon_class(w) not in ('rifle', 'pistol'):
+            continue
+        rows = []
+        for d in range(8):
+            LAST_MUZZLE[0] = None
+            P = make_pose('RunAttack', w, d, 0)
+            build(P)
+            (ax, ay), (bx, by) = LAST_MUZZLE[0]
+            rows.append((round(ax, 1), round(ay, 1), round(bx - ax, 3), round(by - ay, 3)))
+        out[w] = rows
+    return out
+
+
+def write_muzzle_table(project):
+    t = muzzle_table()
+    alias = {'tt33': 'makarov', 'sks': 'akm', 'toz34': 'shotgun'}
+    lines = ['extends RefCounted', '# Generated by tools/survivor3d.py write_muzzle_table(): where the muzzle',
+             '# sits in a 128 px survivor cell (x, y) and the barrel direction (dx, dy)',
+             '# per direction row, for the muzzle flash of a shot on the move.', '', 'const POINTS = {']
+    for w in sorted(list(t.keys()) + list(alias.keys())):
+        rows = t[alias.get(w, w)]
+        cells = ', '.join('[%.1f, %.1f, %.3f, %.3f]' % r for r in rows)
+        lines.append('    "%s": [%s],' % (w, cells))
+    lines.append('}')
+    with open(os.path.join(project, 'world', 'muzzle_points.gd'), 'w') as f:
+        f.write('\n'.join(lines) + '\n')
 
 
 def render_frame(clip, w, d, k):

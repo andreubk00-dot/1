@@ -105,7 +105,7 @@ func run():
         game.current_weapon_id = id
         game.equipped_melee_id = ""
         check(game._modern_survivor_firearm_variant_prefix() == id + "_", "wrong baked prefix: " + id)
-        for clip in ["Attack1","Attack2","Attack3","Attack4","CrouchIdle","CrouchRun","Die","Idle","Idle2","Idle3","Run","RunAttack","RunBackwards","RunBackwardsAttack","StrafeLeft","StrafeLeftAttack","StrafeRight","StrafeRightAttack","TakeDamage","Taunt","Walk"]:
+        for clip in ["Attack1","Attack2","Attack3","Attack4","CrouchIdle","CrouchRun","Die","Idle","Idle2","Idle3","Run","RunAttack","RunBackwards","RunBackwardsAttack","StrafeLeft","StrafeLeftAttack","StrafeRight","StrafeRightAttack","TakeDamage","Taunt","Walk","Pickup","Use"]:
             check(ResourceLoader.exists("res://survivor_%s_%s.png" % [id,clip]), "missing baked sheet %s %s" % [id,clip])
             check(game._modern_survivor_sheet(clip) != null, "runtime cannot load baked sheet %s %s" % [id,clip])
 

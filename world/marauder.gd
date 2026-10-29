@@ -11,7 +11,8 @@ const Nav = preload("res://world/local_navigation.gd")
 const CELL = 128
 const SPRITE_SCALE = 0.5
 const SPRITE_OFFSET = Vector2(0, -7.5)
-const FRAMES = {"Idle": 8, "Walk": 12, "Run": 12, "Attack1": 8, "TakeDamage": 8, "Die": 8}
+# dev77: a step cycle in 16 frames, breathing and the fall in 12 (smoother)
+const FRAMES = {"Idle": 12, "Walk": 16, "Run": 16, "Attack1": 8, "TakeDamage": 8, "Die": 12}
 const WALK_SPEED = 36.0
 const COMBAT_SPEED = 56.0
 const RUN_SPEED = 74.0
@@ -873,7 +874,7 @@ func _die(hit_dir: Vector2) -> void:
 
 func _update_dying(delta: float) -> void:
     die_t += delta
-    var frame = min(FRAMES["Die"] - 1, int(die_t / 0.11))
+    var frame = min(FRAMES["Die"] - 1, int(die_t / (0.88 / FRAMES["Die"])))
     _set_clip("Die", frame)
     if die_t >= 1.0:
         game._leave_marauder_body(self)
@@ -912,7 +913,7 @@ func _animate(move: Vector2) -> void:
         var n = FRAMES[clip]
         _set_clip(clip, int(fposmod(walk_dist / STRIDE[clip], 1.0) * n) % n)
     else:
-        _set_clip("Idle", int(t * 6.0 + get_instance_id() % 7) % FRAMES["Idle"])
+        _set_clip("Idle", int(t * 9.0 + get_instance_id() % 7) % FRAMES["Idle"])
     # pixel-crisp: the sprite never sits between screen pixels
     sprite.position = SPRITE_OFFSET
     position = position

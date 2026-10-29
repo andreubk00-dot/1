@@ -1897,15 +1897,15 @@ func _run_runtime_smoke_tests():
     _record_test(is_equal_approx(_world_loot_visual_scale("akm"),1.0),"0.74: лут должен рисоваться в нативном размере")
     missing_asset_files.clear()
     for prefix_75 in ["","makarov_","tt33_","shotgun_","toz34_","sks_","akm_","knife_","pipe_","axe_"]:
-        for clip_75 in ["Attack1","Attack2","Attack3","Attack4","CrouchIdle","CrouchRun","Die","Idle","Idle2","Idle3","Run","RunAttack","RunBackwards","RunBackwardsAttack","StrafeLeft","StrafeLeftAttack","StrafeRight","StrafeRightAttack","TakeDamage","Taunt","Walk"]:
+        for clip_75 in ["Attack1","Attack2","Attack3","Attack4","CrouchIdle","CrouchRun","Die","Idle","Idle2","Idle3","Run","RunAttack","RunBackwards","RunBackwardsAttack","StrafeLeft","StrafeLeftAttack","StrafeRight","StrafeRightAttack","TakeDamage","Taunt","Walk","Pickup","Use"]:
             var path_75 = "res://survivor_%s%s.png" % [prefix_75,clip_75]
             if not ResourceLoader.exists(path_75):
                 missing_asset_files.append(path_75)
     _record_test(missing_asset_files.is_empty(),"Не хватает файлов персонажа: %d (распакуйте ВСЕ части архива)" % missing_asset_files.size())
     var surv76 = load("res://survivor_akm_Walk.png")
-    _record_test(surv76 == null or surv76.get_size() == Vector2(SURVIVOR_CELL * 12,SURVIVOR_CELL * 8),"0.76: Walk sheet должен быть 12x8 кадров по 128px")
+    _record_test(surv76 == null or surv76.get_size() == Vector2(SURVIVOR_CELL * 16,SURVIVOR_CELL * 8),"dev77: Walk sheet должен быть 16x8 кадров по 128px")
     var surv76i = load("res://survivor_akm_Idle.png")
-    _record_test(surv76i == null or surv76i.get_size() == Vector2(SURVIVOR_CELL * 8,SURVIVOR_CELL * 8),"0.76: Idle sheet должен быть 8x8 кадров по 128px")
+    _record_test(surv76i == null or surv76i.get_size() == Vector2(SURVIVOR_CELL * 12,SURVIVOR_CELL * 8),"dev77: Idle sheet должен быть 12x8 кадров по 128px")
     for weapon_id_74 in ["makarov","shotgun","akm"]:
         _record_test(load("res://survivor_%s_Idle.png" % weapon_id_74) != null,"0.74: нет baked survivor sheet %s" % weapon_id_74)
     _record_test(load("res://player_cohesive_longgun_back_v8.png") != null,"Не загружается cohesive longgun player atlas")
@@ -6163,18 +6163,21 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         # after a hard run the survivor heaves for breath: the idle cycle
         # quickens as stamina runs low
         var pant = clamp(1.0 - stamina / 45.0,0.0,1.0)
-        return int(floor(Time.get_ticks_msec() * (0.0032 + 0.0048 * pant))) % 8
+        var idle_n = max(1,int(count))
+        # the same breath period whatever the frame count (8 frames at 3.2/s)
+        return int(floor(Time.get_ticks_msec() * (0.0032 + 0.0048 * pant) * float(idle_n) / 8.0)) % idle_n
     if sheet_name == "CrouchIdle":
         return int(floor(Time.get_ticks_msec() * 0.0024)) % max(1,int(count))
     if sheet_name == "Taunt":
         var reload_p = _reload_anim_progress()
         if reload_p < 0.0:
             return 0
-        return clamp(int(floor(reload_p * 8.0)),0,7)
-    if sheet_name == "Die" and player_death_time <= 0.0:
-        # pick-up: down on one knee and back up (frames 1-2-3-3-3-2-1)
+        return clamp(int(floor(reload_p * float(count))),0,int(count) - 1)
+    if sheet_name == "Pickup" or sheet_name == "Use":
+        # dev77: authored clips - down on a knee to the floor, a hand out to
+        # a door (the kneel used to be the first frames of the fall)
         var ip = clamp(1.0 - interact_anim / max(0.01,interact_anim_len),0.0,0.999)
-        return [1,2,3,3,3,2,1][int(floor(ip * 7.0))]
+        return clamp(int(floor(ip * float(count))),0,int(count) - 1)
     if sheet_name == "Die":
         # the authored fall plays once and the last frame holds
         return clamp(int(floor(player_death_time / PLAYER_DEATH_FALL * float(count))),0,max(1,int(count)) - 1)
@@ -6182,13 +6185,13 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         if modern_survivor_hit_time <= 0.0 or modern_survivor_hit_duration <= 0.001:
             return 0
         var hit_p = clamp(1.0 - modern_survivor_hit_time / modern_survivor_hit_duration,0.0,1.0)
-        return clamp(int(floor(hit_p * 8.0)),0,7)
+        return clamp(int(floor(hit_p * float(count))),0,int(count) - 1)
     if sheet_name == "Attack2":
         var cycle_p = _weapon_cycle_progress()
         if cycle_p < 0.0:
             return 0
         return clamp(int(floor(cycle_p * 8.0)),0,7)
-    if sheet_name.find("Attack") != -1:
+    if sheet_name.find("Attack") != -1 and not sheet_name in MOVE_ATTACK_CLIPS:
         if equipped_melee_id != "":
             if melee_swing_time <= 0.0 or melee_swing_duration <= 0.001:
                 return 0
@@ -6207,8 +6210,8 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
 func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
     if player_death_time > 0.0:
         return "Die"
-    if interact_anim > 0.0 and interact_kind == "low" and modern_survivor_hit_time <= 0.0:
-        return "Die"                 # the kneel of the fall doubles as a reach to the floor
+    if interact_anim > 0.0 and modern_survivor_hit_time <= 0.0 and not is_crouching:
+        return "Pickup" if interact_kind == "low" else "Use"
     if modern_survivor_hit_time > 0.0:
         return "TakeDamage"
 
@@ -6374,6 +6377,34 @@ func _set_modern_survivor_visible(visible):
         if pv_pose_front != null:
             pv_pose_front.visible = true
 
+# dev77: firing on the move plays these by the stride (the legs keep walking);
+# the flash, baked into the standing shot only, is drawn at the muzzle here
+const MOVE_ATTACK_CLIPS = ["RunAttack","RunBackwardsAttack","StrafeLeftAttack","StrafeRightAttack"]
+const MuzzlePoints = preload("res://world/muzzle_points.gd")
+var pv_move_flash = null
+
+func _update_move_flash(clip:String,weapon_id:String,row:int) -> void:
+    if pv_move_flash == null:
+        pv_move_flash = Polygon2D.new()
+        pv_move_flash.name = "MoveFlash"
+        # in texels of the survivor cell (the sprite's own space)
+        pv_move_flash.polygon = PackedVector2Array([Vector2(0,-2),Vector2(4,-4),Vector2(7,-1),Vector2(11,0),
+            Vector2(7,1),Vector2(4,4),Vector2(0,2)])
+        pv_move_flash.color = Color(1.0,0.82,0.36,0.95)
+        pv_move_flash.z_index = 1
+        var core = Polygon2D.new()
+        core.polygon = PackedVector2Array([Vector2(0,-1),Vector2(4,-1.5),Vector2(6,0),Vector2(4,1.5),Vector2(0,1)])
+        core.color = Color(1.0,0.97,0.78,1.0)
+        pv_move_flash.add_child(core)
+        pv_modern_survivor_sprite.add_child(pv_move_flash)
+    var pts = MuzzlePoints.POINTS.get(weapon_id,[])
+    var show = muzzle_time > 0.0 and clip in MOVE_ATTACK_CLIPS and pts.size() == 8
+    pv_move_flash.visible = show
+    if show:
+        var m = pts[clamp(row,0,7)]
+        pv_move_flash.position = Vector2(m[0],m[1]) - Vector2(SURVIVOR_CELL,SURVIVOR_CELL) * 0.5
+        pv_move_flash.rotation = atan2(m[3],m[2])
+
 func _update_modern_survivor(weapon_id,local_aim,local_motion,pose_offset,body_roll):
     if pv_modern_survivor_sprite == null:
         return
@@ -6390,6 +6421,7 @@ func _update_modern_survivor(weapon_id,local_aim,local_motion,pose_offset,body_r
     var frame_total = max(1,int(tex.get_width() / SURVIVOR_CELL)) if tex != null else 8
     var frame = min(_modern_survivor_frame(clip,moving,frame_total),frame_total - 1)
     pv_modern_survivor_sprite.region_rect = Rect2(frame * SURVIVOR_CELL,row * SURVIVOR_CELL,SURVIVOR_CELL,SURVIVOR_CELL)
+    _update_move_flash(clip,str(weapon_id),row)
     # whole screen pixels only (one texel = 0.5 / PLAYER_VISUAL_SCALE here) and
     # no turning: a pixel sprite rotated by a fraction of a degree breaks into
     # stair-steps; the authored frames carry the body roll themselves
@@ -7064,7 +7096,8 @@ func _update_player_visuals(delta):
     if interact_anim > 0.0 and interact_kind == "reach":
         # a push or a reach: the body leans a pixel or two toward the target
         var rp = clamp(1.0 - interact_anim / max(0.01,interact_anim_len),0.0,1.0)
-        pose_offset += interact_dir * sin(rp * PI) * 2.2
+        # (the hand itself reaches out in the Use clip; the body only follows)
+        pose_offset += interact_dir * sin(rp * PI) * 0.8
     # one rounding, to whole screen pixels (0.5 world units / visual scale);
     # rounding to 0.5 here and to the pixel grid again at the sprite mapped
     # each half-step to 1, 3 or 4 pixels and the figure twitched
@@ -7444,7 +7477,7 @@ func _start_interact_gesture(type:String,target):
     if not is_instance_valid(target) or player == null:
         return
     interact_kind = "low" if type in LOW_INTERACTIONS else "reach"
-    interact_anim_len = 0.45 if interact_kind == "low" else 0.28
+    interact_anim_len = 0.55 if interact_kind == "low" else 0.34
     interact_anim = interact_anim_len
     var d = target.global_position - player.global_position
     interact_dir = d.normalized() if d.length() > 0.5 else aim_direction
