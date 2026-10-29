@@ -322,6 +322,8 @@ var thirst = 82.0
 # preparation / returning to shelter meaningful.
 var fatigue = 12.0
 var is_sprinting = false
+var sprint_winded = false
+const SPRINT_RECOVER = 20.0
 # 1.38: crouch (C): slower, quieter and harder to spot; uses the survivor's
 # authored CrouchIdle / CrouchRun sheets
 var is_crouching = false
@@ -4271,10 +4273,17 @@ func _process(delta):
             is_crouching = not is_crouching
         if Input.is_action_pressed("sprint") and move_direction.length() > 0.05:
             is_crouching = false                      # breaking into a run stands you up
+        # dev75: out of breath, the run stays off until a fifth of the
+        # stamina is back - at the threshold it flicked on and off every
+        # couple of frames and the survivor stuttered between run and walk
+        if stamina <= 1.0:
+            sprint_winded = true
+        elif stamina >= SPRINT_RECOVER:
+            sprint_winded = false
         is_sprinting = (
             move_direction.length() > 0.05
             and (Input.is_action_pressed("sprint") or (qa_visual_mode and qa_force_sprint))
-            and stamina > 1.0
+            and not sprint_winded
             and hunger > 0.0
             and thirst > 0.0
             and _injury_can_sprint()
@@ -6634,8 +6643,11 @@ func _create_player():
 
     camera = Camera2D.new()
     camera.zoom = Vector2(1.42,1.42)
-    camera.position_smoothing_enabled = true
-    camera.position_smoothing_speed = 8.0
+    # dev75: no built-in smoothing - its lag behind the survivor scaled with
+    # each frame's length, so an uneven frame rate shook him on screen by
+    # several pixels; the camera now holds him exactly and only the look-ahead
+    # (aim and travel) eases, frame-rate independent (_update_player_visuals)
+    camera.position_smoothing_enabled = false
     player.add_child(camera)
 
     tracer = Line2D.new()
@@ -7120,18 +7132,30 @@ func _update_player_visuals(delta):
     pv_pose_front.z_index = 4
 
     if camera != null:
-        var desired = aim_direction * 34.0 + Vector2(
-            0,
-            -11 + body_bob * 0.12
-        )
+        # dev75: the view no longer bobs with the steps, and it eases at the
+        # same pace whatever the frame rate - the old "delta * 6 + 0.2" per
+        # frame jumped with every uneven frame and shook the survivor on screen
+        var desired = _camera_look_ahead() * 34.0 + Vector2(0,-11)
         # the frame leads where the survivor is heading, a little more at a run
         desired += player.velocity * (0.22 if is_sprinting else 0.14)
-        camera.position = camera.position.lerp(
-            desired,
-            min(1.0,delta * 6.0 + 0.2)
-        )
+        camera.position = camera.position.lerp(desired,1.0 - exp(-CAMERA_FOLLOW_RATE * delta))
         # a blow jolts the view away from the attacker, settling fast
         camera.offset = camera_kick.round()
+
+func _camera_look_ahead() -> Vector2:
+    # dev75: where the view leans, from the cursor's place on the SCREEN - not
+    # the aim in the world: the aim turns as the view moves, the view follows
+    # the aim, and on an uneven frame rate the two rocked each other
+    if (qa_visual_mode or qa_bot_driver) and qa_locked_aim.length() > 0.01:
+        return aim_direction
+    var vp = get_viewport()
+    if vp == null or inventory_open or trader_open or contract_open or region_map_open or developer_panel_open:
+        return _last_look_ahead
+    var off = vp.get_mouse_position() - vp.get_visible_rect().size * 0.5
+    if off.length() < 2.0:
+        return _last_look_ahead
+    _last_look_ahead = off.normalized() * clamp(off.length() / 60.0,0.0,1.0)
+    return _last_look_ahead
 
 func _melee_model_texture(id):
     if melee_model_atlas == null:
@@ -7395,6 +7419,8 @@ var interact_anim_len = 0.45
 var interact_kind = ""
 var interact_dir = Vector2.ZERO
 var camera_kick = Vector2.ZERO
+const CAMERA_FOLLOW_RATE = 20.0   # 1/s; the old per-frame lerp at 60 fps
+var _last_look_ahead = Vector2.RIGHT
 var hurt_flash = 0.0
 var _hurt_rect = null
 var _pickup_fly = []

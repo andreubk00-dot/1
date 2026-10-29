@@ -542,14 +542,17 @@ GAITS = {
     # the swing, a clearer heel-strike and toe-off, more spring in the body
     # and a stronger hip / shoulder counter-swing (the old cycle read as a glide,
     # worst walking toward or away from the camera where the stride foreshortens)
+    # 1.38 dev75: the weight shift and the shoulder twist are a third of
+    # what they were - walking toward or away from the camera the head swung
+    # almost four texels side to side every stride and the figure rocked
     'walk': dict(S=0.60, A=5.8,
                  swing=[(0.0, -1.0, 1.3, -0.6), (0.34, -0.45, 3.0, -0.3), (0.7, 0.55, 2.0, 0.1), (1.0, 1.0, 0.0, 0.4)],
                  stance=[(0.0, 0.4), (0.16, 0.0), (0.66, 0.0), (1.0, -0.65)],
-                 heel=1.8, bob=0.62, hip=0.85, twist=0.14, shift=0.7, lean=0.04),
+                 heel=1.8, bob=0.62, hip=0.85, twist=0.08, shift=0.22, lean=0.04),
     'run': dict(S=0.36, A=7.8,
                 swing=[(0.0, -0.8, 2.8, -0.8), (0.3, -1.1, 9.4, -0.95), (0.62, 0.4, 7.6, 0.0), (1.0, 0.6, 0.0, 0.2)],
                 stance=[(0.0, 0.2), (0.25, 0.0), (0.7, -0.1), (1.0, -0.8)],
-                heel=2.6, bob=1.85, hip=1.05, twist=0.24, shift=0.4, lean=0.3),
+                heel=2.6, bob=1.85, hip=1.05, twist=0.15, shift=0.2, lean=0.3),
     'crouch': dict(S=0.6, A=4.2,
                    swing=[(0.0, -1.0, 1.0, -0.5), (0.4, -0.4, 2.8, -0.3), (1.0, 1.0, 0.0, 0.2)],
                    stance=[(0.0, 0.2), (0.2, 0.0), (0.7, 0.0), (1.0, -0.5)],
