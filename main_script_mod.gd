@@ -17515,6 +17515,56 @@ func _make_puddle(chunk,local_pos:Vector2,variant:int,big:bool = false):
     chunk.add_child(p)
     return p
 
+# dev78: autumn leaves drifted against the kerbs of the town streets - the
+# carriageway was a bare grey field between the cars. Strips from
+# art/world_hd/kerb_leaves_hd.png (dense edge on top), turned to each kerb.
+const KERB_LEAVES_TEX = "res://art/world_hd/kerb_leaves_hd.png"
+const KERB_ROAD_MIN = 299.0
+const KERB_ROAD_MAX = 469.0
+
+func _place_kerb_leaves(chunk,coord):
+    if not _hd_exists(KERB_LEAVES_TEX):
+        return
+    if chunk.has_meta("faction_settlement") or bool(chunk.get_meta("poi_masks_public_road",false)):
+        return
+    var did = str(chunk.get_meta("district_id",""))
+    if did.find("rural") >= 0 or did.find("dacha") >= 0 or did.find("woodland") >= 0:
+        return
+    var atlas = load(KERB_LEAVES_TEX)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 48271 + coord.y * 69621 + 17)) + 5
+    # [kerb line, axis, rotation]: the strip's dense edge lies on the kerb
+    var kerbs = [[KERB_ROAD_MIN,0,-PI * 0.5],[KERB_ROAD_MAX,0,PI * 0.5],[KERB_ROAD_MIN,1,0.0],[KERB_ROAD_MAX,1,PI]]
+    var placed = 0
+    for k in kerbs:
+        for seg in [[14.0,250.0],[518.0,754.0]]:
+            for piece in range(2):
+                if rng.randf() > 0.62:
+                    continue
+                # one drift in each half of the stretch, so two never pile up
+                var half_len = (seg[1] - seg[0]) * 0.5
+                var lo = seg[0] + half_len * piece
+                var along = rng.randf_range(lo + 30.0,lo + half_len - 30.0)
+                var depth = rng.randf_range(0.6,0.85)
+                var inward = (12.0 * depth) if float(k[0]) == KERB_ROAD_MIN else -(12.0 * depth)
+                var p = Vector2(float(k[0]) + inward,along) if int(k[1]) == 0 else Vector2(along,float(k[0]) + inward)
+                var tex = AtlasTexture.new()
+                tex.atlas = atlas
+                tex.region = Rect2(0,rng.randi_range(0,3) * 24,192,24)
+                var spr = Sprite2D.new()
+                spr.texture = tex
+                spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+                spr.position = p.round()
+                spr.rotation = float(k[2])
+                spr.scale = Vector2(0.5 * rng.randf_range(0.55,0.85),depth)
+                spr.flip_h = rng.randf() < 0.5
+                spr.modulate = Color(0.92,0.90,0.88,1.0)
+                spr.z_index = 1
+                spr.set_meta("ground_decal","kerb_leaves")
+                chunk.add_child(spr)
+                placed += 1
+    chunk.set_meta("kerb_leaves",placed)
+
 func _place_puddles(chunk,coord):
     if not _hd_exists(PUDDLE_TEX):
         return
@@ -22030,6 +22080,7 @@ func _load_chunk(coord):
         _build_procedural_chunk(chunk,coord)
         _decorate_street_furniture(chunk,coord)
     _dress_ground_seams(chunk,coord)
+    _place_kerb_leaves(chunk,coord)
     _place_puddles(chunk,coord)
     _record_map_footprint(chunk,coord)
     _place_ether_note(chunk,coord)
@@ -32431,9 +32482,10 @@ void fragment() {
     // the clear pocket around the player, its edge ragged by the same noise
     float d = length((w - player) * vec2(1.0, 1.25));
     float edge = vn((w + drift * 0.6) / vec2(40.0, 30.0));
-    float r = clear_r * (0.72 + 0.4 * n + 0.25 * edge);
+    // (a gentle wobble: deep lobes read as dark smudges on the asphalt)
+    float r = clear_r * (0.86 + 0.18 * n + 0.08 * edge);
     // thin at the pocket's edge, a wall a few dozen steps further out
-    float pocket = smoothstep(r, r + 70.0, d);
+    float pocket = smoothstep(r - 20.0, r + 110.0, d);
     float far = smoothstep(r + 40.0, r + 240.0, d);
     float a = density * (0.75 + 0.25 * bank) * (0.12 + 0.58 * pocket + 0.55 * far);
     a = clamp(a, 0.0, 0.94);

@@ -7,6 +7,7 @@ extends SceneTree
 #   and never inside a building or on the carriageway
 # - settlement people are drawn sprites that breathe and turn to the survivor
 # - big halls are furnished out on the floor, clinic wards included
+# - town kerbs hold drifts of fallen leaves; dirt tracks do not
 const Main = preload("res://main_script_mod.gd")
 const RegionCatalog = preload("res://world/region_catalog.gd")
 
@@ -90,6 +91,7 @@ func run():
         for off in p.get("footprint",[]):
             coords.append(p["coord"] + off)
     var signs = 0
+    var leafy = 0
     for c in coords:
         if not game.loaded_chunks.has(c):
             game._load_chunk(c)
@@ -97,6 +99,16 @@ func run():
         if ch == null:
             continue
         var rects = _building_rects(ch)
+        var did = str(ch.get_meta("district_id",""))
+        var drifts = int(ch.get_meta("kerb_leaves",0))
+        if drifts > 0:
+            leafy += 1
+            check(did.find("woodland") < 0 and did.find("rural") < 0 and did.find("dacha") < 0,"kerb leaves on a dirt track in %s (%s)" % [c,did])
+        for n in ch.get_children():
+            if str(n.get_meta("ground_decal","")) == "kerb_leaves":
+                var lp = n.position
+                var on_kerb = (abs(lp.x - 299.0) < 14.0 or abs(lp.x - 469.0) < 14.0 or abs(lp.y - 299.0) < 14.0 or abs(lp.y - 469.0) < 14.0)
+                check(on_kerb,"a leaf drift away from the kerb in %s at %s" % [c,lp])
         for n in ch.get_children():
             if not (n is Node2D):
                 continue
@@ -121,6 +133,7 @@ func run():
         game._unload_chunk(c)
         await process_frame
     check(signs >= 6,"too few district / site boards: %d" % signs)
+    check(leafy >= 20,"too few town streets with kerb leaves: %d" % leafy)
 
     # --- the clinic ward ------------------------------------------------------------------
     var clinic = RegionCatalog.poi_by_id("regional_clinical_complex_4")
