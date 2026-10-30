@@ -201,6 +201,12 @@ func run():
     game.player.global_position = base.world_pos(Vector2i(0, 0), Vector2(384, 384))
     game._refresh_chunks(true)
     await frames(30)
+    # the garrison comes up on the base's own tick (game _process), which a
+    # headless run drives less often than physics: wait on the clock, not frames
+    for i in range(24):
+        if base.members().size() >= 18:
+            break
+        await create_timer(0.25).timeout
     var men = base.members()
     check(men.size() >= 18, "garrison too thin: " + str(men.size()))
     for m in men:
