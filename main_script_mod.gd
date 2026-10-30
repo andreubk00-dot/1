@@ -2877,6 +2877,7 @@ var scene_legacy_chunks = {}
 # "dog": the companion's record, "lost": names}; dog is its node
 const DogCatalog = preload("res://world/dog_catalog.gd")
 const BlockLots = preload("res://world/block_lots.gd")
+const StreetScenes = preload("res://world/street_scenes.gd")
 const Dog = preload("res://world/dog.gd")
 var dog_state = {"sites":{},"dog":{},"lost":[]}
 var dog = null
@@ -26102,7 +26103,7 @@ func _build_supply_convoy_scene(root,coord:Vector2i,event:Dictionary):
 # a scene or a block lot: something laid out on the ground with a footprint
 # that trees, cars and signs step round
 func _holds_ground(n) -> bool:
-    return is_instance_valid(n) and (bool(n.get_meta("world_event_root",false)) or n.has_meta("block_lot"))
+    return is_instance_valid(n) and (bool(n.get_meta("world_event_root",false)) or n.has_meta("block_lot") or n.has_meta("street_scene"))
 
 func _world_event_rect(root) -> Rect2:
     if not _holds_ground(root):
@@ -26143,7 +26144,7 @@ func _world_event_intersects(chunk,rect:Rect2) -> bool:
         elif bool(child.get_meta("world_barrel",false)) or bool(child.get_meta("world_lamp",false)):
             if rect.grow(22.0).has_point(child.position):
                 return true
-        elif child.has_meta("block_lot"):
+        elif child.has_meta("block_lot") or child.has_meta("street_scene"):
             if rect.intersects(_world_event_rect(child)):
                 return true
         elif child.has_meta("interaction_type"):
@@ -26549,6 +26550,7 @@ func _build_procedural_chunk(chunk,coord):
         for lot in block_lots_pending:
             _build_block_lot(chunk,coord,int(lot[0]),lot[1],str(lot[2]))
         block_lots_pending.clear()
+        _build_street_scenes(chunk,coord,profile,is_legacy,preserve_082_layout)
 
         if not is_legacy:
             _decorate_region_identity(chunk,coord,profile)
@@ -26766,7 +26768,6 @@ func _build_block_lot(chunk,coord:Vector2i,slot:int,slot_pos:Vector2,kind:String
     # half the lots turn their plan a quarter (u and v swap), so two of a kind
     # side by side across a sector border are never mirror twins
     var swap = kind in BlockLots.TURNABLE and rng.randf() < 0.5
-    var car_colors = [Color("46535a"),Color("654039"),Color("555247"),Color("3e4c45"),Color("6b6a5e")]
     var placed = 0
     for item in plan:
         if item.has("opt") and rng.randf() > float(item["opt"]):
@@ -26779,50 +26780,147 @@ func _build_block_lot(chunk,coord:Vector2i,slot:int,slot_pos:Vector2,kind:String
             var b = _lot_point(r,slot_pos,float(q[0]) + float(q[2]),float(q[1]) + float(q[3]))
             _lot_surface(chunk,coord,str(item["surface"]),Rect2(Vector2(min(a.x,b.x),min(a.y,b.y)),(a - b).abs()),str(item.get("edge","kerb")))
             continue
-        var at = item.get("at",item.get("tree",item.get("car",item.get("lamp",item.get("fence",item.get("cache",[0.5,0.5]))))))
+        var at = _plan_item_at(item)
         if swap:
             at = [at[1],at[0]]
         var jitter = Vector2(rng.randf_range(-9.0,9.0),rng.randf_range(-7.0,7.0)) if not item.has("draw") else Vector2.ZERO
         var pos = (_lot_point(r,slot_pos,float(at[0]),float(at[1])) + jitter).round()
-        if item.has("piece"):
-            var solid = item.get("solid",[0,0])
-            var node = _settlement_piece(chunk,{"kind":str(item["piece"]),"pos":pos,"scale":float(item.get("s",0.5)),
-                "solid":Vector2(float(solid[0]),float(solid[1])),"flip":mirror_x != (rng.randf() < 0.3)})
-            if node != null:
-                node.set_meta("block_lot_piece",kind)
-                placed += 1
-        elif item.has("street"):
-            if _lot_spot_clear(chunk,pos,12.0) and _street_furniture_sprite(str(item["street"]),chunk,pos,5) != null:
-                placed += 1
-        elif item.has("prop"):
-            if _lot_spot_clear(chunk,pos,10.0):
-                var pr = _world_prop_sprite(str(item["prop"]),chunk,pos,5,float(item.get("s",0.5)))
-                if pr != null:
-                    pr.z_as_relative = false
-                    pr.flip_h = rng.randf() < 0.5
-                    pr.set_meta("block_lot_piece",kind)
-                    placed += 1
-        elif item.has("tree"):
-            if _lot_spot_clear(chunk,pos,14.0) and _create_tree(chunk,pos,float(item.get("s",1.0)) * rng.randf_range(0.9,1.08),true) != null:
-                placed += 1
-        elif item.has("car"):
-            if _lot_spot_clear(chunk,pos,30.0):
-                _create_car(chunk,pos,car_colors[rng.randi_range(0,car_colors.size() - 1)],(PI * 0.5 if bool(item.get("turn",false)) else 0.0) + rng.randf_range(-0.06,0.06))
-                placed += 1
-        elif item.has("lamp"):
-            _create_lamp(chunk,pos)
-        elif item.has("fence"):
-            var rot = PI * 0.5 if str(item.get("rot","h")) == "v" else 0.0
-            _create_fence(chunk,pos,float(item.get("len",120.0)),rot)
-        elif item.has("draw"):
-            if _lot_spot_clear(chunk,pos,16.0) and _lot_draw(chunk,str(item["draw"]),pos,mirror_x,rng) != null:
-                placed += 1
-        elif item.has("cache"):
-            if _lot_spot_clear(chunk,pos,12.0):
-                var c = _create_container(chunk,coord,pos,"lot_%d" % slot,str(item.get("loot","residential")),"%s • %s" % [str(item.get("name","Тайник")),str(BlockLots.LABELS.get(kind,""))])
-                if c != null:
-                    c.set_meta("block_lot_cache",kind)
+        var car_angle = PI * 0.5 if bool(item.get("turn",false)) else 0.0
+        if _place_plan_item(chunk,coord,item,pos,mirror_x,rng,kind,"lot_%d" % slot,str(BlockLots.LABELS.get(kind,"")),car_angle):
+            placed += 1
     root.set_meta("block_lot_pieces",placed)
+
+func _plan_item_at(item:Dictionary) -> Array:
+    for k in ["at","tree","car","lamp","fence","cache"]:
+        if item.has(k):
+            return item[k]
+    return [0.5,0.5]
+
+const PLAN_CAR_COLORS = [Color("46535a"),Color("654039"),Color("555247"),Color("3e4c45"),Color("6b6a5e")]
+
+# One item of a lot or street plan, at its place in the sector. Returns
+# whether something went up. tag marks what it belongs to (a lot / scene kind).
+func _place_plan_item(chunk,coord:Vector2i,item:Dictionary,pos:Vector2,mirror_x:bool,rng,tag:String,cache_id:String,label:String,car_angle:float) -> bool:
+    var placed = 0
+    if item.has("piece"):
+        var solid = item.get("solid",[0,0])
+        var node = _settlement_piece(chunk,{"kind":str(item["piece"]),"pos":pos,"scale":float(item.get("s",0.5)),
+            "solid":Vector2(float(solid[0]),float(solid[1])),"flip":mirror_x != (rng.randf() < 0.3)})
+        if node != null:
+            node.set_meta("block_lot_piece",tag)
+            placed += 1
+    elif item.has("street"):
+        if _lot_spot_clear(chunk,pos,12.0) and _street_furniture_sprite(str(item["street"]),chunk,pos,5) != null:
+            placed += 1
+    elif item.has("prop"):
+        if _lot_spot_clear(chunk,pos,10.0):
+            var pr = _world_prop_sprite(str(item["prop"]),chunk,pos,5,float(item.get("s",0.5)))
+            if pr != null:
+                pr.z_as_relative = false
+                pr.flip_h = rng.randf() < 0.5
+                pr.set_meta("block_lot_piece",tag)
+                placed += 1
+    elif item.has("tree"):
+        if _lot_spot_clear(chunk,pos,14.0) and _create_tree(chunk,pos,float(item.get("s",1.0)) * rng.randf_range(0.9,1.08),true) != null:
+            placed += 1
+    elif item.has("car"):
+        if _lot_spot_clear(chunk,pos,30.0):
+            _create_car(chunk,pos,PLAN_CAR_COLORS[rng.randi_range(0,PLAN_CAR_COLORS.size() - 1)],car_angle + rng.randf_range(-0.06,0.06))
+            placed += 1
+    elif item.has("lamp"):
+        _create_lamp(chunk,pos)
+    elif item.has("fence"):
+        var rot = PI * 0.5 if str(item.get("rot","h")) == "v" else 0.0
+        _create_fence(chunk,pos,float(item.get("len",120.0)),rot)
+    elif item.has("draw"):
+        if _lot_spot_clear(chunk,pos,16.0) and _lot_draw(chunk,str(item["draw"]),pos,mirror_x,rng) != null:
+            placed += 1
+    elif item.has("veg"):
+        var vi = VEGETATION_KINDS.find(str(item["veg"]))
+        if vi >= 0 and _lot_spot_clear(chunk,pos,8.0):
+            var v = _facade_atlas_sprite(chunk,"res://vegetation_v1.png",Rect2(vi * 64,0,64,64),pos,0.5)
+            if v != null:
+                _vegetation_sway(v,vi)
+                v.z_as_relative = false
+                v.z_index = -6 if vi >= 5 else 6
+                v.flip_h = rng.randf() < 0.5
+                v.add_to_group("world_vegetation")
+                v.set_meta("vegetation_kind",VEGETATION_KINDS[vi])
+                placed += 1
+    elif item.has("cache"):
+        if _lot_spot_clear(chunk,pos,12.0):
+            var c = _create_container(chunk,coord,pos,cache_id,str(item.get("loot","residential")),"%s • %s" % [str(item.get("name","Тайник")),label])
+            if c != null:
+                c.set_meta("block_lot_cache",tag)
+                placed += 1
+    return placed > 0
+
+# ------------------------------------------------------ dev79 street scenes --
+# a street arm: [axis 0 = north-south, the sign of "along" going outwards, start]
+const STREET_ARMS = [[0,-1.0,250.0],[0,1.0,518.0],[1,-1.0,250.0],[1,1.0,518.0]]
+const STREET_ARM_LEN = 236.0
+# set while a street scene draws: its "across" runs north-south (an east-west street)
+var plan_draw_across_y = false
+const STREET_HALF = 80.0
+
+func _arm_point(arm:int,along:float,across:float) -> Vector2:
+    var a = STREET_ARMS[arm]
+    var l = float(a[2]) + float(a[1]) * along * STREET_ARM_LEN
+    var c = 384.0 + across * STREET_HALF
+    return Vector2(c,l) if int(a[0]) == 0 else Vector2(l,c)
+
+func _build_street_scenes(chunk,coord:Vector2i,profile:Dictionary,is_legacy:bool,preserve:bool):
+    if is_legacy or preserve or coord == Vector2i.ZERO:
+        return
+    if not profile.get("poi",{}).is_empty() or _chunk_has_player_base(coord):
+        return
+    var family = str(DISTRICT_GROUND.get(str(profile.get("district_id",RegionCatalog.district_id_for_chunk(coord))),"city"))
+    var count = 0
+    for arm in range(4):
+        var vertical = int(STREET_ARMS[arm][0]) == 0
+        var kind = StreetScenes.pick(family,coord,arm,vertical)
+        if kind == "":
+            continue
+        var a = _arm_point(arm,0.0,-1.0)
+        var b = _arm_point(arm,1.0,1.0)
+        var root = Node2D.new()
+        root.name = "StreetScene_%d" % arm
+        var r = Rect2(Vector2(min(a.x,b.x),min(a.y,b.y)),(a - b).abs())
+        root.position = r.get_center()
+        root.set_meta("street_scene",kind)
+        root.set_meta("world_event_footprint",r.size)
+        root.add_to_group("street_scenes")
+        chunk.add_child(root)
+        var rng = RandomNumberGenerator.new()
+        rng.seed = abs(hash("street:%d:%d:%d" % [coord.x,coord.y,arm])) + 1
+        # which kerb is which flips with a coin, so two jams never match
+        var flip = rng.randf() < 0.5
+        var placed = 0
+        for item in StreetScenes.plan(kind):
+            if item.has("opt") and rng.randf() > float(item["opt"]):
+                continue
+            if item.has("surface"):
+                var q = item["rect"]
+                var c0 = float(q[1]) * (-1.0 if flip else 1.0)
+                var c1 = (float(q[1]) + float(q[3])) * (-1.0 if flip else 1.0)
+                var p0 = _arm_point(arm,float(q[0]),c0)
+                var p1 = _arm_point(arm,float(q[0]) + float(q[2]),c1)
+                _lot_surface(chunk,coord,str(item["surface"]),Rect2(Vector2(min(p0.x,p1.x),min(p0.y,p1.y)),(p0 - p1).abs()),str(item.get("edge","soft")))
+                continue
+            var at = _plan_item_at(item)
+            var across = float(at[1]) * (-1.0 if flip else 1.0)
+            var jitter = Vector2(rng.randf_range(-6.0,6.0),rng.randf_range(-5.0,5.0)) if not item.has("draw") else Vector2.ZERO
+            var pos = (_arm_point(arm,float(at[0]),across) + jitter).round()
+            # a car lies along its street (and the far lane drives the other way)
+            var heading = PI * 0.5 if vertical else 0.0
+            plan_draw_across_y = not vertical
+            var car_angle = heading + deg_to_rad(float(item.get("turn",0.0))) * (-1.0 if flip else 1.0)
+            if _place_plan_item(chunk,coord,item,pos,flip,rng,kind,"street_%d" % arm,str(StreetScenes.LABELS.get(kind,"")),car_angle):
+                placed += 1
+        plan_draw_across_y = false
+        root.set_meta("street_scene_pieces",placed)
+        count += 1
+    chunk.set_meta("street_scenes",count)
 
 func _lot_surface(chunk,coord:Vector2i,surface:String,rect:Rect2,edge:String):
     var path = LOT_SURFACE_TEX % surface
@@ -26978,6 +27076,88 @@ func _lot_draw(chunk,kind:String,pos:Vector2,mirror:bool,rng):
                 _ellipse(c + Vector2(0,-6),8.5,9,Color("8e8c86"),n)
                 _ellipse(c + Vector2(0,-6),5.5,6,Color("3a3936"),n)
             _add_static_rect(n,Vector2(0,-3),Vector2(48,10))
+            return n
+        "crater":
+            # the carriageway caved in: broken plates of asphalt round a hole
+            # with rainwater at the bottom
+            var n = _lot_node(chunk,pos,kind)
+            n.z_index = -47
+            var rim = PackedVector2Array()
+            var hole = PackedVector2Array()
+            var water = PackedVector2Array()
+            for k in range(14):
+                var a = TAU * float(k) / 14.0
+                var wob = 1.0 + rng.randf_range(-0.18,0.18)
+                rim.append(Vector2(cos(a) * 40.0 * wob,sin(a) * 22.0 * wob))
+                hole.append(Vector2(cos(a) * 30.0 * wob,sin(a) * 15.0 * wob + 1.0))
+                water.append(Vector2(cos(a) * 16.0 * wob,sin(a) * 6.0 * wob + 5.0))
+            _poly(rim,Color("2d2d2e"),n)
+            _poly(hole,Color("17161a"),n)
+            _poly(water,Color(0.20,0.25,0.29,0.85),n)
+            for k in range(6):
+                var a = TAU * float(k) / 6.0 + rng.randf_range(-0.3,0.3)
+                var p0 = Vector2(cos(a) * 36.0,sin(a) * 19.0)
+                var p1 = Vector2(cos(a) * (50.0 + rng.randf_range(0,14)),sin(a) * (28.0 + rng.randf_range(0,8)))
+                var line = Line2D.new()
+                line.width = 1.0
+                line.default_color = Color(0.12,0.12,0.12,0.8)
+                line.add_point(p0)
+                line.add_point(p1)
+                n.add_child(line)
+            for k in range(5):
+                var a = rng.randf_range(0,TAU)
+                _rect(Vector2(cos(a) * 34.0,sin(a) * 17.0),Vector2(rng.randf_range(4,8),rng.randf_range(2,4)),Color("4a4a4b"),n)
+            _add_static_rect(n,Vector2(0,1),Vector2(52,22))
+            return n
+        "log":
+            # a tree down across the track: the trunk, the root plate, the crown
+            var n = _lot_node(chunk,pos,kind)
+            var length = 132.0
+            var bark = Color("5a4130")
+            var flip_end = rng.randf() < 0.5
+            var ends = [-length * 0.5,length * 0.5]
+            # it lies askew: straight up the screen a trunk reads as a standing tree
+            n.rotation = (1.0 if rng.randf() < 0.5 else -1.0) * (0.95 if plan_draw_across_y else 0.22)
+            _ellipse(Vector2(4,3),length * 0.48,5,Color(0,0,0,0.22),n)
+            _rect(Vector2(0,-5),Vector2(length,11),bark,n)
+            _rect(Vector2(0,-9),Vector2(length,3),bark.lightened(0.18),n)
+            for k in range(7):
+                _rect(Vector2(-length * 0.42 + k * 18.0,-5),Vector2(1,11),bark.darkened(0.3),n)
+            var root_x = ends[0] if flip_end else ends[1]
+            _ellipse(Vector2(root_x,-8),8,14,Color("4a3626"),n)
+            _ellipse(Vector2(root_x,-8),4,8,Color("2e241b"),n)
+            var crown_x = ends[1] if flip_end else ends[0]
+            # the crown lies flat on the ground, spread wide
+            var cx = crown_x + (-20.0 if crown_x < 0.0 else 20.0)
+            _ellipse(Vector2(cx + 4,0),44,22,Color(0,0,0,0.22),n)
+            # bare limbs out of the trunk end, then the leaves in clumps
+            for k in range(5):
+                var limb = Line2D.new()
+                limb.width = 3.0 - float(k % 2)
+                limb.default_color = bark.darkened(0.1)
+                limb.add_point(Vector2(crown_x,-5))
+                limb.add_point(Vector2(cx + rng.randf_range(-30,30),-6 + rng.randf_range(-18,14)))
+                n.add_child(limb)
+            var leaf = [Color("b8662a"),Color("cc8a34"),Color("8a5a2a"),Color("c9a440"),Color("9c4e22")]
+            for k in range(16):
+                var o = Vector2(rng.randf_range(-34,34),rng.randf_range(-20,14))
+                _ellipse(Vector2(cx,-6) + o + Vector2(1,2),rng.randf_range(8,13),rng.randf_range(5,8),leaf[k % 5].darkened(0.3),n)
+                _ellipse(Vector2(cx,-6) + o,rng.randf_range(7,12),rng.randf_range(5,8),leaf[k % 5],n)
+            _add_static_rect(n,Vector2(0,-4),Vector2(length * 0.84,9))
+            return n
+        "mud":
+            var n = _lot_node(chunk,pos,kind)
+            n.z_index = -47
+            _ellipse(Vector2(0,0),58,34,Color(0.22,0.17,0.12,0.75),n)
+            _ellipse(Vector2(-6,2),42,24,Color(0.17,0.13,0.10,0.8),n)
+            _ellipse(Vector2(10,4),18,8,Color(0.24,0.28,0.30,0.55),n)
+            for k in range(2):
+                var off = -10.0 + k * 20.0
+                # the ruts run along the track
+                if plan_draw_across_y:
+                    _rect(Vector2(0,off),Vector2(90,4),Color(0.12,0.09,0.07,0.55),n)
+                else:
+                    _rect(Vector2(off,0),Vector2(4,60),Color(0.12,0.09,0.07,0.55),n)
             return n
         "sandpile":
             var n = _lot_node(chunk,pos,kind)

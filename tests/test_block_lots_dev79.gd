@@ -7,6 +7,8 @@ extends SceneTree
 # - no lots in the woods, on a site, at the start or by a chained dog
 # - every kind turns up, often enough to change the look of the town
 # - a lot's stash is a real container with its own loot table
+# - street scenes (a jam, a roadblock, a cave-in, weeds, a fallen tree, a car in
+#   the mud) keep off the crossing and the pavements, and off sites
 const Main = preload("res://main_script_mod.gd")
 const BlockLots = preload("res://world/block_lots.gd")
 const RegionCatalog = preload("res://world/region_catalog.gd")
@@ -41,6 +43,8 @@ func run():
         await process_frame
 
     var kinds = {}
+    var street_kinds = {}
+    var street_sectors = 0
     var city = 0
     var city_with_lots = 0
     var sample = null
@@ -90,6 +94,22 @@ func run():
                         planned_cache = true
                 if planned_cache and game.container_states.has(cache_key):
                     check(str(game.container_states[cache_key].get("loot_table","")) != "","a lot stash without a loot table at %s" % c)
+            if int(ch.get_meta("street_scenes",0)) > 0:
+                street_sectors += 1
+                check(poi.is_empty() and c != Vector2i.ZERO,"a street scene on a site or at the start: %s" % c)
+            for n in ch.get_children():
+                if n.has_meta("street_scene"):
+                    street_kinds[str(n.get_meta("street_scene"))] = true
+                    var sr = game._world_event_rect(n)
+                    check(not sr.intersects(Rect2(299,299,170,170)),"a street scene on the crossing at %s" % c)
+            for n in ch.get_children():
+                # nothing solid of a street scene on a pavement: a survivor on foot always gets by
+                if n.has_meta("settlement_piece_solid") and n.has_meta("block_lot_piece") and str(n.get_meta("block_lot_piece")) in game.StreetScenes.PLANS:
+                    var solid:Vector2 = n.get_meta("settlement_piece_solid")
+                    var vert = n.position.y < 274.0 or n.position.y > 494.0
+                    var lo = (n.position.x - solid.x * 0.5) if vert else (n.position.y - solid.y * 0.5)
+                    var hi = (n.position.x + solid.x * 0.5) if vert else (n.position.y + solid.y * 0.5)
+                    check(lo >= 299.0 - 6.0 and hi <= 469.0 + 6.0,"a street scene piece on the pavement at %s %s" % [c,n.position])
             # lot pieces stand clear of the walls
             for n in ch.get_children():
                 if n.has_meta("block_lot_piece") or n.has_meta("lot_draw"):
@@ -103,6 +123,10 @@ func run():
             continue
         check(kinds.has(k),"no %s anywhere near the start" % k)
     check(city > 0 and float(city_with_lots) / float(city) >= 0.25,"too few town sectors with a lot: %d of %d" % [city_with_lots,city])
+    print("STREET SCENES ",street_kinds.keys()," in ",street_sectors," sectors")
+    for k in ["jam","roadblock","crater","overgrown"]:
+        check(street_kinds.has(k),"no street %s anywhere near the start" % k)
+    check(street_sectors >= 20,"too few sectors with a street scene: %d" % street_sectors)
 
     # --- the same sector twice -----------------------------------------------
     check(sample != null,"no sector with a lot")

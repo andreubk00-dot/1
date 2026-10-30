@@ -7,6 +7,7 @@ so a tile covers 128 x 128), in the ground's own palette; art/world_hd/lot_<kind
   3 gravel    a building site's crushed stone and clay
   4 slab      a ruin's bare floor slab, stained, cracked
   5 path      trodden earth, the way people cut across a lot
+  6 weeds     grass and weeds taking an empty street back
 python3 tools/wa_lot_surfaces_hd.py <project>"""
 import math
 import os
@@ -16,7 +17,7 @@ import sys
 from PIL import Image
 
 T = 256
-KINDS = ['asphalt', 'paving', 'sand', 'gravel', 'slab', 'path']
+KINDS = ['asphalt', 'paving', 'sand', 'gravel', 'slab', 'path', 'weeds']
 LEAF = [(176, 92, 30), (196, 118, 40), (150, 84, 36), (206, 160, 60)]
 
 
@@ -135,6 +136,14 @@ def tile(kind, seed):
                     px[x, y] = shade(px[x, y][:3], 0.84) + (255,)
         for _ in range(9):
             crack(px, rnd, (70, 68, 64), 26)
+    elif kind == 'weeds':
+        base(px, (50, 64, 34), n1, n2, 0.22, 0.20, rnd, (0.0, 1, 1))
+        for _ in range(5200):                # blades, two texels tall
+            x, y = rnd.randrange(T), rnd.randrange(T)
+            c = rnd.choice(((82, 103, 51), (66, 86, 40), (42, 54, 29), (96, 112, 58)))
+            px[x, y] = c + (255,)
+            px[x, (y + 1) % T] = shade(c, 0.85) + (255,)
+        leaves(px, rnd, 60)
     elif kind == 'path':
         base(px, (92, 76, 58), n1, n2, 0.18, 0.14, rnd, (0.14, 0.8, 1.15))
         leaves(px, rnd, 40)

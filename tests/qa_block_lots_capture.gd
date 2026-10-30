@@ -1,6 +1,7 @@
 extends SceneTree
-# Visual QA for the dev79 block lots: finds one lot of every kind (or of
-# --qa-only=<kind>, several) and shoots it at gameplay zoom.
+# Visual QA for the dev79 block lots and street scenes: finds one of every kind
+# (or of --qa-only=<kind>, several; streets as street_<kind>) and shoots it at
+# gameplay zoom.
 # xvfb-run godot --path . --rendering-driver opengl3 --script tests/qa_block_lots_capture.gd -- --qa-output=<dir> [--qa-only=square] [--qa-count=1]
 #   [--qa-aerial=x,y]  instead: one aerial shot of the 3 x 3 sectors round x,y
 const Main = preload("res://main_script_mod.gd")
@@ -73,8 +74,8 @@ func run():
                 if ch == null:
                     continue
                 for n in ch.get_children():
-                    if n.has_meta("block_lot"):
-                        var k = str(n.get_meta("block_lot"))
+                    if n.has_meta("block_lot") or n.has_meta("street_scene"):
+                        var k = str(n.get_meta("block_lot")) if n.has_meta("block_lot") else "street_" + str(n.get_meta("street_scene"))
                         if only != "" and k != only:
                             continue
                         if not found.has(k):
