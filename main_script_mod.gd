@@ -6168,7 +6168,7 @@ func _modern_survivor_frame(sheet_name,moving,count = 8):
         var pant = clamp(1.0 - stamina / 45.0,0.0,1.0)
         var idle_n = max(1,int(count))
         # the same breath period whatever the frame count (8 frames at 3.2/s)
-        return int(floor(Time.get_ticks_msec() * (0.0032 + 0.0048 * pant) * float(idle_n) / 8.0)) % idle_n
+        return int(floor(Time.get_ticks_msec() * (0.0032 + 0.0016 * pant) * float(idle_n) / 8.0)) % idle_n
     if sheet_name == "CrouchIdle":
         return int(floor(Time.get_ticks_msec() * 0.0024)) % max(1,int(count))
     if sheet_name == "Taunt":
@@ -7082,7 +7082,9 @@ func _update_player_visuals(delta):
 
     var idle_t = Time.get_ticks_msec() * 0.001
     var pant_k = clamp(1.0 - stamina / 45.0,0.0,1.0)
-    var idle_breath = sin(idle_t * lerpf(1.72,5.2,pant_k)) * lerpf(0.14,0.55,pant_k) * (1.0-blend)
+    # dev80: catching breath after a run was a fast half-pixel heave that the
+    # pixel snap turned into a twitch; deeper breaths now, not a shake
+    var idle_breath = sin(idle_t * lerpf(1.72,3.0,pant_k)) * lerpf(0.14,0.24,pant_k) * (1.0-blend)
     var idle_weight = sin(idle_t * 0.58) * 0.16 * (1.0-blend)
     var idle_micro = sin(idle_t * 0.29 + 0.7) * 0.05 * (1.0-blend)
 
@@ -7383,11 +7385,8 @@ func _body_state_offset(phase:float,blend:float) -> Vector2:
     var off = Vector2.ZERO
     var t = Time.get_ticks_msec() * 0.001
     var px = 0.5 / PLAYER_VISUAL_SCALE          # one screen pixel in visual space
-    # truly chilled (below 35.6 degC): short shivering fits, one pixel wide,
-    # with calm between them
-    var cold = clamp((35.6 - body_temperature) / 1.4,0.0,1.0)
-    if cold > 0.0 and sin(t * 1.3) > 0.55 - cold * 0.5:
-        off.x += px * (1.0 if sin(t * 52.0) > 0.0 else 0.0)
+    # (dev80: no shivering - a pixel jumping eight times a second read as the
+    # figure jittering; the cold shows in the breath and on the HUD)
     # a badly hurt leg: the body sinks a pixel onto the good one every other step
     var legs = float(body_condition.get("legs",100.0))
     if legs < 45.0 and blend > 0.1 and sin(phase) > 0.35:

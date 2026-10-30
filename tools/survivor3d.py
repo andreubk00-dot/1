@@ -487,15 +487,16 @@ def build(pose):
             # the load hangs on the straps: lower parts swing further than the lid
             return U(f + pf * k, r + pr * k, z + pzl * k)
         s.box(PK(-6.1, 0, 8.6), fU, rU, zU, 2.7, 4.9, 5.9, PACK)
-        s.box(PK(-6.3, 0, 13.6, 0.7), fU, rU, zU, 2.9, 5.0, 1.3, darker(PACK, 1.1))
+        # (the parts move together: pockets and bedroll ride the pack, not on their own)
+        s.box(PK(-6.3, 0, 13.6, 0.9), fU, rU, zU, 2.9, 5.0, 1.3, darker(PACK, 1.1))
         for sg in (-1, 1):
-            s.box(PK(-6.0, 5.5 * sg, 6.4, 1.2), fU, rU, zU, 1.8, 0.8, 2.8, PACK_D)
-        s.box(PK(-8.95, 0, 6.8, 1.2), fU, rU, zU, 0.5, 3.3, 2.9, PACK_D, edge=False)
-        s.box(PK(-9.25, 0, 8.6, 1.2), fU, rU, zU, 0.25, 3.4, 0.5, darker(PACK_D, 0.8), edge=False)
-        s.pixel(PK(-9.5, 0, 7.4, 1.2), BRASS, bias=0.3)
-        s.capsule(PK(-6.0, -5.8, 15.6, 1.4), PK(-6.0, 5.8, 15.6, 1.4), 1.8, 1.8, ROLL)
+            s.box(PK(-6.0, 5.5 * sg, 6.4, 1.05), fU, rU, zU, 1.8, 0.8, 2.8, PACK_D)
+        s.box(PK(-8.95, 0, 6.8, 1.05), fU, rU, zU, 0.5, 3.3, 2.9, PACK_D, edge=False)
+        s.box(PK(-9.25, 0, 8.6, 1.05), fU, rU, zU, 0.25, 3.4, 0.5, darker(PACK_D, 0.8), edge=False)
+        s.pixel(PK(-9.5, 0, 7.4, 1.05), BRASS, bias=0.3)
+        s.capsule(PK(-6.0, -5.8, 15.6, 1.1), PK(-6.0, 5.8, 15.6, 1.1), 1.8, 1.8, ROLL)
         for sg in (-1, 1):
-            s.box(PK(-6.0, 3.6 * sg, 15.6, 1.4), fU, rU, zU, 1.9, 0.35, 1.9, BELT, edge=False)
+            s.box(PK(-6.0, 3.6 * sg, 15.6, 1.1), fU, rU, zU, 1.9, 0.35, 1.9, BELT, edge=False)
     # head frame: it turns against the shoulders to keep the gaze steady
     fH = norm(rot_about(fU, V(0, 0, 0), zU, P.head_yaw)) if P.head_yaw else fU
     rH = norm(rot_about(rU, V(0, 0, 0), zU, P.head_yaw)) if P.head_yaw else rU
@@ -723,11 +724,13 @@ def gait(P, t, move, style='walk', amp_scale=1.0, pitch_scale=1.0):
 
     def twist_at(tt):
         return -g['twist'] * math.cos(2 * math.pi * tt) * mf
-    lag = 0.085 if style == 'run' else 0.11
-    swing = 1.35 if style == 'run' else 1.0
-    pz = (bob_at(t - lag) - P.bob) * 0.95 * swing
-    pr = (shift_at(t - lag) - P.shift_r) * 0.9 * swing + (twist_at(t - lag) - P.twist) * 5.5
-    pf = -abs(pz) * 0.25 - (0.35 if style == 'run' else 0.0)
+    # dev80: a packed rucksack is strapped tight - it only settles a little
+    # behind the back (it used to bounce 2.3 units at a run and swing out with
+    # every turn of the shoulders)
+    lag = 0.06 if style == 'run' else 0.08
+    pz = (bob_at(t - lag) - P.bob) * 0.32
+    pr = (shift_at(t - lag) - P.shift_r) * 0.3 + (twist_at(t - lag) - P.twist) * 1.4
+    pf = -abs(pz) * 0.2 - (0.2 if style == 'run' else 0.0)
     P.pack = (pf, pr, pz)
     P.head_yaw = -0.6 * P.twist
     P.head_dz = (bob_at(t - 0.05) - P.bob) * 0.35
@@ -766,7 +769,7 @@ def make_pose(clip, w, d, k):
         if clip == 'Idle3':
             P.twist = 0.08 * math.sin(t * 2 * math.pi)
         # breathing lifts the straps a beat after the chest; idle eyes wander
-        P.pack = (0.0, 0.0, -0.35 * amp * math.sin(t * 2 * math.pi - 0.9))
+        P.pack = (0.0, 0.0, -0.15 * amp * math.sin(t * 2 * math.pi - 0.9))
         P.head_yaw = {'Idle': 0.0, 'Idle2': 0.32, 'Idle3': -0.18}[clip] * math.sin(t * 2 * math.pi)
         if unarmed:
             P.hands = {'L': (0.6, -6.9, -0.4 + P.bob), 'R': (0.6, 6.9, -0.4 + P.bob)}
