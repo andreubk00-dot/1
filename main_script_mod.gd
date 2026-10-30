@@ -2876,6 +2876,7 @@ var scene_legacy_chunks = {}
 # dev73 the dog (docs/DOG_DEV73.md): {"sites": {"x,y": "taken"|"dead"},
 # "dog": the companion's record, "lost": names}; dog is its node
 const DogCatalog = preload("res://world/dog_catalog.gd")
+const BlockLots = preload("res://world/block_lots.gd")
 const Dog = preload("res://world/dog.gd")
 var dog_state = {"sites":{},"dog":{},"lost":[]}
 var dog = null
@@ -23235,7 +23236,7 @@ func _tree_position_forbidden(chunk,pos):
         return true
     if chunk != null:
         for child in chunk.get_children():
-            if is_instance_valid(child) and bool(child.get_meta("world_event_root",false)):
+            if _holds_ground(child):
                 if _world_event_rect(child).grow(22.0).has_point(pos):
                     return true
     return _tree_blocks_door_swing(chunk,pos)
@@ -26098,8 +26099,13 @@ func _build_supply_convoy_scene(root,coord:Vector2i,event:Dictionary):
         _supply_event_survivor(root,event,i,survivor_positions[i])
     _supply_event_cargo_node(root,event)
 
+# a scene or a block lot: something laid out on the ground with a footprint
+# that trees, cars and signs step round
+func _holds_ground(n) -> bool:
+    return is_instance_valid(n) and (bool(n.get_meta("world_event_root",false)) or n.has_meta("block_lot"))
+
 func _world_event_rect(root) -> Rect2:
-    if not is_instance_valid(root) or not bool(root.get_meta("world_event_root",false)):
+    if not _holds_ground(root):
         return Rect2()
     var size = root.get_meta("world_event_footprint",Vector2.ZERO)
     if typeof(size) != TYPE_VECTOR2 or size == Vector2.ZERO:
@@ -26136,6 +26142,9 @@ func _world_event_intersects(chunk,rect:Rect2) -> bool:
                 return true
         elif bool(child.get_meta("world_barrel",false)) or bool(child.get_meta("world_lamp",false)):
             if rect.grow(22.0).has_point(child.position):
+                return true
+        elif child.has_meta("block_lot"):
+            if rect.intersects(_world_event_rect(child)):
                 return true
         elif child.has_meta("interaction_type"):
             if rect.grow(30.0).has_point(child.position):
@@ -26387,6 +26396,10 @@ func _build_procedural_chunk(chunk,coord):
         if not poi.is_empty() and not is_legacy:
             build_chance = max(build_chance,0.92)
 
+        # dev79: the blocks a house does not stand on become lots (a square, a
+        # playground, a car park...); see world/block_lots.gd
+        var lot_family = _block_lot_family(coord,profile,zone,is_legacy,preserve_082_layout)
+        var converted = 0
         for i in range(slots.size()):
             var legacy_container_key = "%d:%d:container:cache_%d" % [coord.x,coord.y,i]
             var should_build = rng.randf() <= build_chance
@@ -26395,6 +26408,17 @@ func _build_procedural_chunk(chunk,coord):
             # whose container state already exists.
             if container_states.has(legacy_container_key):
                 should_build = true
+
+            if lot_family != "":
+                var slot_pos = slots[i].get("pos",_legacy_building_anchors()[i])
+                # a house the survivor has never seen may give way to a lot: one a
+                # sector, never one whose cache is in the save
+                if should_build and converted == 0 and slots.size() >= 3 and not container_states.has(legacy_container_key) and BlockLots.converts(lot_family,coord,i):
+                    should_build = false
+                    converted += 1
+                    block_lots_pending.append([i,slot_pos,BlockLots.pick(lot_family,coord,i)])
+                elif not should_build and BlockLots.fills_empty(lot_family,coord,i):
+                    block_lots_pending.append([i,slot_pos,BlockLots.pick(lot_family,coord,i)])
 
             if not should_build:
                 continue
@@ -26498,16 +26522,16 @@ func _build_procedural_chunk(chunk,coord):
                 building_node.set_meta("loot_profile",loot_table)
 
         if zone == "industrial":
-            _create_workbench(chunk,Vector2(165,590))
-            _create_barrel(chunk,Vector2(225,548))
-            _create_barrel(chunk,Vector2(625,246))
-            _create_fence(chunk,Vector2(118,268),110)
+            _create_workbench(chunk,_zone_dress_spot(chunk,coord,Vector2(165,590),1))
+            _create_barrel(chunk,_zone_dress_spot(chunk,coord,Vector2(225,548),2))
+            _create_barrel(chunk,_zone_dress_spot(chunk,coord,Vector2(625,246),3))
+            _create_fence(chunk,_zone_dress_spot(chunk,coord,Vector2(118,268),4,true),110)
 
         elif zone == "military":
-            _create_fence(chunk,Vector2(160,270),150)
-            _create_fence(chunk,Vector2(548,516),140)
-            _create_barrel(chunk,Vector2(210,250))
-            _create_barrel(chunk,Vector2(618,535))
+            _create_fence(chunk,_zone_dress_spot(chunk,coord,Vector2(160,270),5,true),150)
+            _create_fence(chunk,_zone_dress_spot(chunk,coord,Vector2(548,516),6,true),140)
+            _create_barrel(chunk,_zone_dress_spot(chunk,coord,Vector2(210,250),7))
+            _create_barrel(chunk,_zone_dress_spot(chunk,coord,Vector2(618,535),8))
             _create_name_sign(chunk,Vector2(470,262),"ОГРАНИЧЕННАЯ ЗОНА","","warning")
 
         elif zone == "woodland":
@@ -26516,11 +26540,15 @@ func _build_procedural_chunk(chunk,coord):
                 _create_name_sign(chunk,Vector2(56,262),"ЛЕСОПОЛОСА","","wood")
 
         elif zone == "rural":
-            _create_fence(chunk,Vector2(118,278),92)
+            _create_fence(chunk,_zone_dress_spot(chunk,coord,Vector2(118,278),9,true),92)
 
         elif zone == "commercial":
             _create_lamp(chunk,Vector2(275,304))
             _create_lamp(chunk,Vector2(520,493))
+
+        for lot in block_lots_pending:
+            _build_block_lot(chunk,coord,int(lot[0]),lot[1],str(lot[2]))
+        block_lots_pending.clear()
 
         if not is_legacy:
             _decorate_region_identity(chunk,coord,profile)
@@ -26611,6 +26639,355 @@ func _build_procedural_chunk(chunk,coord):
     )
     if authored_poi:
         _spawn_high_risk_local_incident(chunk,coord,poi_id,poi.get("cell_offset",Vector2i.ZERO))
+
+# ------------------------------------------------------------ dev79 lots --
+var block_lots_pending = []
+const LOT_SURFACE_TEX = "res://art/world_hd/lot_%s_hd.png"
+# the block's ground between the chunk edge and the pavement, a little inside
+const LOT_NEAR = [22.0,248.0]
+const LOT_FAR = [520.0,746.0]
+const LOT_PATCH_SHADER = """shader_type canvas_item;
+uniform vec2 size;
+uniform int edge = 0;          // 0: a kerb of stones round paving, 1: a soft worn edge
+uniform vec2 world_origin;
+varying vec2 local;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y);
+}
+void vertex() { local = VERTEX; }
+void fragment() {
+    vec2 lp = (floor(local) + 0.5) * 0.5;
+    float d = min(min(lp.x, size.x - lp.x), min(lp.y, size.y - lp.y));
+    vec4 c = texture(TEXTURE, UV);
+    if (edge == 1) {
+        vec2 wp = world_origin + lp;
+        float line = 3.0 + 8.0 * vn(wp / 11.0) + 3.0 * vn(wp / 3.0);
+        if (d < line) discard;
+        if (d < line + 1.0) c.rgb *= 0.86;
+    } else {
+        if (d < 1.0) c.rgb = vec3(0.60, 0.59, 0.55);
+        else if (d < 2.0) c.rgb = vec3(0.47, 0.46, 0.43);
+        else if (d < 3.0) c.rgb *= 0.82;
+    }
+    COLOR = c;
+}"""
+var _lot_patch_shader = null
+
+func _block_lot_family(coord:Vector2i,profile:Dictionary,zone:String,is_legacy:bool,preserve:bool) -> String:
+    if is_legacy or preserve or coord == Vector2i.ZERO:
+        return ""
+    if not profile.get("poi",{}).is_empty() or _chunk_has_player_base(coord):
+        return ""
+    var family = str(DISTRICT_GROUND.get(str(profile.get("district_id",RegionCatalog.district_id_for_chunk(coord))),"city"))
+    if not BlockLots.FAMILY_LOTS.has(family):
+        return ""
+    # a sector that hosts a scene on a plot keeps its plots for it
+    var risk = int(profile.get("risk",2))
+    var poi_id = str(profile.get("poi_id",""))
+    var ev = EncounterCatalog.event_for(coord,zone,risk,poi_id)
+    if not ev.is_empty() and str(ev.get("placement","road")) == "plot":
+        return ""
+    if not scene_legacy_chunks.has(_zone_chunk_key(coord)):
+        var sc = SceneCatalog.scene_for(coord,zone,risk,poi_id)
+        if not sc.is_empty() and str(sc.get("placement","road")) == "plot":
+            return ""
+    if DogCatalog.site_name(coord) != "":
+        return ""
+    return family
+
+# dev79: a zone's stock dressing (the works' fence, bench and barrels, the
+# army's fences) stood on the same spot in every sector of the zone. Each sector
+# now mirrors it into a block of its own and shifts it a little; a sector with
+# a player's base, or a spot that is taken, keeps the old place.
+func _zone_dress_spot(chunk,coord:Vector2i,base:Vector2,salt:int,edge_piece:bool = false) -> Vector2:
+    if _chunk_has_player_base(coord) or bool(legacy_building_layout_chunks.get(_zone_chunk_key(coord),false)):
+        return base
+    var h = abs(hash("dress:%d:%d:%d" % [coord.x,coord.y,salt]))
+    var p = base
+    if h % 2 == 1:
+        p.x = CHUNK_SIZE - p.x
+    if (h / 2) % 2 == 1:
+        p.y = CHUNK_SIZE - p.y
+    # a fence keeps its line along the pavement; loose pieces wander the block
+    var along = float((h / 4) % 61) - 30.0
+    var across = 0.0 if edge_piece else float((h / 300) % 41) - 20.0
+    p += Vector2(along,across)
+    if not edge_piece and (_point_on_road_or_sidewalk(p) or not _lot_spot_clear(chunk,p,18.0)):
+        return base
+    if edge_piece and not _settlement_spot_clear(chunk,p,20.0):
+        return base
+    return p.round()
+
+func _lot_rect(slot_pos:Vector2) -> Rect2:
+    var xr = LOT_NEAR if slot_pos.x < CHUNK_SIZE * 0.5 else LOT_FAR
+    var yr = LOT_NEAR if slot_pos.y < CHUNK_SIZE * 0.5 else LOT_FAR
+    return Rect2(xr[0],yr[0],xr[1] - xr[0],yr[1] - yr[0])
+
+func _lot_point(r:Rect2,slot_pos:Vector2,u:float,v:float) -> Vector2:
+    # u = 1 lies against the north-south street, v = 1 against the east-west one
+    var x = r.position.x + u * r.size.x if slot_pos.x < CHUNK_SIZE * 0.5 else r.end.x - u * r.size.x
+    var y = r.position.y + v * r.size.y if slot_pos.y < CHUNK_SIZE * 0.5 else r.end.y - v * r.size.y
+    return Vector2(x,y)
+
+func _lot_spot_clear(chunk,pos:Vector2,radius:float) -> bool:
+    for n in chunk.get_children():
+        if not is_instance_valid(n) or not (n is Node2D):
+            continue
+        if bool(n.get_meta("world_barrel",false)) or bool(n.get_meta("world_lamp",false)) or n.has_meta("interaction_type"):
+            if n.position.distance_to(pos) < radius + 14.0:
+                return false
+        elif bool(n.get_meta("world_fence",false)):
+            var half = Vector2(float(n.get_meta("fence_length",0.0)) * 0.5,0).rotated(n.rotation)
+            var a = n.position - half
+            var b = n.position + half
+            if Geometry2D.get_closest_point_to_segment(pos,a,b).distance_to(pos) < radius + 10.0:
+                return false
+    return _settlement_spot_clear(chunk,pos,radius)
+
+func _build_block_lot(chunk,coord:Vector2i,slot:int,slot_pos:Vector2,kind:String):
+    var plan = BlockLots.plan(kind)
+    if plan.is_empty():
+        return
+    var r = _lot_rect(slot_pos)
+    var root = Node2D.new()
+    root.name = "BlockLot_%d" % slot
+    root.position = r.get_center()
+    # not a world event (those count one to a sector); _holds_ground knows it
+    root.set_meta("world_event_footprint",r.size)
+    root.set_meta("block_lot_label",str(BlockLots.LABELS.get(kind,kind)))
+    root.set_meta("block_lot",kind)
+    root.add_to_group("block_lots")
+    chunk.add_child(root)
+    var mirror_x = slot_pos.x >= CHUNK_SIZE * 0.5
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(hash("lot:%d:%d:%d" % [coord.x,coord.y,slot])) + 1
+    # half the lots turn their plan a quarter (u and v swap), so two of a kind
+    # side by side across a sector border are never mirror twins
+    var swap = kind in BlockLots.TURNABLE and rng.randf() < 0.5
+    var car_colors = [Color("46535a"),Color("654039"),Color("555247"),Color("3e4c45"),Color("6b6a5e")]
+    var placed = 0
+    for item in plan:
+        if item.has("opt") and rng.randf() > float(item["opt"]):
+            continue
+        if item.has("surface"):
+            var q = item["rect"]
+            if swap:
+                q = [q[1],q[0],q[3],q[2]]
+            var a = _lot_point(r,slot_pos,float(q[0]),float(q[1]))
+            var b = _lot_point(r,slot_pos,float(q[0]) + float(q[2]),float(q[1]) + float(q[3]))
+            _lot_surface(chunk,coord,str(item["surface"]),Rect2(Vector2(min(a.x,b.x),min(a.y,b.y)),(a - b).abs()),str(item.get("edge","kerb")))
+            continue
+        var at = item.get("at",item.get("tree",item.get("car",item.get("lamp",item.get("fence",item.get("cache",[0.5,0.5]))))))
+        if swap:
+            at = [at[1],at[0]]
+        var jitter = Vector2(rng.randf_range(-9.0,9.0),rng.randf_range(-7.0,7.0)) if not item.has("draw") else Vector2.ZERO
+        var pos = (_lot_point(r,slot_pos,float(at[0]),float(at[1])) + jitter).round()
+        if item.has("piece"):
+            var solid = item.get("solid",[0,0])
+            var node = _settlement_piece(chunk,{"kind":str(item["piece"]),"pos":pos,"scale":float(item.get("s",0.5)),
+                "solid":Vector2(float(solid[0]),float(solid[1])),"flip":mirror_x != (rng.randf() < 0.3)})
+            if node != null:
+                node.set_meta("block_lot_piece",kind)
+                placed += 1
+        elif item.has("street"):
+            if _lot_spot_clear(chunk,pos,12.0) and _street_furniture_sprite(str(item["street"]),chunk,pos,5) != null:
+                placed += 1
+        elif item.has("prop"):
+            if _lot_spot_clear(chunk,pos,10.0):
+                var pr = _world_prop_sprite(str(item["prop"]),chunk,pos,5,float(item.get("s",0.5)))
+                if pr != null:
+                    pr.z_as_relative = false
+                    pr.flip_h = rng.randf() < 0.5
+                    pr.set_meta("block_lot_piece",kind)
+                    placed += 1
+        elif item.has("tree"):
+            if _lot_spot_clear(chunk,pos,14.0) and _create_tree(chunk,pos,float(item.get("s",1.0)) * rng.randf_range(0.9,1.08),true) != null:
+                placed += 1
+        elif item.has("car"):
+            if _lot_spot_clear(chunk,pos,30.0):
+                _create_car(chunk,pos,car_colors[rng.randi_range(0,car_colors.size() - 1)],(PI * 0.5 if bool(item.get("turn",false)) else 0.0) + rng.randf_range(-0.06,0.06))
+                placed += 1
+        elif item.has("lamp"):
+            _create_lamp(chunk,pos)
+        elif item.has("fence"):
+            var rot = PI * 0.5 if str(item.get("rot","h")) == "v" else 0.0
+            _create_fence(chunk,pos,float(item.get("len",120.0)),rot)
+        elif item.has("draw"):
+            if _lot_spot_clear(chunk,pos,16.0) and _lot_draw(chunk,str(item["draw"]),pos,mirror_x,rng) != null:
+                placed += 1
+        elif item.has("cache"):
+            if _lot_spot_clear(chunk,pos,12.0):
+                var c = _create_container(chunk,coord,pos,"lot_%d" % slot,str(item.get("loot","residential")),"%s • %s" % [str(item.get("name","Тайник")),str(BlockLots.LABELS.get(kind,""))])
+                if c != null:
+                    c.set_meta("block_lot_cache",kind)
+    root.set_meta("block_lot_pieces",placed)
+
+func _lot_surface(chunk,coord:Vector2i,surface:String,rect:Rect2,edge:String):
+    var path = LOT_SURFACE_TEX % surface
+    if not _hd_exists(path):
+        return null
+    if _lot_patch_shader == null:
+        _lot_patch_shader = Shader.new()
+        _lot_patch_shader.code = LOT_PATCH_SHADER
+    var spr = Sprite2D.new()
+    spr.texture = load(path)
+    spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    spr.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+    spr.centered = false
+    spr.region_enabled = true
+    # texels from the world origin, so neighbouring patches of one surface agree
+    var origin = (Vector2(coord) * CHUNK_SIZE + rect.position) * 2.0
+    spr.region_rect = Rect2(origin,rect.size * 2.0)
+    spr.scale = Vector2(0.5,0.5)
+    spr.position = rect.position
+    # over the ground and its seams, under the decals, the snow and everything standing
+    spr.z_index = -18
+    var mat = ShaderMaterial.new()
+    mat.shader = _lot_patch_shader
+    mat.set_shader_parameter("size",rect.size)
+    mat.set_shader_parameter("edge",1 if edge == "soft" else 0)
+    mat.set_shader_parameter("world_origin",Vector2(coord) * CHUNK_SIZE + rect.position)
+    spr.material = mat
+    spr.set_meta("lot_surface",surface)
+    chunk.add_child(spr)
+    return spr
+
+func _lot_node(chunk,pos:Vector2,tag:String):
+    var n = Node2D.new()
+    n.position = pos
+    n.z_index = 5
+    n.z_as_relative = false
+    n.set_meta("lot_draw",tag)
+    chunk.add_child(n)
+    return n
+
+func _lot_draw(chunk,kind:String,pos:Vector2,mirror:bool,rng):
+    var sx = -1.0 if mirror else 1.0
+    match kind:
+        "monument":
+            # a plinth on the square and somebody in bronze on it, an arm out
+            var n = _lot_node(chunk,pos,kind)
+            _ellipse(Vector2(6,2),22,5,Color(0,0,0,0.26),n)
+            _rect(Vector2(0,-3),Vector2(34,10),Color("6d6b65"),n)
+            _rect(Vector2(0,-8),Vector2(34,2),Color("8a8780"),n)
+            _rect(Vector2(0,-20),Vector2(16,22),Color("85827a"),n)
+            _rect(Vector2(6,-20),Vector2(4,22),Color("6a675f"),n)
+            _rect(Vector2(0,-30),Vector2(18,2),Color("98958c"),n)
+            var bronze = Color("3e4a40")
+            _poly(PackedVector2Array([Vector2(-5,-31),Vector2(5,-31),Vector2(4,-46),Vector2(-4,-46)]),bronze,n)
+            _poly(PackedVector2Array([Vector2(-5,-31),Vector2(-1,-31),Vector2(-2,-44),Vector2(-4,-46)]),bronze.lightened(0.18),n)
+            _ellipse(Vector2(0,-49),3.0,3.2,bronze,n)
+            _poly(PackedVector2Array([Vector2(3 * sx,-44),Vector2(12 * sx,-52),Vector2(13 * sx,-50),Vector2(4 * sx,-41)]),bronze,n)
+            _rect(Vector2(-2,-25),Vector2(10,1),Color("c7b46a"),n)
+            _add_static_rect(n,Vector2(0,-3),Vector2(30,10))
+            return n
+        "slide":
+            var n = _lot_node(chunk,pos,kind)
+            _ellipse(Vector2(4,2),20,4,Color(0,0,0,0.24),n)
+            var steel = Color("8e979c")
+            var paint = Color("a8483a")
+            for x in [-14.0,-8.0]:
+                _rect(Vector2(x * sx,-12),Vector2(1.5,24),steel,n)
+            for k in range(5):
+                _rect(Vector2(-11 * sx,-4 - k * 4.5),Vector2(6,1),steel,n)
+            _rect(Vector2(-11 * sx,-25),Vector2(10,3),paint,n)
+            _poly(PackedVector2Array([Vector2(-6 * sx,-25),Vector2(-3 * sx,-25),Vector2(16 * sx,-2),Vector2(12 * sx,0)]),Color("b9c0c2"),n)
+            _poly(PackedVector2Array([Vector2(-6 * sx,-26),Vector2(-5 * sx,-27),Vector2(15 * sx,-4),Vector2(13 * sx,-3)]),paint,n)
+            _add_static_rect(n,Vector2(0,-2),Vector2(30,6))
+            return n
+        "sandbox":
+            var n = _lot_node(chunk,pos,kind)
+            n.z_index = 2
+            var wood = Color("7a5534")
+            _rect(Vector2(0,0),Vector2(34,24),Color("a68a62"),n)
+            _rect(Vector2(2,2),Vector2(26,16),Color("b39870"),n)
+            _rect(Vector2(0,-11),Vector2(34,3),wood.lightened(0.15),n)
+            _rect(Vector2(0,11),Vector2(34,3),wood,n)
+            _rect(Vector2(-16,0),Vector2(3,24),wood.lightened(0.08),n)
+            _rect(Vector2(16,0),Vector2(3,24),wood.darkened(0.15),n)
+            _rect(Vector2(6,2),Vector2(4,4),Color("b0402e"),n)
+            _rect(Vector2(-7,-2),Vector2(5,2),Color("3f6f9e"),n)
+            return n
+        "carousel":
+            var n = _lot_node(chunk,pos,kind)
+            _ellipse(Vector2(3,3),17,6,Color(0,0,0,0.24),n)
+            _ellipse(Vector2(0,0),16,7,Color("7b8286"),n)
+            _ellipse(Vector2(0,-1),15,6,Color("9aa2a5"),n)
+            for k in range(6):
+                var a = TAU * float(k) / 6.0 + 0.3
+                var p = Vector2(cos(a) * 11.0,sin(a) * 4.5 - 1.0)
+                _rect(p + Vector2(0,-4),Vector2(1.5,8),Color("b04a3a") if k % 2 == 0 else Color("3c6a9a"),n)
+            _rect(Vector2(0,-6),Vector2(2,10),Color("6a7276"),n)
+            return n
+        "bays":
+            # painted bays across the asphalt; the cars stand nose in
+            var n = _lot_node(chunk,pos,kind)
+            n.z_index = -45
+            var paint = Color(0.82,0.80,0.72,0.55)
+            for k in range(-4,5):
+                _rect(Vector2(float(k) * 26.0,0),Vector2(1,40),paint,n)
+            _rect(Vector2(0,20),Vector2(210,1),paint,n)
+            return n
+        "wall_h","wall_stub":
+            # what is left of a brick wall: a jagged top, a window gap, soot
+            var w = 96.0 if kind == "wall_h" else 34.0
+            var n = _lot_node(chunk,pos,kind)
+            var brick = Color("7a4232")
+            _ellipse(Vector2(8,2),w * 0.5,4,Color(0,0,0,0.24),n)
+            var top = PackedVector2Array()
+            top.append(Vector2(-w * 0.5,0))
+            var steps = int(w / 8.0)
+            for k in range(steps + 1):
+                var x = -w * 0.5 + w * float(k) / float(steps)
+                top.append(Vector2(x,-(10.0 + rng.randf_range(0.0,18.0))))
+            top.append(Vector2(w * 0.5,0))
+            _poly(top,brick,n)
+            for row in range(1,6):
+                _rect(Vector2(0,-row * 4.0),Vector2(w,1),Color(0.36,0.20,0.16,0.55),n)
+            if kind == "wall_h":
+                _rect(Vector2(-14 * sx,-12),Vector2(14,10),Color("2a2622"),n)
+            _rect(Vector2(0,-1),Vector2(w,2),Color(0.18,0.14,0.12,0.6),n)
+            _add_static_rect(n,Vector2(0,-3),Vector2(w,6))
+            return n
+        "wall_v":
+            var n = _lot_node(chunk,pos,kind)
+            _rect(Vector2(4,0),Vector2(6,88),Color(0,0,0,0.22),n)
+            _rect(Vector2(0,0),Vector2(7,86),Color("8a5a46"),n)
+            _rect(Vector2(-2,0),Vector2(2,86),Color("a06a52"),n)
+            for k in range(3):
+                _rect(Vector2(0,-30 + k * 30),Vector2(7,4),Color("5e3a2e"),n)
+            _add_static_rect(n,Vector2(0,0),Vector2(7,86))
+            return n
+        "slabs":
+            var n = _lot_node(chunk,pos,kind)
+            _ellipse(Vector2(6,2),36,5,Color(0,0,0,0.24),n)
+            for k in range(3):
+                var o = Vector2(float(k % 2) * 3.0 - 1.5,-float(k) * 6.0)
+                _rect(o + Vector2(0,-3),Vector2(66,6),Color("8b8a84").darkened(0.06 * k),n)
+                _rect(o + Vector2(0,-6),Vector2(66,1),Color("a9a8a1"),n)
+                _rect(o + Vector2(31,-3),Vector2(4,6),Color("6c6b66"),n)
+            _add_static_rect(n,Vector2(0,-6),Vector2(66,12))
+            return n
+        "pipes":
+            var n = _lot_node(chunk,pos,kind)
+            for k in range(3):
+                var c = Vector2(float(k) * 17.0 - 17.0,-float(k % 2) * 3.0)
+                _ellipse(c + Vector2(3,3),9,4,Color(0,0,0,0.22),n)
+                _ellipse(c + Vector2(0,-6),8.5,9,Color("8e8c86"),n)
+                _ellipse(c + Vector2(0,-6),5.5,6,Color("3a3936"),n)
+            _add_static_rect(n,Vector2(0,-3),Vector2(48,10))
+            return n
+        "sandpile":
+            var n = _lot_node(chunk,pos,kind)
+            n.z_index = 3
+            _ellipse(Vector2(4,2),30,9,Color(0,0,0,0.18),n)
+            _ellipse(Vector2(0,-2),28,10,Color("9c805a"),n)
+            _ellipse(Vector2(-3,-5),20,7,Color("ad906a"),n)
+            _ellipse(Vector2(-6,-7),10,4,Color("bea079"),n)
+            return n
+    return null
 
 func _decorate_region_identity(chunk,coord,profile):
     # 0.82 deliberately uses small physical signs/landmarks instead of a map UI.
@@ -28044,7 +28421,7 @@ func _car_spot_free(chunk,pos) -> bool:
         elif child.has_meta("poi_piece_kind"):
             if child.position.distance_to(pos) < 76.0:
                 return false
-        elif bool(child.get_meta("world_event_root",false)):
+        elif _holds_ground(child):
             var event_rect = _world_event_rect(child).grow(18.0)
             if footprint.intersects(event_rect):
                 return false
@@ -28296,7 +28673,7 @@ func _forest_edge_context(chunk) -> Dictionary:
             if typeof(size) == TYPE_VECTOR2 and size != Vector2.ZERO:
                 var clearance = Vector2(30,42)
                 ctx["buildings"].append(Rect2(child.position - size * 0.5 - clearance,size + clearance * 2.0))
-        if bool(child.get_meta("world_event_root",false)):
+        if _holds_ground(child):
             ctx["blocks"].append(_world_event_rect(child).grow(22.0))
         if bool(child.get_meta("world_car",false)):
             ctx["blocks"].append(Rect2(child.position - Vector2(44,28),Vector2(88,56)))
@@ -28323,7 +28700,7 @@ func _forest_edge_blocked(chunk,p:Vector2) -> bool:
     for child in chunk.get_children():
         if not is_instance_valid(child):
             continue
-        if bool(child.get_meta("world_event_root",false)) and _world_event_rect(child).grow(22.0).has_point(p):
+        if _holds_ground(child) and _world_event_rect(child).grow(22.0).has_point(p):
             return true
         # never on a parked car or into the trunk of another tree
         if bool(child.get_meta("world_car",false)) and Rect2(child.position - Vector2(44,28),Vector2(88,56)).has_point(p):
@@ -28949,7 +29326,7 @@ func _name_sign_spot_ok(chunk,p:Vector2) -> bool:
             # (and the board, standing south of it, must clear the facade)
             if typeof(size) == TYPE_VECTOR2 and Rect2(b.position - size * 0.5 - Vector2(0,24),size + Vector2(0,24 + 8 + 34)).grow(16.0).has_point(p):
                 return false
-        elif bool(b.get_meta("world_event_root",false)) and _world_event_rect(b).grow(16.0).has_point(p):
+        elif _holds_ground(b) and _world_event_rect(b).grow(16.0).has_point(p):
             return false
         elif bool(b.get_meta("world_name_sign","") != "") and b.position.distance_to(p) < 60.0:
             return false
