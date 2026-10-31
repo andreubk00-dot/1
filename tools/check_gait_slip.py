@@ -14,8 +14,19 @@ import char3d  # noqa: E402
 import survivor3d as S  # noqa: E402
 
 
-def planted_drift(clip, stride_px, d=0, w='akm', samples=4):
-    """Largest drift (world px) of a planted ankle over one stance, side view."""
+# which way the body travels for each clip (forward, right), and a facing that
+# puts that travel across the screen
+TRAVEL = {'RunBackwards': ((-1, 0), 0), 'StrafeLeft': ((0, -1), 2), 'StrafeRight': ((0, 1), 2)}
+
+
+def planted_drift(clip, stride_px, d=None, w='akm', samples=4):
+    """Largest drift (world px) of a planted ankle over one stance, seen
+    with the travel across the screen."""
+    move, face = TRAVEL.get(clip, ((1, 0), 0))
+    d = face if d is None else d
+    P0 = S.Pose(d)
+    unit = P0.L(move[0], move[1], 0)
+    sign = 1.0 if char3d.proj(unit)[0] > char3d.proj(P0.L(0, 0, 0))[0] else -1.0
     n = S.frame_count(clip) * samples
     track = []
     for i in range(n):
@@ -28,7 +39,7 @@ def planted_drift(clip, stride_px, d=0, w='akm', samples=4):
         hip = pelvis + P.r * (2.7 * -1) + P.z * (-1.2) + P.f * P.hip_f['L']
         _, ankle = S.two_bone(hip, P.L(*P.feet['L']), S.LEG[0], S.LEG[1], P.f)
         sx = char3d.proj(ankle)[0] * S.SHEET_WORLD_SCALE
-        body = t * stride_px                     # the game moves the sprite this far
+        body = sign * t * stride_px              # the game moves the sprite this far
         track.append((t, P.feet['L'][2], sx + body))
     # the stance that begins the cycle: the foot is down from contact until it lifts
     down = []
@@ -40,8 +51,5 @@ def planted_drift(clip, stride_px, d=0, w='akm', samples=4):
 
 
 if __name__ == '__main__':
-    for clip in ('Walk', 'Run', 'RunAttack', 'CrouchRun'):
-        print('%-10s stride %5.1f px  planted foot drifts %.2f px' % (clip, S.stride_px(clip), planted_drift(clip, S.stride_px(clip))))
-    S.TRUE_WALK = True
-    for clip in ('Walk', 'Jog', 'Run'):
-        print('raider %-6s stride %5.1f px  planted foot drifts %.2f px' % (clip, S.stride_px(clip), planted_drift(clip, S.stride_px(clip))))
+    for clip in ('Walk', 'Jog', 'Run', 'RunAttack', 'RunBackwards', 'StrafeLeft', 'CrouchRun'):
+        print('%-12s stride %5.1f px  planted foot drifts %.2f px' % (clip, S.stride_px(clip), planted_drift(clip, S.stride_px(clip))))

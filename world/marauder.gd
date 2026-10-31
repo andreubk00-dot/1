@@ -265,8 +265,8 @@ func _physics_process(delta: float) -> void:
     if moved > 0.0:
         var clip = _gait_clip(move)
         var d = (global_position - last_pos) / moved
-        var k = sqrt(d.x * d.x + pow(GaitStrides.GROUND_YK * d.y, 2.0))
-        gait_phase = fposmod(gait_phase + moved / max(4.0, float(GaitStrides.RAIDER[clip]) * k), 1.0)
+        var k = sqrt(d.x * d.x + pow(GaitStrides.VIEW_YK * d.y, 2.0))
+        gait_phase = fposmod(gait_phase + moved / max(4.0, float(GaitStrides.RAIDER[clip]) * float(GaitStrides.CADENCE.get(clip, GaitStrides.CADENCE_EASE)) * k), 1.0)
     stuck_t = stuck_t + delta if (move.length() > 5.0 and moved < 0.2) else max(0.0, stuck_t - delta)
     last_pos = global_position
     _footsteps(move)

@@ -393,7 +393,12 @@ var autosave_time = 0.0
 var aim_direction = Vector2.RIGHT
 var move_direction = Vector2.ZERO
 var walk_phase = 0.0
-var locomotion_clip = "Walk"
+var locomotion_clip = "Jog"
+# dev82: below a runner's pace (overloaded, hurt) the survivor walks; the
+# switch has a margin so a pace near the line does not flicker between them
+var gait_walking = false
+const GAIT_WALK_BELOW = 40.0
+const GAIT_JOG_ABOVE = 46.0
 var movement_anim_blend = 0.0
 var visual_move_direction = Vector2.ZERO
 var visual_move_speed = 0.0
@@ -1336,8 +1341,8 @@ func _run_static_self_tests():
     _record_test(int(_base_build_costs("rain_collector").get("scrap",0)) == 2,"Неверная цена дождесборника")
     _record_test(_make_item_icon("firewood") != null,"Нет inventory art дров")
     _record_test(_make_world_loot_texture("firewood") != null,"Нет world-loot art дров")
-    _record_test(abs(_gait_cycle_distance(false) - float(GaitStrides.SURVIVOR["Walk"])) < 0.01,"Неверная длина walk-cycle")
-    _record_test(abs(_gait_cycle_distance(true) - float(GaitStrides.SURVIVOR["Run"])) < 0.01,"Неверная длина run-cycle")
+    _record_test(abs(_gait_cycle_distance(false) - float(GaitStrides.SURVIVOR["Jog"]) * GaitStrides.CADENCE_EASE) < 0.01,"Неверная длина jog-cycle")
+    _record_test(abs(_gait_cycle_distance(true) - float(GaitStrides.SURVIVOR["Run"]) * float(GaitStrides.CADENCE.get("Run",GaitStrides.CADENCE_EASE))) < 0.01,"Неверная длина run-cycle")
     _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(false),false) - TAU) < 0.001,"Distance gait не даёт полный walk-cycle")
     _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(true),true) - TAU) < 0.001,"Distance gait не даёт полный run-cycle")
     _record_test(abs(ENEMY_SPEED - ENEMY_BASE_SPEED) < 0.001,"Скорость заражённого не должна оставаться в dev-замедлении")
@@ -1898,7 +1903,7 @@ func _run_runtime_smoke_tests():
     _record_test(is_equal_approx(_world_loot_visual_scale("akm"),1.0),"0.74: лут должен рисоваться в нативном размере")
     missing_asset_files.clear()
     for prefix_75 in ["","makarov_","tt33_","shotgun_","toz34_","sks_","akm_","knife_","pipe_","axe_"]:
-        for clip_75 in ["Attack1","Attack2","Attack3","Attack4","CrouchIdle","CrouchRun","Die","Idle","Idle2","Idle3","Run","RunAttack","RunBackwards","RunBackwardsAttack","StrafeLeft","StrafeLeftAttack","StrafeRight","StrafeRightAttack","TakeDamage","Taunt","Walk","Pickup","Use"]:
+        for clip_75 in ["Attack1","Attack2","Attack3","Attack4","CrouchIdle","CrouchRun","Die","Idle","Idle2","Idle3","Run","RunAttack","RunBackwards","RunBackwardsAttack","StrafeLeft","StrafeLeftAttack","StrafeRight","StrafeRightAttack","TakeDamage","Taunt","Walk","Pickup","Use","Jog"]:
             var path_75 = "res://survivor_%s%s.png" % [prefix_75,clip_75]
             if not ResourceLoader.exists(path_75):
                 missing_asset_files.append(path_75)
@@ -2522,8 +2527,8 @@ func _run_runtime_smoke_tests():
     if native_side_legs != null:
         _record_test(native_side_legs.get_width() == 576,"Native leg atlas width должен быть 576")
         _record_test(native_side_legs.get_height() == 240,"Native leg atlas height должен быть 240")
-    _record_test(abs(_gait_cycle_distance(true) - _gait_cycle_distance(false) * float(GaitStrides.SURVIVOR["Run"]) / float(GaitStrides.SURVIVOR["Walk"])) < 0.01,"Run cycle distance сломан")
-    _record_test(abs(_gait_cycle_distance(false,Vector2.DOWN) - _gait_cycle_distance(false) * GaitStrides.GROUND_YK) < 0.01,"dev81: шаг к камере должен учитывать ракурс")
+    _record_test(_gait_cycle_distance(true) > _gait_cycle_distance(false),"Run cycle distance сломан")
+    _record_test(abs(_gait_cycle_distance(false,Vector2.DOWN) - _gait_cycle_distance(false) * GaitStrides.VIEW_YK) < 0.01,"dev82: шаг к камере должен учитывать ракурс")
     _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(false) * 0.5,false) - PI) < 0.001,"Walk half-cycle sync сломан")
     _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(true) * 0.5,true) - PI) < 0.001,"Run half-cycle sync сломан")
     _record_test(MOVE_SPEED > ENEMY_SPEED,"Player walk speed должен немного превышать infected speed")
@@ -5849,20 +5854,21 @@ func _gait_variant_for_phase(phase_value):
 func _gait_stride_clip(running) -> String:
     var clip = locomotion_clip
     if not GaitStrides.SURVIVOR.has(clip):
-        clip = "Walk"
-    if running and clip == "Walk":
+        clip = "Jog"
+    if running and (clip == "Walk" or clip == "Jog"):
         clip = "Run"
     elif not running and clip == "Run":
-        clip = "Walk"
+        clip = "Jog"
     if is_crouching and not running:
         clip = "CrouchRun"
     return clip
 
 func _gait_cycle_distance(running,move_dir:Vector2 = Vector2.RIGHT):
-    var stride = float(GaitStrides.SURVIVOR.get(_gait_stride_clip(running),GaitStrides.SURVIVOR["Walk"]))
+    var gclip = _gait_stride_clip(running)
+    var stride = float(GaitStrides.SURVIVOR.get(gclip,GaitStrides.SURVIVOR["Jog"]))
     var d = move_dir.normalized() if move_dir.length() > 0.01 else Vector2.RIGHT
-    var k = sqrt(d.x * d.x + pow(GaitStrides.GROUND_YK * d.y,2.0))
-    return max(4.0,stride * k)
+    var k = sqrt(d.x * d.x + pow(GaitStrides.VIEW_YK * d.y,2.0))
+    return max(4.0,stride * float(GaitStrides.CADENCE.get(gclip,GaitStrides.CADENCE_EASE)) * k)
 
 func _gait_phase_delta_for_distance(distance,running,move_dir:Vector2 = Vector2.RIGHT):
     var cycle_distance = max(1.0,_gait_cycle_distance(running,move_dir))
@@ -6258,7 +6264,7 @@ func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
             return "StrafeLeft" if melee_lateral < 0.0 else "StrafeRight"
         if melee_forward < -0.22:
             return "RunBackwards"
-        return "Run" if is_sprinting else "Walk"
+        return _forward_gait_clip()
 
     if reload_time > 0.0:
         return "Taunt"
@@ -6294,7 +6300,16 @@ func _modern_survivor_clip(weapon_id,local_aim,local_motion,moving):
     if forward_amount < -0.22:
         return "RunBackwards"
 
-    return "Run" if is_sprinting else "Walk"
+    return _forward_gait_clip()
+
+func _forward_gait_clip() -> String:
+    if is_sprinting:
+        return "Run"
+    if gait_walking and visual_move_speed > GAIT_JOG_ABOVE:
+        gait_walking = false
+    elif not gait_walking and visual_move_speed < GAIT_WALK_BELOW:
+        gait_walking = true
+    return "Walk" if gait_walking else "Jog"
 
 func _modern_survivor_overlay_config(weapon_id):
     # Weapon-specific overlay keeps the selected gun readable over the baked survivor.
@@ -7118,7 +7133,13 @@ func _update_player_visuals(delta):
     var forward_mass = local_motion * blend * (0.25 if is_sprinting else 0.085) * clamp(speed_ratio,0.0,1.25)
     var impact_drop = Vector2(0,foot_contact * 0.012 * blend * locomotion_strength)
     var pose_offset = Vector2(idle_weight + idle_micro,idle_breath - 1.0)
-    pose_offset += planted_shift + forward_mass + impact_drop + visual_motion_impulse * 0.72 + Vector2(0,body_bob)
+    if use_modern_survivor:
+        # dev82: the step's bob and sway are drawn in the sheet; nudging the
+        # whole sprite as well, a pixel at a time on its own beat, made the
+        # head hop two texels at once and the figure jitter sideways
+        pose_offset += forward_mass + visual_motion_impulse * 0.72
+    else:
+        pose_offset += planted_shift + forward_mass + impact_drop + visual_motion_impulse * 0.72 + Vector2(0,body_bob)
     # the spring: top-down, a sway along the ground reads half as tall
     pose_offset += Vector2(body_spring_pos.x,body_spring_pos.y * 0.6)
     pose_offset += _body_state_offset(phase,blend)

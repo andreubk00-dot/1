@@ -50,14 +50,21 @@ func _check_weapon(game,weapon_id:String,melee:bool)->void:
             check(int(tex.get_width())==1536 and int(tex.get_height())==1024,"%s idle atlas geometry %s" % [weapon_id,clip])
     # Changing aim/motion must keep the existing direction-based clip mapping.
     game.modern_survivor_idle_time=0.0
+    # dev82: at the survivor's own pace the legs jog; slowed (overloaded, hurt) they walk
+    game.visual_move_speed=game.MOVE_SPEED
+    game.gait_walking=false
     for spec in [
-        [Vector2.RIGHT,"Walk"],
+        [Vector2.RIGHT,"Jog"],
         [Vector2.LEFT,"RunBackwards"],
         [Vector2.UP,"StrafeLeft"],
         [Vector2.DOWN,"StrafeRight"]
     ]:
         var clip=game._modern_survivor_clip(weapon_id,Vector2.RIGHT,spec[0],true)
         check(clip==str(spec[1]),"%s walking direction expected %s got %s" % [weapon_id,str(spec[1]),clip])
+    game.visual_move_speed=game.MOVE_SPEED*0.5
+    check(game._modern_survivor_clip(weapon_id,Vector2.RIGHT,Vector2.RIGHT,true)=="Walk",weapon_id+" slow pace walks")
+    game.visual_move_speed=game.MOVE_SPEED
+    check(game._modern_survivor_clip(weapon_id,Vector2.RIGHT,Vector2.RIGHT,true)=="Jog",weapon_id+" back to a jog")
     game.is_sprinting=true
     check(game._modern_survivor_clip(weapon_id,Vector2.RIGHT,Vector2.RIGHT,true)=="Run",weapon_id+" sprint transition")
     _clear_actions(game)

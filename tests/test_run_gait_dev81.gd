@@ -61,14 +61,19 @@ func run():
         var dist: float = res[0]
         var cycles: float = res[1]
         var sprint = leg.has("sprint")
-        var stride = float(GaitStrides.SURVIVOR["Run" if sprint else "Walk"])
+        var gclip = "Run" if sprint else "Jog"
+        var stride = float(GaitStrides.SURVIVOR[gclip]) * float(GaitStrides.CADENCE.get(gclip, GaitStrides.CADENCE_EASE))
         if leg[0] == "move_down":
-            stride *= GaitStrides.GROUND_YK
+            stride *= GaitStrides.VIEW_YK
         var want = dist / stride
         check(dist > 40.0, "%s: the survivor barely moved (%.1f)" % [leg, dist])
         # the start and the stop ease in and out; allow a little either way
         check(abs(cycles - want) <= max(0.25, want * 0.12), "%s: %.2f gait cycles over %.1f px, the stride wants %.2f" % [leg, cycles, dist, want])
         print("%s: %.1f px, %.2f cycles (%.2f per second)" % [leg, dist, cycles, cycles / 1.6])
+        # dev82: a runner's rhythm - about 160-190 steps a minute, never a patter
+        var spm = cycles / 1.6 * 120.0 * (dist / max(1.0, dist))
+        if leg[0] != "move_down":
+            check(spm > 130.0 and spm < 215.0, "%s: %.0f steps a minute is not a runner's cadence" % [leg, spm])
 
     # --- raiders ---------------------------------------------------------------
     var m = Marauder.new()

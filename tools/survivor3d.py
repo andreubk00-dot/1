@@ -163,7 +163,7 @@ BLK = (36, 36, 38)
 CLIPS = ['Attack1', 'Attack2', 'Attack3', 'Attack4', 'CrouchIdle', 'CrouchRun', 'Die', 'Idle',
          'Idle2', 'Idle3', 'Run', 'RunAttack', 'RunBackwards', 'RunBackwardsAttack', 'StrafeLeft',
          'StrafeLeftAttack', 'StrafeRight', 'StrafeRightAttack', 'TakeDamage', 'Taunt', 'Walk',
-         'Pickup', 'Use']
+         'Pickup', 'Use', 'Jog']
 MOVE_CLIPS = ('Walk', 'Jog', 'Run', 'RunBackwards', 'StrafeLeft', 'StrafeRight', 'CrouchRun')
 # dev77: firing on the move - the same step cycle with the gun held up; the
 # game plays them by the stride like any walk (it used to run a whole step
@@ -254,7 +254,11 @@ GUNS = {
 # old 9.2 + 9.0 left the knees bent even standing, and the walk's dip made it
 # a squat-walk); now the leg is near straight at mid-stance and flexes at the
 # heel-strike and in the swing, as a man's does
+# the survivor's own proportions (dev82 tried human-length legs - rejected:
+# the figure lost its look); pelvis heights below follow LEG through LEG_K
 LEG = (8.9, 8.7)
+LEG_K = (LEG[0] + LEG[1]) / 17.6          # against the old legs (8.9 + 8.7)
+PELVIS_Z = 3.4 + LEG[0] + LEG[1]          # standing pelvis height (was 21.0)
 
 
 def two_bone(a, target, l1, l2, pole):
@@ -289,7 +293,7 @@ class Pose:
         self.r = V(-math.sin(a), math.cos(a), 0)      # character's right
         self.z = V(0, 0, 1)
         # defaults (body-local numbers)
-        self.pelvis_z = 21.0
+        self.pelvis_z = PELVIS_Z
         self.lean = 0.0          # forward lean (rad)
         self.side_lean = 0.0
         self.twist = 0.0         # upper-body yaw
@@ -458,15 +462,15 @@ def build(pose):
             top = i & 4
             wr_ = 5.55 if top else 6.4
             dp = 3.6 if top else 4.1
-            zz = 5.0 if top else -7.4
+            zz = 5.0 if top else -7.4 * LEG_K
             cc.append(U((dp if i & 1 else -dp), (wr_ if i & 2 else -wr_), zz))
         s.block(cc, COAT)
-        s.box(U(0.0, 0, -7.2), fU, rU, zU, 4.15, 6.45, 0.4, darker(COAT, 0.78), edge=False)   # hem
+        s.box(U(0.0, 0, -7.2 * LEG_K), fU, rU, zU, 4.15, 6.45, 0.4, darker(COAT, 0.78), edge=False)   # hem
         s.box(U(3.95, 0, -1.0), fU, rU, zU, 0.12, 0.25, 6.0, darker(COAT, 0.72), edge=False)  # front edge
     else:
         s.box(U(0.0, 0, 4.5), fU, rU, zU, 3.55, 5.45, 0.55, JACKET_D, edge=False)       # hem
     if APRON:
-        bottom = -6.0 if COAT else -2.0
+        bottom = -6.0 * LEG_K if COAT else -2.0
         s.box(U(3.9 if not COAT else 4.25, 0, (11.0 + bottom) * 0.5), fU, rU, zU, 0.15, 3.5, (11.0 - bottom) * 0.5, APRON, edge=False)
         s.box(U(3.75, 0, 11.4), fU, rU, zU, 0.15, 2.4, 0.4, darker(APRON, 0.8), edge=False)
     # collar + neck gaiter
@@ -700,10 +704,16 @@ GAITS = {
 # contact / toe-off) are the longest the rig's short legs reach with the knee
 # still bent at contact; check_reach() guards it.
 RUN_GAITS = {
-    'jog': dict(S=0.31, Lf=6.6, Lb=10.0, drop=1.7, B=0.95, kick=7.0, knee=5.6, reach=0.9,
-                lean=0.09, hip=1.1, twist=0.10, shift=0.10, heel=2.0, arms=3.6),
-    'sprint': dict(S=0.25, Lf=7.0, Lb=10.8, drop=2.2, B=1.15, kick=10.0, knee=8.0, reach=1.3,
-                   lean=0.15, hip=1.3, twist=0.12, shift=0.08, heel=2.6, arms=4.8),
+    # the longest steps the survivor's legs reach; the knee lift and heel kick
+    # are a runner's, not a sprinter-cartoon's (dev82: lower than dev81)
+    # dev82 review: the upper body swings with the legs (shoulders against
+    # the hips, a sway over each planted foot), the trailing foot leaves the
+    # ground at once (a flight, not a lunge), the heel kick is eased; the
+    # sprint leans in and plants under the hips, not out in front
+    'jog': dict(S=0.31, Lf=6.4, Lb=10.2, drop=1.7, B=0.72, kick=5.2, knee=4.8, reach=0.3,
+                lean=0.09, hip=1.1, twist=0.15, shift=0.15, heel=2.6, arms=3.6, lift=2.6, land=3.5),
+    'sprint': dict(S=0.26, Lf=5.6, Lb=12.0, drop=2.1, B=0.7, kick=8.0, knee=6.8, reach=0.3,
+                   lean=0.27, hip=1.3, twist=0.17, shift=0.12, heel=3.0, arms=4.6, lift=3.2, land=3.6),
 }
 # running backwards or sideways the steps are shorter (the legs cannot
 # reach as far behind or across)
@@ -757,20 +767,32 @@ def run_foot(g, phi, amp=1.0):
     sw = (phi - S) / (1.0 - S)
     v = -(Lf + Lb) / S * (1.0 - S)            # ground speed in swing-phase units
     keys = [(0.0, -Lb, 3.0 + g['heel']),
-            (0.26, -Lb * 0.72, 3.0 + g['kick']),
+            (0.1, -Lb * 0.95, 3.0 + g['heel'] + g['lift']),
+            (0.3, -Lb * 0.68, 3.0 + g['kick']),
             (0.52, Lf * 0.25, 3.0 + g['knee']),
-            (0.80, Lf + g['reach'] * amp, 4.6),
+            (0.80, Lf + g['reach'] * amp, g['land']),
             (1.0, Lf, 3.0)]
-    o, z = _hermite(keys, sw, (v * 0.6, 14.0), (v * 0.35, -6.0))
+    o, z = _hermite(keys, sw, (v * 0.6, 22.0), (v * 0.35, -6.0))
     return o, max(3.0, z), keyinterp(RUN_SWING_PITCH, sw)[0]
+
+
+def run_foot_in(g, phi):
+    """0..1: how far a swinging foot comes in toward the line it runs on"""
+    S = g['S']
+    if phi < S:
+        return 0.0
+    return math.sin(math.pi * (phi - S) / (1.0 - S))
 
 
 def run_gait(P, t, move, style='jog', amp=1.0, pitch_scale=1.0):
     g = RUN_GAITS[style]
     mf, mr = move
     for side, sg, ph in (('L', -1, 0.0), ('R', 1, 0.5)):
-        o, z, pitch = run_foot(g, (t + ph) % 1.0, amp)
-        P.feet[side] = (0.6 + mf * o, 2.6 * sg + mr * o, z)
+        phi = (t + ph) % 1.0
+        o, z, pitch = run_foot(g, phi, amp)
+        # runners land near the midline: the swinging foot comes in a little
+        width = 2.6 - 0.9 * run_foot_in(g, phi)
+        P.feet[side] = (0.6 + mf * o, width * sg + mr * o, z)
         P.foot_pitch[side] = pitch * pitch_scale
     c = math.cos(2 * math.pi * t)
     P.hip_f['L'] = g['hip'] * c * mf
@@ -785,8 +807,8 @@ def run_gait(P, t, move, style='jog', amp=1.0, pitch_scale=1.0):
     P.bob = bob_at(t)
     P.lean = g['lean'] * (1 if mf > 0 else (-0.3 if mf < 0 else 0.4))
     # the rucksack is strapped tight (dev80); the head steadies a beat late
-    pz = (bob_at(t - 0.06) - P.bob) * 0.3
-    P.pack = (-abs(pz) * 0.2 - 0.15, 0.0, pz)
+    pz = (bob_at(t - 0.07) - P.bob) * 0.4
+    P.pack = (-abs(pz) * 0.2 - 0.15, -P.shift_r * 0.25, pz)
     P.head_yaw = -0.6 * P.twist
     P.head_dz = (bob_at(t - 0.05) - P.bob) * 0.3
     return P
@@ -810,8 +832,6 @@ def check_reach(style, amp=1.0, margin=0.35):
 
 
 WALK_DROP = 1.4              # the walking pelvis rides this much lower
-# set while the raiders' sheets bake: their Walk is a walk, their Jog the jog
-TRUE_WALK = False
 
 
 def gait(P, t, move, style='walk', amp_scale=1.0, pitch_scale=1.0):
@@ -884,14 +904,15 @@ def unarmed_swing(P, t, amp, run=False):
             P.hands[side] = (0.8 + amp * c, 7.3 * sg, -0.8 + abs(c) * 0.6 + max(0.0, c) * 0.9)
 
 
-def carry_sway(P, t, k):
+def carry_sway(P, t, k, keep_twist=0.35):
     """Weapon moves with the chest while walking/running."""
     if P.grip is None:
         return
     f, r, z = P.grip
-    P.grip = (f, r, z + k * math.cos(4 * math.pi * t))
-    P.gun_yaw += 0.02 * k * math.cos(2 * math.pi * t)
-    P.twist *= 0.35          # a rifle keeps the torso squarer than free arms
+    # the gun rides the step: up and down with each footfall, a little across
+    P.grip = (f, r + 0.35 * k * math.cos(2 * math.pi * t), z + k * math.cos(4 * math.pi * t))
+    P.gun_yaw += 0.03 * k * math.cos(2 * math.pi * t)
+    P.twist *= keep_twist    # a rifle keeps the torso squarer than free arms
 
 
 def make_pose(clip, w, d, k):
@@ -911,13 +932,15 @@ def make_pose(clip, w, d, k):
         P.head_yaw = {'Idle': 0.0, 'Idle2': 0.32, 'Idle3': -0.18}[clip] * math.sin(t * 2 * math.pi)
         if unarmed:
             P.hands = {'L': (0.6, -6.9, -0.4 + P.bob), 'R': (0.6, 6.9, -0.4 + P.bob)}
-    elif clip == 'Walk' and TRUE_WALK:
+    elif clip == 'Walk':
+        # dev82: a walk is a walk - at a slow pace (overloaded, hurt), the
+        # raiders' patrol; the survivor's ordinary pace is the Jog
         gait(P, t, (1, 0), 'walk')
         if unarmed:
             unarmed_swing(P, t, 3.4)
         else:
             carry_sway(P, t, 0.5)
-    elif clip in ('Walk', 'Jog', 'Run', 'RunAttack'):
+    elif clip in ('Jog', 'Run', 'RunAttack'):
         # dev81: the survivor's ordinary pace is a jog, the sprint a sprint
         # (the old Walk was a stroll at a jogger's speed - the feet skated)
         run = clip == 'Run'
@@ -926,7 +949,14 @@ def make_pose(clip, w, d, k):
         if unarmed:
             unarmed_swing(P, t, RUN_GAITS[style]['arms'], True)
         else:
-            carry_sway(P, t, 0.7 if run else 0.5)
+            # firing on the move (RunAttack) keeps the gun steady on the target
+            aiming = clip == 'RunAttack'
+            carry_sway(P, t, 0.5 if aiming else (1.3 if run else 1.0), keep_twist=0.35 if aiming else 0.7)
+            if run and P.grip is not None:
+                # a sprint carries the gun low across the body, not at the shoulder
+                f, r, z = P.grip
+                P.grip = (f - 0.8, r - 1.0, z - 4.0)
+                P.gun_pitch += 0.38
     elif clip.startswith('RunBackwards'):
         run_gait(P, t, (-1, 0), 'jog', amp=BACK_AMP, pitch_scale=-0.4)
         P.lean = -0.04
@@ -944,7 +974,7 @@ def make_pose(clip, w, d, k):
         else:
             carry_sway(P, t, 0.35)
     elif clip == 'CrouchIdle':
-        P.pelvis_z = 13.5
+        P.pelvis_z = 3.0 + 10.5 * LEG_K
         P.feet = {'L': (2.8, -3.4, 3.0), 'R': (-2.2, 3.2, 3.0)}
         P.foot_pitch = {'L': 0.0, 'R': -0.35}
         P.lean = 0.22
@@ -952,7 +982,7 @@ def make_pose(clip, w, d, k):
         if unarmed:
             unarmed_swing(P, 0.25, 0.0)
     elif clip == 'CrouchRun':
-        P.pelvis_z = 15.0
+        P.pelvis_z = 3.0 + 12.0 * LEG_K
         gait(P, t, (1, 0), 'crouch')
         if unarmed:
             unarmed_swing(P, t, 2.0)
@@ -969,7 +999,7 @@ def make_pose(clip, w, d, k):
             P.gun_pitch += 0.35 * a
     elif clip == 'Die':
         a = min(1.0, k / (frame_count('Die') * 0.75))
-        P.pelvis_z = 21.0 - 7.0 * min(1.0, a * 1.6)
+        P.pelvis_z = PELVIS_Z - 7.0 * LEG_K * min(1.0, a * 1.6)
         P.feet = {'L': (1.8, -3.0, 3.0), 'R': (-0.6, 3.2, 3.0)}
         P.fall = (math.pi * 0.46) * (a ** 1.4)
         if w:
@@ -985,13 +1015,13 @@ def make_pose(clip, w, d, k):
         # survivor seemed to topple sideways at every crate)
         a = [0.0, 0.35, 0.7, 0.92, 1.0, 1.0, 0.9, 0.62, 0.3, 0.08][k]
         reach = [0.0, 0.1, 0.4, 0.8, 1.0, 1.0, 0.75, 0.35, 0.1, 0.0][k]
-        P.pelvis_z = 21.0 - 7.6 * a
+        P.pelvis_z = PELVIS_Z - 7.6 * LEG_K * a
         P.feet = {'L': (0.6 + 3.2 * a, -2.9, 3.0), 'R': (0.6 - 3.4 * a, 3.0, 3.0 + 0.4 * a)}
         P.foot_pitch = {'L': 0.0, 'R': -0.75 * a}
         P.lean = 0.42 * a
         P.head_pitch = 0.3 * a
         _free_left_hand(P, w, a)
-        P.hands['L'] = (2.0 + 6.0 * reach, -2.6, 2.0 - 13.5 * reach)
+        P.hands['L'] = (2.0 + 6.0 * reach, -2.6, 2.0 - (13.5 + 7.6 * (LEG_K - 1.0)) * reach)
         if cls == 'none':
             P.hands['R'] = (2.0 + 2.0 * a, 5.6, 0.5 - 2.0 * a)
     elif clip == 'Use':
@@ -1157,10 +1187,8 @@ MARAUDER_CLIPS = ('Idle', 'Walk', 'Jog', 'Run', 'Attack1', 'TakeDamage', 'Die')
 
 
 def build_marauders(project, outfits=MARAUDER_OUTFITS, weapons=MARAUDER_WEAPONS, clips=MARAUDER_CLIPS):
-    global TRUE_WALK
     out = os.path.join(project, 'art', 'marauders')
     os.makedirs(out, exist_ok=True)
-    TRUE_WALK = True
     for o in outfits:
         apply_outfit(o)
         for w in weapons:
@@ -1169,7 +1197,6 @@ def build_marauders(project, outfits=MARAUDER_OUTFITS, weapons=MARAUDER_WEAPONS,
         # bare hands: a raider who threw the gun down to surrender
         for clip in ('Idle', 'Walk', 'Jog', 'Run', 'Die'):
             save_png(sheet(clip, None), os.path.join(out, '%s_none_%s.png' % (o, clip)))
-    TRUE_WALK = False
     apply_outfit('survivor')
 
 
@@ -1195,10 +1222,10 @@ SHEET_WORLD_SCALE = 0.5
 
 
 def stride_units(clip):
-    if clip == 'Walk' and TRUE_WALK:
+    if clip == 'Walk':
         g = GAITS['walk']
         return 2.0 * g['A'] / g['S']
-    if clip in ('Walk', 'Jog', 'RunAttack'):
+    if clip in ('Jog', 'RunAttack'):
         g = RUN_GAITS['jog']
         return (g['Lf'] + g['Lb']) / g['S']
     if clip == 'Run':
@@ -1221,14 +1248,10 @@ def stride_px(clip):
 
 
 def write_gait_strides(project):
-    global TRUE_WALK
     survivor = {}
     for clip in MOVE_CLIPS + MOVE_ATTACK_CLIPS:
-        if clip != 'Jog':
-            survivor[clip] = round(stride_px(clip), 3)
-    TRUE_WALK = True
+        survivor[clip] = round(stride_px(clip), 3)
     raider = {c: round(stride_px(c), 3) for c in ('Walk', 'Jog', 'Run')}
-    TRUE_WALK = False
     fmt = lambda d: '{' + ', '.join('"%s": %s' % (k, v) for k, v in d.items()) + '}'
     src = ('extends RefCounted\n'
            '# Generated by tools/survivor3d.py write_gait_strides - do not edit.\n'
@@ -1237,7 +1260,20 @@ def write_gait_strides(project):
            '# GROUND_YK toward and away from the camera.\n'
            'const SURVIVOR = %s\n'
            'const RAIDER = %s\n'
-           'const GROUND_YK = %s\n' % (fmt(survivor), fmt(raider), char3d.YK))
+           'const GROUND_YK = %s\n'
+           '# dev82: the share of that foreshortening the cadence follows. Full\n'
+           '# (0.55) kept the foot planted toward the camera but nearly doubled the\n'
+           '# leg speed there - the legs pattered; 0.8 keeps a runner\'s rhythm and\n'
+           '# lets the foot drift a little along the line of sight, where it reads least.\n'
+           'const VIEW_YK = 0.8\n'
+           '# dev82: the survivor\'s legs are short for his speed (a third of his\n'
+           '# height); matching the ground exactly made them patter at 2 to 3 cycles\n'
+           '# a second. The cycle runs this much longer than the drawn stride - a\n'
+           '# runner\'s 175-185 steps a minute - and the planted foot drifts a fifth\n'
+           '# of a step, which at this size reads far better than the patter.\n'
+           'const CADENCE_EASE = 1.25\n'
+           '# a sprint turns the legs over faster than a jog (about 200 steps a minute)\n'
+           'const CADENCE = {"Run": 1.15}\n' % (fmt(survivor), fmt(raider), char3d.YK))
     with open(os.path.join(project, 'world', 'gait_strides.gd'), 'w') as f:
         f.write(src)
 
