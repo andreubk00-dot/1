@@ -12,11 +12,14 @@ const CELL = 128
 const SPRITE_SCALE = 0.5
 const SPRITE_OFFSET = Vector2(0, -7.5)
 # dev77: a step cycle in 16 frames, breathing and the fall in 12 (smoother)
-const FRAMES = {"Idle": 12, "Walk": 16, "Run": 16, "Attack1": 8, "TakeDamage": 8, "Die": 12}
+const FRAMES = {"Idle": 12, "Walk": 16, "Jog": 16, "Run": 16, "Attack1": 8, "TakeDamage": 8, "Die": 12}
 const WALK_SPEED = 36.0
 const COMBAT_SPEED = 56.0
 const RUN_SPEED = 74.0
-const STRIDE = {"Walk": 34.0, "Run": 46.0}
+# dev81: a patrol walks, a raider in a fight jogs, one closing in sprints; the
+# cycle length is the stride the sheet really takes (world/gait_strides.gd)
+const GaitStrides = preload("res://world/gait_strides.gd")
+var gait_phase = 0.0
 
 # per weapon: preferred range, damage to the player per hit, rounds, timing
 const ARMS = {
@@ -104,7 +107,7 @@ var _sheets = {}
 var mouth: AudioStreamPlayer2D = null
 var gear: AudioStreamPlayer2D = null
 var voice_id = 0
-var step_mark = 0.0
+var step_mark = 0
 var stagger_t = 0.0
 var knock = Vector2.ZERO
 var flinch_t = 0.0
@@ -259,6 +262,11 @@ func _physics_process(delta: float) -> void:
     move_and_slide()
     var moved = global_position.distance_to(last_pos)
     walk_dist += moved
+    if moved > 0.0:
+        var clip = _gait_clip(move)
+        var d = (global_position - last_pos) / moved
+        var k = sqrt(d.x * d.x + pow(GaitStrides.GROUND_YK * d.y, 2.0))
+        gait_phase = fposmod(gait_phase + moved / max(4.0, float(GaitStrides.RAIDER[clip]) * k), 1.0)
     stuck_t = stuck_t + delta if (move.length() > 5.0 and moved < 0.2) else max(0.0, stuck_t - delta)
     last_pos = global_position
     _footsteps(move)
@@ -883,7 +891,7 @@ func _update_dying(delta: float) -> void:
 
 # ------------------------------------------------------------- animation --
 func _sheet(clip: String) -> Texture2D:
-    var held = "none" if weapon_dropped and clip in ["Idle", "Walk", "Run", "Die", "TakeDamage"] else weapon
+    var held = "none" if weapon_dropped and clip in ["Idle", "Walk", "Jog", "Run", "Die", "TakeDamage"] else weapon
     if held == "none" and clip == "TakeDamage":
         clip = "Idle"
     var key = "%s_%s_%s" % [outfit, held, clip]
@@ -909,9 +917,9 @@ func _animate(move: Vector2) -> void:
     elif hurt_anim > 0.0:
         _set_clip("TakeDamage", clamp(int((0.25 - hurt_anim) / 0.25 * 4.0), 0, 3))
     elif move.length() > 5.0:
-        var clip = "Run" if move.length() > COMBAT_SPEED + 4.0 else "Walk"
+        var clip = _gait_clip(move)
         var n = FRAMES[clip]
-        _set_clip(clip, int(fposmod(walk_dist / STRIDE[clip], 1.0) * n) % n)
+        _set_clip(clip, int(gait_phase * n) % n)
     else:
         _set_clip("Idle", int(t * 9.0 + get_instance_id() % 7) % FRAMES["Idle"])
     # pixel-crisp: the sprite never sits between screen pixels
@@ -1010,15 +1018,25 @@ func _play_gear(path: String, db: float) -> void:
     gear.play()
 
 
+func _gait_clip(move: Vector2) -> String:
+    var v = move.length()
+    if v > (COMBAT_SPEED + RUN_SPEED) * 0.5:
+        return "Run"
+    if v > (WALK_SPEED + COMBAT_SPEED) * 0.5:
+        return "Jog"
+    return "Walk"
+
+
 func _footsteps(move: Vector2) -> void:
     # two footfalls per gait cycle, on the surface underfoot; running is louder
     if move.length() < 5.0:
         return
-    var clip = "Run" if move.length() > COMBAT_SPEED + 4.0 else "Walk"
-    var half = STRIDE[clip] * 0.5
-    if walk_dist - step_mark < half:
+    var clip = _gait_clip(move)
+    # a footfall at each contact: the phase passes 0 and one half
+    var half_step = int(gait_phase * 2.0)
+    if half_step == step_mark:
         return
-    step_mark = walk_dist
+    step_mark = half_step
     var surface = game._footstep_surface_at(global_position)
     var take = "step_%s_%d" % [surface, randi() % int(game.STEP_TAKES.get(surface, 1)) + 1]
     game._play_distance_sfx(take, global_position, -13.0 if clip == "Run" else -17.0, 380.0, 0.05)

@@ -393,6 +393,7 @@ var autosave_time = 0.0
 var aim_direction = Vector2.RIGHT
 var move_direction = Vector2.ZERO
 var walk_phase = 0.0
+var locomotion_clip = "Walk"
 var movement_anim_blend = 0.0
 var visual_move_direction = Vector2.ZERO
 var visual_move_speed = 0.0
@@ -1335,10 +1336,10 @@ func _run_static_self_tests():
     _record_test(int(_base_build_costs("rain_collector").get("scrap",0)) == 2,"Неверная цена дождесборника")
     _record_test(_make_item_icon("firewood") != null,"Нет inventory art дров")
     _record_test(_make_world_loot_texture("firewood") != null,"Нет world-loot art дров")
-    _record_test(abs(_gait_cycle_distance(false) - 72.0) < 0.01,"Неверная длина walk-cycle")
-    _record_test(abs(_gait_cycle_distance(true) - 88.0) < 0.01,"Неверная длина run-cycle")
-    _record_test(abs(_gait_phase_delta_for_distance(72.0,false) - TAU) < 0.001,"Distance gait не даёт полный walk-cycle")
-    _record_test(abs(_gait_phase_delta_for_distance(88.0,true) - TAU) < 0.001,"Distance gait не даёт полный run-cycle")
+    _record_test(abs(_gait_cycle_distance(false) - float(GaitStrides.SURVIVOR["Walk"])) < 0.01,"Неверная длина walk-cycle")
+    _record_test(abs(_gait_cycle_distance(true) - float(GaitStrides.SURVIVOR["Run"])) < 0.01,"Неверная длина run-cycle")
+    _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(false),false) - TAU) < 0.001,"Distance gait не даёт полный walk-cycle")
+    _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(true),true) - TAU) < 0.001,"Distance gait не даёт полный run-cycle")
     _record_test(abs(ENEMY_SPEED - ENEMY_BASE_SPEED) < 0.001,"Скорость заражённого не должна оставаться в dev-замедлении")
     _record_test(MOVE_SPEED > ENEMY_SPEED,"Игрок должен быть немного быстрее заражённого на обычном шаге")
     _record_test(abs(SPRINT_SPEED_MULT - 1.32) < 0.001,"Sprint multiplier сломан")
@@ -2521,10 +2522,10 @@ func _run_runtime_smoke_tests():
     if native_side_legs != null:
         _record_test(native_side_legs.get_width() == 576,"Native leg atlas width должен быть 576")
         _record_test(native_side_legs.get_height() == 240,"Native leg atlas height должен быть 240")
-    _record_test(abs(_gait_cycle_distance(false) - 72.0) < 0.01,"Walk cycle distance сломан")
-    _record_test(abs(_gait_cycle_distance(true) - 88.0) < 0.01,"Run cycle distance сломан")
-    _record_test(abs(_gait_phase_delta_for_distance(36.0,false) - PI) < 0.001,"Walk half-cycle sync сломан")
-    _record_test(abs(_gait_phase_delta_for_distance(44.0,true) - PI) < 0.001,"Run half-cycle sync сломан")
+    _record_test(abs(_gait_cycle_distance(true) - _gait_cycle_distance(false) * float(GaitStrides.SURVIVOR["Run"]) / float(GaitStrides.SURVIVOR["Walk"])) < 0.01,"Run cycle distance сломан")
+    _record_test(abs(_gait_cycle_distance(false,Vector2.DOWN) - _gait_cycle_distance(false) * GaitStrides.GROUND_YK) < 0.01,"dev81: шаг к камере должен учитывать ракурс")
+    _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(false) * 0.5,false) - PI) < 0.001,"Walk half-cycle sync сломан")
+    _record_test(abs(_gait_phase_delta_for_distance(_gait_cycle_distance(true) * 0.5,true) - PI) < 0.001,"Run half-cycle sync сломан")
     _record_test(MOVE_SPEED > ENEMY_SPEED,"Player walk speed должен немного превышать infected speed")
     _record_test(abs(MOVE_SPEED - 64.0) < 0.001,"Неверная базовая скорость игрока")
     _record_test(abs(SPRINT_SPEED_MULT - 1.32) < 0.001,"Неверный sprint multiplier")
@@ -2877,6 +2878,7 @@ var scene_legacy_chunks = {}
 # "dog": the companion's record, "lost": names}; dog is its node
 const DogCatalog = preload("res://world/dog_catalog.gd")
 const BlockLots = preload("res://world/block_lots.gd")
+const GaitStrides = preload("res://world/gait_strides.gd")
 const StreetScenes = preload("res://world/street_scenes.gd")
 const Dog = preload("res://world/dog.gd")
 var dog_state = {"sites":{},"dog":{},"lost":[]}
@@ -4352,7 +4354,8 @@ func _process(delta):
         walk_phase = fposmod(
             walk_phase + _gait_phase_delta_for_distance(
                 actual_displacement.length(),
-                is_sprinting
+                is_sprinting,
+                actual_displacement
             ),
             TAU
         )
@@ -5837,13 +5840,32 @@ func _gait_variant_for_phase(phase_value):
 
 
 
-func _gait_cycle_distance(running):
-    # Distance-driven cycle: animation speed follows actual travelled distance.
-    # 0.60 anatomical cadence: longer planted phase and slower visual cycle for a grounded step.
-    return 88.0 if running else 72.0
+# dev81: the cycle length is the stride the sheet actually takes (generated
+# with the sheets, world/gait_strides.gd) - it used to be a fixed 72 / 88 px
+# against steps of 12 / 22 px, so the ground ran four to six times faster
+# than the feet. Toward and away from the camera the sprite's ground is drawn
+# foreshortened, so the same stride covers less of the screen and the legs
+# turn over faster to keep the planted foot on the spot.
+func _gait_stride_clip(running) -> String:
+    var clip = locomotion_clip
+    if not GaitStrides.SURVIVOR.has(clip):
+        clip = "Walk"
+    if running and clip == "Walk":
+        clip = "Run"
+    elif not running and clip == "Run":
+        clip = "Walk"
+    if is_crouching and not running:
+        clip = "CrouchRun"
+    return clip
 
-func _gait_phase_delta_for_distance(distance,running):
-    var cycle_distance = max(1.0,_gait_cycle_distance(running))
+func _gait_cycle_distance(running,move_dir:Vector2 = Vector2.RIGHT):
+    var stride = float(GaitStrides.SURVIVOR.get(_gait_stride_clip(running),GaitStrides.SURVIVOR["Walk"]))
+    var d = move_dir.normalized() if move_dir.length() > 0.01 else Vector2.RIGHT
+    var k = sqrt(d.x * d.x + pow(GaitStrides.GROUND_YK * d.y,2.0))
+    return max(4.0,stride * k)
+
+func _gait_phase_delta_for_distance(distance,running,move_dir:Vector2 = Vector2.RIGHT):
+    var cycle_distance = max(1.0,_gait_cycle_distance(running,move_dir))
     return max(0.0,float(distance)) / cycle_distance * TAU
 
 func _walk_phase_index(phase_value):
@@ -6413,6 +6435,8 @@ func _update_modern_survivor(weapon_id,local_aim,local_motion,pose_offset,body_r
         return
     var moving = visual_move_speed > 2.0 and movement_anim_blend > 0.10
     var clip = _modern_survivor_clip(weapon_id,local_aim,local_motion,moving)
+    if GaitStrides.SURVIVOR.has(clip):
+        locomotion_clip = clip
     var tex = _modern_survivor_sheet(clip)
     if tex == null:
         tex = _modern_survivor_sheet(_modern_survivor_idle_sheet(weapon_id))
