@@ -254,6 +254,38 @@ func _draw():
                 for offset in [Vector2(7,10),Vector2(7,-8),Vector2(-width-7,10),Vector2(7,21)]:
                     if _label(p+offset,text,color):
                         break
+    # dev84: a goal off the edge of the view - an arrow on the border with its
+    # name and how far it is (the pencil line used to run off the paper and the
+    # goal had no name anywhere on the map)
+    for mark in data.get("markers",[]):
+        if not bool(mark.get("system",false)) or contains_sector(mark["coord"]):
+            continue
+        var from = project(data["player"]) if data.has("player") else size * 0.5
+        var dir = (project(mark["coord"]) - from).normalized()
+        if dir == Vector2.ZERO:
+            continue
+        var inner = Rect2(Vector2(16,16),size - Vector2(32,32))
+        var t = 1e9
+        if dir.x > 0.001: t = min(t,(inner.end.x - from.x) / dir.x)
+        if dir.x < -0.001: t = min(t,(inner.position.x - from.x) / dir.x)
+        if dir.y > 0.001: t = min(t,(inner.end.y - from.y) / dir.y)
+        if dir.y < -0.001: t = min(t,(inner.position.y - from.y) / dir.y)
+        var edge = from + dir * max(0.0,t)
+        var color = Color("884632") if mark["kind"] == "danger" else Color("385b66")
+        var side = Vector2(-dir.y,dir.x) * 5.0
+        draw_colored_polygon(PackedVector2Array([edge + dir * 9.0,edge + side,edge - side]),color)
+        var far = 0
+        if data.has("player"):
+            var d = mark["coord"] - data["player"]
+            far = max(abs(d.x),abs(d.y))
+        var text = str(mark.get("label","ЦЕЛЬ")).replace("ПОЛЕВОЙ МАРШРУТ • ","")
+        if far > 0:
+            text += " • %d сект." % far
+        var width = get_theme_default_font().get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,7).x
+        var at = edge - dir * 14.0 + Vector2(-width * 0.5,4)
+        at.x = clamp(at.x,8.0,size.x - width - 10.0)
+        at.y = clamp(at.y,14.0,size.y - 8.0)
+        _label(at,text,color,true)
     if data.has("home"):
         var p = project(data["home"])
         _symbol(p,"home",Color("385b66"))
