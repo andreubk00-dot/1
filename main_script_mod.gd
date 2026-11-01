@@ -4417,6 +4417,7 @@ func _process(delta):
     _update_interior_prop_depth()
     _update_detail_lights(delta)
     _update_roofs(delta)
+    _update_car_depth()
     _update_day_night(delta)
     _update_weather(delta)
     # after the weather pass has set this frame's street-lamp energy (flicker)
@@ -18171,7 +18172,9 @@ func _decorate_equipment_button(button,slot,id):
     button.add_child(icon_frame)
 
     var slot_label = Label.new()
-    slot_label.text = _slot_name(slot)
+    # dev84: the panel is drawn at 0.68 - the space in "ВЕРХНЯЯ ОДЕЖДА" shrank
+    # to a pixel and the two words ran together on the slot
+    slot_label.text = "ОДЕЖДА" if slot == "outerwear" else _slot_name(slot)
     slot_label.position = Vector2(44,3)
     slot_label.size = Vector2(button.size.x - 50,12)
     slot_label.add_theme_font_size_override("font_size",7)
@@ -28772,6 +28775,58 @@ func _add_window_light_patches(building,facade,size:Vector2):
         patch.add_to_group("window_light_patches")
         building.add_child(patch)
 
+# dev84: a parked car stands on layer 6 and the survivor on 20, so walking
+# past behind a car (north of its body) he was drawn over its roof - he seemed
+# to stand on it. Like a wall: behind the car, the car wins.
+const CAR_Z_UNDER = 6
+const CAR_Z_OVER = 30          # over the survivor (20) and his sprite (+2), under a wall (35)
+const CAR_DEPTH_RANGE = 110.0
+
+# The same for every tall thing standing on the ground under the survivor's
+# layer: trees, lamp posts, barrels, the set pieces of sites and settlements.
+const DEPTH_PROP_GROUPS = ["world_cars","depth_props","poi_set_pieces"]
+const TREE_BEHIND_ALPHA = 0.6
+const CHAR_Z_FRONT = 24        # over the survivor's sprite and arms (20 + up to 3)
+const CHAR_DEPTH_RANGE = 90.0
+
+func _update_car_depth() -> void:
+    if player == null:
+        return
+    var p = player.global_position
+    for group in DEPTH_PROP_GROUPS:
+        for prop in get_tree().get_nodes_in_group(group):
+            if not is_instance_valid(prop):
+                continue
+            # the layer it was made on is its place when he is not behind it
+            var under = int(prop.get_meta("depth_z_under",-1))
+            if under < 0:
+                under = prop.z_index if not prop.z_as_relative and prop.z_index >= 4 and prop.z_index < 20 else 0
+                prop.set_meta("depth_z_under",under)
+            if under == 0:
+                continue
+            var near = abs(prop.global_position.x - p.x) < CAR_DEPTH_RANGE and abs(prop.global_position.y - p.y) < CAR_DEPTH_RANGE
+            var z = CAR_Z_OVER if near and p.y < prop.global_position.y else under
+            if prop.z_index != z:
+                prop.z_index = z
+                # a crown he stands behind thins out, so he is never lost under it
+                if bool(prop.get_meta("world_tree",false)):
+                    prop.modulate.a = TREE_BEHIND_ALPHA if z == CAR_Z_OVER else 1.0
+    # and the living: an infected, a raider or a dog nearer the camera than the
+    # survivor (south of him) is drawn in front of him - they all stood on
+    # layer 9 under his 20, so one at his chest was drawn behind his back
+    for group in ["infected","marauders","dog"]:
+        for body in get_tree().get_nodes_in_group(group):
+            if not is_instance_valid(body) or not (body is CanvasItem) or body.z_as_relative:
+                continue
+            var under = int(body.get_meta("depth_z_under",-1))
+            if under < 0:
+                under = body.z_index
+                body.set_meta("depth_z_under",under)
+            var near = abs(body.global_position.x - p.x) < CHAR_DEPTH_RANGE and abs(body.global_position.y - p.y) < CHAR_DEPTH_RANGE
+            var z = CHAR_Z_FRONT if near and body.global_position.y > p.y else under
+            if body.z_index != z:
+                body.z_index = z
+
 func _update_roofs(delta):
     for rec in roof_records:
         var roof = rec.get("roof")
@@ -28841,9 +28896,10 @@ func _create_car(chunk,pos,color,angle):
     var car = Node2D.new()
     car.position = pos
     car.rotation = angle
-    car.z_index = 6
+    car.z_index = CAR_Z_UNDER
     car.z_as_relative = false
     car.set_meta("world_car",true)
+    car.add_to_group("world_cars")
     chunk.add_child(car)
 
     # Cars use a dedicated transparent game sprite instead of the old matte-backed atlas cell.
@@ -29140,6 +29196,7 @@ func _create_tree(chunk,pos,scale_factor,force = false):
     tree.z_index = 7
     tree.z_as_relative = false
     tree.set_meta("world_tree",true)
+    tree.add_to_group("depth_props")
     chunk.add_child(tree)
 
     var hd_trees = _hd_exists("res://art/world_hd/trees_hd.png")
@@ -29661,6 +29718,7 @@ func _create_lamp(chunk,pos):
     lamp.z_index = 5
     lamp.z_as_relative = false
     lamp.set_meta("world_lamp",true)
+    lamp.add_to_group("depth_props")
     chunk.add_child(lamp)
 
     var post = _world_prop_sprite("lamp",lamp,Vector2(0,-10),0,1.0)
@@ -29707,6 +29765,7 @@ func _create_barrel(chunk,pos):
     var barrel = Node2D.new()
     barrel.position = pos
     barrel.set_meta("world_barrel",true)
+    barrel.add_to_group("depth_props")
     barrel.z_index = 5
     barrel.z_as_relative = false
     chunk.add_child(barrel)

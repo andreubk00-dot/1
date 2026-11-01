@@ -55,5 +55,33 @@ func run():
     game._inventory_item_gui_input(ev, wi, "water")
     check(game.thirst > 45.0, "a right click on water did not drink it (thirst %.0f)" % game.thirst)
     game._close_inventory()
+    # a parked car covers a survivor who stands behind it (north of its body)
+    # and lets him draw over it in front
+    var car = null
+    for c in game.get_tree().get_nodes_in_group("world_cars"):
+        if is_instance_valid(c):
+            car = c
+            break
+    check(car != null, "no parked car near the start")
+    if car != null:
+        game.player.global_position = car.global_position + Vector2(0, -24)
+        game._update_car_depth()
+        check(car.z_index > game.player.z_index + 2, "a survivor behind a car is drawn over its roof")
+        game.player.global_position = car.global_position + Vector2(0, 30)
+        game._update_car_depth()
+        check(car.z_index < game.player.z_index, "a survivor in front of a car is hidden by it")
+    # an infected nearer the camera than the survivor is drawn in front of him
+    var inf = null
+    for e in game.get_tree().get_nodes_in_group("infected"):
+        if is_instance_valid(e):
+            inf = e
+            break
+    if inf != null:
+        game.player.global_position = inf.global_position + Vector2(0, -20)
+        game._update_car_depth()
+        check(inf.z_index > game.player.z_index + 3, "an infected in front of the survivor is drawn behind him")
+        game.player.global_position = inf.global_position + Vector2(0, 20)
+        game._update_car_depth()
+        check(inf.z_index < game.player.z_index, "an infected behind the survivor is drawn over him")
     print("COHESION dev84: ", checks, " checks, ", failures, " failures")
     quit(1 if failures else 0)

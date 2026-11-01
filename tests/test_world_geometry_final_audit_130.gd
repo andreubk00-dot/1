@@ -91,7 +91,8 @@ func run()->void:
             for j in range(i+1,cars.size()):
                 var other=Rect2(cars[j].position-Vector2(40,24),Vector2(80,48))
                 check(not cr.intersects(other),"cars overlap at "+str(coord))
-            check(cars[i].z_index == 6,"car z-order drift at "+str(coord))
+            # dev84: a car goes over the survivor while he stands behind it
+            check(cars[i].z_index in [game.CAR_Z_UNDER,game.CAR_Z_OVER],"car z-order drift at "+str(coord))
         for tree in trees:
             check(tree.position.x >= 0 and tree.position.x <= game.CHUNK_SIZE and tree.position.y >= 0 and tree.position.y <= game.CHUNK_SIZE,"tree outside chunk at "+str(coord))
             if not authored:
@@ -104,7 +105,7 @@ func run()->void:
                 # use their own door/facade-aware placement helpers, so here only reject an actual clip.
                 var tree_guard = br if authored else br.grow(24.0)
                 check(not tree_guard.has_point(tree.position),"tree clips building at "+str(coord))
-            check(tree.z_index == 7,"tree z-order drift at "+str(coord))
+            check(tree.z_index in [7,game.CAR_Z_OVER],"tree z-order drift at "+str(coord))
         for item in furniture:
             check(item.position.x >= 0 and item.position.x <= game.CHUNK_SIZE and item.position.y >= 0 and item.position.y <= game.CHUNK_SIZE,"street furniture outside chunk at "+str(coord))
             for br in building_rects:
