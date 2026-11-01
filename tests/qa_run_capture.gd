@@ -1,7 +1,7 @@
 extends SceneTree
 # Visual QA for dev81: the survivor running for real (input held, camera
 # following), every frame saved around the player - for a GIF.
-# xvfb-run godot --path . --rendering-driver opengl3 --script tests/qa_run_capture.gd -- --qa-output=<dir> [--qa-leg=right|right_sprint|down|up|diag]
+# xvfb-run godot --path . --rendering-driver opengl3 --script tests/qa_run_capture.gd -- --qa-output=<dir> [--qa-leg=right|right_sprint|down|up|diag|strafe|strafe_down]
 const Main = preload("res://main_script_mod.gd")
 var output = ""
 var leg = "right"
@@ -28,7 +28,9 @@ func run():
         "right_sprint":[["move_right","sprint"],Vector2.RIGHT,Vector2(80,384)],
         "down":[["move_down"],Vector2.DOWN,Vector2(384,100)],
         "up":[["move_up"],Vector2.UP,Vector2(384,660)],
-        "diag":[["move_right","move_down"],Vector2(1,1).normalized(),Vector2(160,160)]}
+        "diag":[["move_right","move_down"],Vector2(1,1).normalized(),Vector2(160,160)],
+        "strafe":[["move_right"],Vector2.UP,Vector2(120,384)],
+        "strafe_down":[["move_down"],Vector2.RIGHT,Vector2(384,100)]}
     var spec = dirs[leg]
     game.player.global_position = spec[2]
     game.qa_locked_aim = spec[1]

@@ -77,6 +77,8 @@ func run():
     container.set_meta("interaction_type","container")
     container.set_meta("container_key","qa:container")
     container.set_meta("display_name","QA")
+    # dev83: prompts work at the object's edge - a crate's footprint
+    container.set_meta("interaction_footprint",Rect2(-16,-13,32,26))
     game.add_child(container)
     check(not game._interactable_reachable(container),"container behind wall must be unreachable")
     check(game._nearest_interactable() == null,"nearest interaction must not tunnel through wall")

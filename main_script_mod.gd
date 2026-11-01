@@ -19283,63 +19283,120 @@ func _update_interaction_prompt():
     if hud_interaction_panel != null:
         hud_interaction_panel.visible = interaction_label.text != ""
 
+# dev83: a prompt appears only when the survivor stands right at the thing -
+# the gap between his body and the object's own footprint, not the distance to
+# its centre (a door used to light up from almost two metres away).
+const INTERACT_REACH = 12.0
+const INTERACT_BODY_RADIUS = 7.0
+const INTERACT_PEOPLE = ["dog","trader","faction_npc","marauder_talk","marauder_captive"]
+const INTERACT_PRIORITY = {"door":5.0,"trader":4.0,"contract_board":4.0,"supply_event_cargo":4.0,
+    "shelter_window":3.0,"story_clue":2.5,"faction_npc":2.0,"workbench":2.0,"container":1.5,
+    "base_heater":1.0,"base_campfire":1.0,"base_rain_collector":1.0,"base_lamp":1.0,"base_cot":1.0,"base_barricade":1.0}
+
+func _interaction_footprint(node) -> Rect2:
+    # the object's ground footprint in its own frame (cached)
+    if node.has_meta("interaction_footprint"):
+        return node.get_meta("interaction_footprint")
+    var type = str(node.get_meta("interaction_type",""))
+    if type in INTERACT_PEOPLE:
+        return Rect2(-8,-8,16,16)
+    if type == "door":
+        return Rect2(-24,-7,48,14)
+    var box = Rect2()
+    var have = false
+    var inv = node.get_global_transform().affine_inverse()
+    for child in node.find_children("*","",true,false):
+        var r = Rect2()
+        if child is Sprite2D and child.texture != null and child.visible:
+            r = _sprite_opaque_rect(child)
+            if r.size == Vector2.ZERO:
+                continue
+        elif child is Polygon2D and child.polygon.size() > 0 and child.color.a > 0.3:
+            r = Rect2(child.polygon[0],Vector2.ZERO)
+            for v in child.polygon:
+                r = r.expand(v)
+        elif child is CollisionShape2D and child.shape is RectangleShape2D:
+            r = Rect2(-child.shape.size * 0.5,child.shape.size)
+        elif child is CollisionShape2D and child.shape is CircleShape2D:
+            r = Rect2(-Vector2.ONE * child.shape.radius,Vector2.ONE * child.shape.radius * 2.0)
+        else:
+            continue
+        var xf = inv * child.get_global_transform()
+        for c in [r.position,r.position + Vector2(r.size.x,0),r.end,r.position + Vector2(0,r.size.y)]:
+            var q = xf * c
+            if have:
+                box = box.expand(q)
+            else:
+                box = Rect2(q,Vector2.ZERO)
+                have = true
+    if not have or box.size.x < 4.0 or box.size.y < 4.0:
+        box = Rect2(-8,-8,16,16).merge(box) if have else Rect2(-8,-8,16,16)
+    # a big prop is still reached at its body, not across its shadow
+    box = box.intersection(Rect2(-40,-40,80,80))
+    node.set_meta("interaction_footprint",box)
+    return box
+
+var _opaque_rect_cache = {}
+
+func _sprite_opaque_rect(sprite) -> Rect2:
+    # the drawn part of a sprite, without its transparent margin, in its frame
+    var full = sprite.get_rect()
+    var tex = sprite.texture
+    var key = "%s|%s|%d|%d" % [tex.resource_path if tex.resource_path != "" else str(tex.get_rid()),str(sprite.region_rect) if sprite.region_enabled else "",sprite.hframes,sprite.vframes]
+    var used = Rect2()
+    if _opaque_rect_cache.has(key):
+        used = _opaque_rect_cache[key]
+    else:
+        var img = tex.get_image()
+        if img == null:
+            used = Rect2(Vector2.ZERO,full.size)
+        else:
+            if img.is_compressed():
+                img.decompress()
+            var src = Rect2i(Vector2i.ZERO,img.get_size())
+            if sprite.region_enabled:
+                src = Rect2i(sprite.region_rect)
+            elif sprite.hframes > 1 or sprite.vframes > 1:
+                src.size = Vector2i(img.get_width() / sprite.hframes,img.get_height() / sprite.vframes)
+            var u = img.get_region(src).get_used_rect()
+            used = Rect2(u)
+        _opaque_rect_cache[key] = used
+    return Rect2(full.position + used.position,used.size)
+
+func _interaction_gap(node) -> float:
+    var box = _interaction_footprint(node)
+    var p = node.get_global_transform().affine_inverse() * player.global_position
+    var q = Vector2(clamp(p.x,box.position.x,box.end.x),clamp(p.y,box.position.y,box.end.y))
+    # the footprint lives in the node's frame; measure the gap in the world
+    var gap = player.global_position.distance_to(node.get_global_transform() * q)
+    return gap - INTERACT_BODY_RADIUS
+
 func _nearest_interactable():
     var best = null
     var best_score = 999999.0
+    if not is_instance_valid(player):
+        return null
 
     for node in get_tree().get_nodes_in_group("interactable"):
         if not is_instance_valid(node):
             continue
-
         var type = str(node.get_meta("interaction_type",""))
-        var limit = float(node.get_meta("interaction_radius",62.0))
-        var priority = 0.0
-
-        if type == "door":
-            limit = max(limit,88.0)
-            priority = 22.0
-        elif type == "shelter_window":
-            limit = max(limit,74.0)
-            priority = 12.0
-        elif type == "container":
-            limit = max(limit,70.0)
-            priority = 7.0
-        elif type == "workbench":
-            limit = max(limit,72.0)
-            priority = 8.0
-        elif type == "trader":
-            limit = max(limit,78.0)
-            priority = 16.0
-        elif type == "contract_board":
-            limit = max(limit,78.0)
-            priority = 15.0
-        elif type == "supply_event_cargo":
-            limit = max(limit,86.0)
-            priority = 18.0
-        elif type == "faction_npc":
-            limit = max(limit,76.0)
-            priority = 9.0
-        elif type == "story_clue":
-            limit = max(limit,70.0)
-            priority = 10.0
-        elif type == "base_heater" or type == "base_campfire" or type == "base_rain_collector" or type == "base_lamp" or type == "base_cot" or type == "base_barricade":
-            limit = max(limit,72.0)
-            priority = 6.0
-        elif type == "world_item":
-            limit = max(limit,54.0)
-        elif type == "dog":
+        if type == "dog":
             # a dog at heel never steals the prompt from a door or a crate
             if not node.wants_attention():
                 continue
-            priority = -10.0
-
-        var dist = player.global_position.distance_to(node.global_position)
-        if dist > limit:
+        # cheap reject before the footprint
+        if player.global_position.distance_squared_to(node.global_position) > 100.0 * 100.0:
+            continue
+        var gap = _interaction_gap(node)
+        if gap > INTERACT_REACH:
             continue
         if not _interactable_reachable(node):
             continue
-
-        var score = dist - priority
+        var priority = float(INTERACT_PRIORITY.get(type,0.0))
+        if type == "dog":
+            priority = -3.0
+        var score = gap - priority
         if score < best_score:
             best_score = score
             best = node

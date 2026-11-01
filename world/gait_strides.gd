@@ -3,8 +3,8 @@ extends RefCounted
 # World pixels the body travels in one step cycle of each locomotion clip,
 # seen from the side; the ground under a sprite is drawn foreshortened by
 # GROUND_YK toward and away from the camera.
-const SURVIVOR = {"Walk": 19.421, "Jog": 34.271, "Run": 43.323, "RunBackwards": 30.844, "StrafeLeft": 27.417, "StrafeRight": 27.417, "CrouchRun": 23.467, "RunAttack": 34.271, "RunBackwardsAttack": 30.844, "StrafeLeftAttack": 27.417, "StrafeRightAttack": 27.417}
-const RAIDER = {"Walk": 19.421, "Jog": 34.271, "Run": 43.323}
+const SURVIVOR = {"Walk": 16.772, "Jog": 29.729, "Run": 37.908, "RunBackwards": 26.756, "StrafeLeft": 23.783, "StrafeRight": 23.783, "CrouchRun": 23.467, "RunAttack": 29.729, "RunBackwardsAttack": 26.756, "StrafeLeftAttack": 23.783, "StrafeRightAttack": 23.783}
+const RAIDER = {"Walk": 16.772, "Jog": 29.729, "Run": 37.908}
 const GROUND_YK = 0.55
 # dev82: the share of that foreshortening the cadence follows. Full
 # (0.55) kept the foot planted toward the camera but nearly doubled the
@@ -14,8 +14,8 @@ const VIEW_YK = 0.8
 # dev82: the survivor's legs are short for his speed (a third of his
 # height); matching the ground exactly made them patter at 2 to 3 cycles
 # a second. The cycle runs this much longer than the drawn stride - a
-# runner's 175-185 steps a minute - and the planted foot drifts a fifth
-# of a step, which at this size reads far better than the patter.
-const CADENCE_EASE = 1.25
+# runner's 180-190 steps a minute - and the planted foot drifts about a
+# quarter of a step, which at this size reads far better than the patter.
+const CADENCE_EASE = 1.4
 # a sprint turns the legs over faster than a jog (about 200 steps a minute)
-const CADENCE = {"Run": 1.15}
+const CADENCE = {"Run": 1.33}

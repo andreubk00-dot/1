@@ -312,6 +312,10 @@ class Pose:
         self.foot_pitch = {'L': 0.0, 'R': 0.0}
         self.hip_f = {'L': 0.0, 'R': 0.0}   # pelvis rotation: hip moved forward/back
         self.shift_r = 0.0                   # weight shift over the stance leg
+        # dev83: the hips turned from the aim (a strafe runs with the legs
+        # along the way it goes, the upper body twisted back to the target);
+        # feet, hips and knees live in this turned frame
+        self.hip_yaw = 0.0
         # dev60 secondary motion: the pack and bedroll trail the torso on a
         # spring, the head steadies the gaze against the shoulder swing
         self.pack = (0.0, 0.0, 0.0)          # (f, r, z) lag of the backpack
@@ -346,7 +350,11 @@ def build(pose):
         return pelvis + fU * f + rU * r + zU * z
 
     pts = {}
-    # --- legs
+    # --- legs (in the hips' own frame: see Pose.hip_yaw)
+    aim_f, aim_r = P.f, P.r
+    if P.hip_yaw:
+        P.f = rot_about(P.f, V(0, 0, 0), V(0, 0, 1), P.hip_yaw)
+        P.r = rot_about(P.r, V(0, 0, 0), V(0, 0, 1), P.hip_yaw)
     for side, sg in (('L', -1), ('R', 1)):
         hip = pelvis + P.r * (2.7 * sg) + P.z * (-1.2) + P.f * P.hip_f[side]
         ff, fr, fz = P.feet.get(side, (0.6, 2.7 * sg, 3.0))
@@ -427,8 +435,13 @@ def build(pose):
         s.box(boot_c, toe_dir, P.r, boot_up, 3.1, 2.0, 1.6, BOOTS)
         s.box(boot_c + boot_up * -1.55, toe_dir, P.r, boot_up, 3.3, 2.1, 0.35, SOLE, edge=False)
         s.box(boot_c + toe_dir * 2.2 + boot_up * 0.4, toe_dir, P.r, boot_up, 0.9, 1.9, 1.1, darker(BOOTS, 1.15), edge=False)
+    hip_frame = (P.f, P.r)
+    P.f, P.r = aim_f, aim_r
     # pelvis, belt, buckle, pouch, canteen
-    s.box(U(0, 0, 1.0), fU, rU, zU, 3.3, 5.1, 2.5, JEANS)
+    if P.hip_yaw:
+        s.box(U(0, 0, 1.0), hip_frame[0], hip_frame[1], zU, 3.3, 5.1, 2.5, JEANS)
+    else:
+        s.box(U(0, 0, 1.0), fU, rU, zU, 3.3, 5.1, 2.5, JEANS)
     s.box(U(0.05, 0, 3.4), fU, rU, zU, 3.45, 5.35, 0.75, BELT, edge=False)
     s.box(U(3.5, 0, 3.4), fU, rU, zU, 0.15, 0.8, 0.6, BRASS, edge=False)
     if KIT:
@@ -669,10 +682,12 @@ GAITS = {
     # almost four texels side to side every stride and the figure rocked
     # dev81: the walk is only the raiders' patrol now (the survivor jogs);
     # longer steps on a softer knee - see WALK_DROP
-    'walk': dict(S=0.58, A=8.8,
-                 swing=[(0.0, -1.0, 1.3, -0.6), (0.34, -0.45, 3.0, -0.3), (0.7, 0.55, 2.0, 0.1), (1.0, 1.0, 0.0, 0.4)],
+    # dev83: a walker's leg is near straight under him (it walked on bent
+    # knees: 0.85 of the leg's length at mid-stance, now 0.95) - a shorter step
+    'walk': dict(S=0.58, A=7.6,
+                 swing=[(0.0, -1.0, 1.3, -0.6), (0.34, -0.4, 2.2, -0.3), (0.7, 0.55, 1.5, 0.1), (1.0, 1.0, 0.0, 0.4)],
                  stance=[(0.0, 0.4), (0.16, 0.0), (0.66, 0.0), (1.0, -0.65)],
-                 heel=1.8, bob=0.62, hip=0.85, twist=0.08, shift=0.22, lean=0.04),
+                 heel=1.8, bob=0.75, hip=0.85, twist=0.08, shift=0.22, lean=0.04),
     'run': dict(S=0.36, A=7.8,
                 swing=[(0.0, -0.8, 2.8, -0.8), (0.3, -1.1, 9.4, -0.95), (0.62, 0.4, 7.6, 0.0), (1.0, 0.6, 0.0, 0.2)],
                 stance=[(0.0, 0.2), (0.25, 0.0), (0.7, -0.1), (1.0, -0.8)],
@@ -710,15 +725,19 @@ RUN_GAITS = {
     # the hips, a sway over each planted foot), the trailing foot leaves the
     # ground at once (a flight, not a lunge), the heel kick is eased; the
     # sprint leans in and plants under the hips, not out in front
-    'jog': dict(S=0.31, Lf=6.4, Lb=10.2, drop=1.7, B=0.72, kick=5.2, knee=4.8, reach=0.3,
+    # dev83: the pelvis rides high - the leg under the body bends ~45 degrees,
+    # a runner's, not ~70 (it ran squatting, worst seen side-on); the stride
+    # is centred under the body - the foot lands ahead of the hip
+    'jog': dict(S=0.31, Lf=5.4, Lb=9.0, drop=0.5, B=0.5, kick=4.0, knee=5.6, reach=0.3,
                 lean=0.09, hip=1.1, twist=0.15, shift=0.15, heel=2.6, arms=3.6, lift=2.6, land=3.5),
-    'sprint': dict(S=0.26, Lf=5.6, Lb=12.0, drop=2.1, B=0.7, kick=8.0, knee=6.8, reach=0.3,
+    'sprint': dict(S=0.26, Lf=6.4, Lb=9.0, drop=0.8, B=0.4, kick=6.0, knee=7.4, reach=0.3,
                    lean=0.27, hip=1.3, twist=0.17, shift=0.12, heel=3.0, arms=4.6, lift=3.2, land=3.6),
 }
 # running backwards or sideways the steps are shorter (the legs cannot
 # reach as far behind or across)
 BACK_AMP = 0.9
 STRAFE_AMP = 0.8
+STRAFE_HIP_YAW = 0.85        # radians the hips turn toward a strafe (~50 degrees)
 RUN_STANCE_PITCH = [(0.0, 0.12), (0.25, 0.0), (0.6, -0.08), (1.0, -0.85)]
 RUN_SWING_PITCH = [(0.0, -0.85), (0.3, -1.05), (0.62, -0.25), (0.86, 0.18), (1.0, 0.12)]
 
@@ -766,11 +785,15 @@ def run_foot(g, phi, amp=1.0):
         return o, z, keyinterp(RUN_STANCE_PITCH, u)[0]
     sw = (phi - S) / (1.0 - S)
     v = -(Lf + Lb) / S * (1.0 - S)            # ground speed in swing-phase units
+    # dev83: the knee drives forward through the swing (the foot passes under
+    # the hip already high and reaches out ahead), the heel is not tucked up
+    # under the seat - the stride sits under the body, not behind it
     keys = [(0.0, -Lb, 3.0 + g['heel']),
-            (0.1, -Lb * 0.95, 3.0 + g['heel'] + g['lift']),
-            (0.3, -Lb * 0.68, 3.0 + g['kick']),
-            (0.52, Lf * 0.25, 3.0 + g['knee']),
-            (0.80, Lf + g['reach'] * amp, g['land']),
+            (0.1, -Lb * 0.92, 3.0 + g['heel'] + g['lift']),
+            (0.3, -Lb * 0.52, 3.0 + g['kick']),
+            (0.5, Lf * 0.4, 3.0 + g['knee']),
+            (0.72, Lf + g['reach'] * amp, 3.0 + g['knee'] * 0.5),
+            (0.9, Lf + g['reach'] * amp * 0.5, g['land']),
             (1.0, Lf, 3.0)]
     o, z = _hermite(keys, sw, (v * 0.6, 22.0), (v * 0.35, -6.0))
     return o, max(3.0, z), keyinterp(RUN_SWING_PITCH, sw)[0]
@@ -784,14 +807,14 @@ def run_foot_in(g, phi):
     return math.sin(math.pi * (phi - S) / (1.0 - S))
 
 
-def run_gait(P, t, move, style='jog', amp=1.0, pitch_scale=1.0):
+def run_gait(P, t, move, style='jog', amp=1.0, pitch_scale=1.0, width0=2.6):
     g = RUN_GAITS[style]
     mf, mr = move
     for side, sg, ph in (('L', -1, 0.0), ('R', 1, 0.5)):
         phi = (t + ph) % 1.0
         o, z, pitch = run_foot(g, phi, amp)
         # runners land near the midline: the swinging foot comes in a little
-        width = 2.6 - 0.9 * run_foot_in(g, phi)
+        width = width0 - 0.9 * run_foot_in(g, phi)
         P.feet[side] = (0.6 + mf * o, width * sg + mr * o, z)
         P.foot_pitch[side] = pitch * pitch_scale
     c = math.cos(2 * math.pi * t)
@@ -831,7 +854,7 @@ def check_reach(style, amp=1.0, margin=0.35):
     return worst
 
 
-WALK_DROP = 1.4              # the walking pelvis rides this much lower
+WALK_DROP = -0.2             # the walking pelvis: the leg near straight at mid-stance (dev83)
 
 
 def gait(P, t, move, style='walk', amp_scale=1.0, pitch_scale=1.0):
@@ -966,9 +989,14 @@ def make_pose(clip, w, d, k):
             carry_sway(P, t, 0.35)
     elif clip.startswith('StrafeLeft') or clip.startswith('StrafeRight'):
         sg = -1 if 'Left' in clip else 1
-        run_gait(P, t, (0, sg), 'jog', amp=STRAFE_AMP, pitch_scale=0.2)
-        P.side_lean = 0.05 * sg
-        P.lean = 0.03
+        # dev83: not a sideways run with the legs crossing through each other -
+        # the hips turn toward the way he goes and the legs run along it, the
+        # chest and the gun stay on the target
+        P.hip_yaw = STRAFE_HIP_YAW * sg
+        run_gait(P, t, (math.sin(STRAFE_HIP_YAW), sg * math.cos(STRAFE_HIP_YAW)), 'jog', amp=STRAFE_AMP, width0=3.2)
+        P.twist *= 0.5
+        P.side_lean = 0.03 * sg
+        P.lean = 0.05
         if unarmed:
             unarmed_swing(P, t, 1.4, True)
         else:
@@ -1269,11 +1297,11 @@ def write_gait_strides(project):
            '# dev82: the survivor\'s legs are short for his speed (a third of his\n'
            '# height); matching the ground exactly made them patter at 2 to 3 cycles\n'
            '# a second. The cycle runs this much longer than the drawn stride - a\n'
-           '# runner\'s 175-185 steps a minute - and the planted foot drifts a fifth\n'
-           '# of a step, which at this size reads far better than the patter.\n'
-           'const CADENCE_EASE = 1.25\n'
+           '# runner\'s 180-190 steps a minute - and the planted foot drifts about a\n'
+           '# quarter of a step, which at this size reads far better than the patter.\n'
+           'const CADENCE_EASE = 1.4\n'
            '# a sprint turns the legs over faster than a jog (about 200 steps a minute)\n'
-           'const CADENCE = {"Run": 1.15}\n' % (fmt(survivor), fmt(raider), char3d.YK))
+           'const CADENCE = {"Run": 1.33}\n' % (fmt(survivor), fmt(raider), char3d.YK))
     with open(os.path.join(project, 'world', 'gait_strides.gd'), 'w') as f:
         f.write(src)
 
