@@ -40,7 +40,11 @@ func run():
     await frames(240)
     check(game.health >= hp - 0.01, "the fresh survivor is struck while standing still")
 
-    # the goal has a direction from the first frame: the Lazaret, far off
+    # dev84: a new run starts with the first steps - the arrow on the thing
+    # by the road; once they are done (or skipped by walking off) the goal is
+    # the Lazaret, far off
+    check(game.field_hints.steps_active and game._objective_target_world() != null, "the first steps do not point anywhere")
+    game.field_hints.finish_steps()
     var target = game._objective_target_world()
     check(target != null and target.distance_to(game.player.global_position) > game.OBJECTIVE_POINTER_NEAR, "a new survivor has no direction to the goal")
     # by the start the water bottle's prompt is up: the pointer gives it the floor

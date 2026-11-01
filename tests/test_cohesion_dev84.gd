@@ -41,5 +41,19 @@ func run():
     # ground, over the quick bar
     check(game.PROMPT_RECT.position.y > 250.0, "the prompt sits in the play area")
     check(game.PROMPT_RECT.size.y <= 14.0, "the prompt is a card again, not a strip")
+    # right click on a thing uses it - every hint says "ПКМ по воде"
+    game._grid_add(game.inventory_entries, "water", 1, game.INV_W, game.INV_H)
+    var wi = -1
+    for i in range(game.inventory_entries.size()):
+        if str(game.inventory_entries[i].get("id", "")) == "water":
+            wi = i
+    game.thirst = 40.0
+    game._toggle_inventory()
+    var ev = InputEventMouseButton.new()
+    ev.button_index = MOUSE_BUTTON_RIGHT
+    ev.pressed = true
+    game._inventory_item_gui_input(ev, wi, "water")
+    check(game.thirst > 45.0, "a right click on water did not drink it (thirst %.0f)" % game.thirst)
+    game._close_inventory()
     print("COHESION dev84: ", checks, " checks, ", failures, " failures")
     quit(1 if failures else 0)

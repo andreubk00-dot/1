@@ -119,7 +119,7 @@ func run():
     # 9. a death
     game.developer_invulnerable = false
     game.health = 0.0
-    await frames(150)
+    await frames(int(60 * game.PLAYER_DEATH_DURATION) + 40)
     await snap("death")
     await frames(240)
     await snap("after_death")
@@ -127,6 +127,9 @@ func run():
     game._open_menu("pause")
     await frames(20)
     await snap("pause")
+    game.pause_menu._open_tips()
+    await frames(5)
+    await snap("tips")
     quit(0)
 
 func get_paused_fix() -> void:

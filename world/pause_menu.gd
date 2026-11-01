@@ -374,6 +374,7 @@ func _rebuild_main() -> void:
         v.add_child(_button("ПРОДОЛЖИТЬ", close))
         v.add_child(_button("НАСТРОЙКИ", _open_settings))
         v.add_child(_button("УПРАВЛЕНИЕ", _open_controls))
+        v.add_child(_button("СОВЕТЫ", _open_tips))
         v.add_child(_button("СОХРАНИТЬ", _save))
         v.add_child(_button("СОХРАНИТЬ И ВЫЙТИ", _save_and_quit))
     v.add_child(_label("Esc — назад" if mode == "pause" else "", 5, DIM))
@@ -706,6 +707,40 @@ func _open_settings(tab: String = "sound") -> void:
 
 func _open_controls() -> void:
     _open_settings("keys")
+
+
+# dev84: every hint the survivor has been shown, to read again
+func _open_tips() -> void:
+    var v = _clear(_confirm_box)
+    v.add_child(_label("СОВЕТЫ", 11, INK))
+    var texts = {}
+    if game != null and game.field_hints != null:
+        texts = game.field_hints.texts
+    var scroll = ScrollContainer.new()
+    scroll.custom_minimum_size = Vector2(300, 190)
+    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    var list = VBoxContainer.new()
+    list.add_theme_constant_override("separation", 5)
+    list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.add_child(list)
+    if texts.is_empty():
+        list.add_child(_tip_label("Советы появляются по ходу игры — здесь их можно перечитать."))
+    else:
+        for id in texts:
+            list.add_child(_tip_label("• " + str(texts[id])))
+    v.add_child(scroll)
+    v.add_child(_button("НАЗАД", func(): _show(_main_box)))
+    _show(_confirm_box)
+
+
+func _tip_label(text: String) -> Label:
+    var l = Label.new()
+    l.text = text
+    l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    l.custom_minimum_size = Vector2(288, 0)
+    l.add_theme_font_size_override("font_size", 6)
+    l.add_theme_color_override("font_color", INK)
+    return l
 
 
 func _ask_new_game() -> void:

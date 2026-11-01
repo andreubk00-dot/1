@@ -3028,7 +3028,7 @@ func _ready():
             for gear in ["field_backpack","flashlight","cap"]:
                 _equip_item(gear)
             world_minutes = 7.5 * 60.0
-            field_hints_saved = {"enabled":true,"seen":{}}
+            field_hints_saved = {"enabled":true,"seen":{},"steps_active":true}
 
     _ensure_runtime_item_instance_ids()
     _ensure_weapon_runtime_state(not has_meta("loaded_save") and weapon_instance_states.is_empty())
@@ -7797,6 +7797,10 @@ func _respawn_player():
     fatigue = 20.0
     player.global_position = _fresh_spawn_position(body_coord)
     _refresh_chunks(true)
+    # dev84: say plainly what happened and what is left (it was one line)
+    if field_hints != null:
+        var lost = "Ваши вещи остались на теле — метка на карте ({region_map}), их можно забрать." if body_coord.x < 900000 else "При себе ничего не было."
+        field_hints.warn("death","ВЫ ПОГИБЛИ","Дальше играет новый выживший: он начинает в другом месте с ножом. " + lost)
     if body_coord.x < 900000:
         _set_survival_feedback("Новый выживший. Ваше тело с вещами лежит там, где вы погибли (метка на карте, M).",6.0)
     else:
@@ -8821,6 +8825,8 @@ func _damage_enemy(enemy, amount, hit_dir:Vector2 = Vector2.ZERO):
         _enemy_set_state(enemy,"chase",4.5)
 
     if hp <= 0.0:
+        if field_hints != null:
+            field_hints.step_done("fight")
         _play_infected_voice(enemy,"infected_death",-8.5,650.0,0.022)
         if str(enemy.get_meta("special_role","")) == "carrier" and not bool(enemy.get_meta("carrier_cloud_spawned",false)):
             enemy.set_meta("carrier_cloud_spawned",true)
@@ -12123,6 +12129,11 @@ func _hud_survival_objective():
         return {"title":"ГОЛОД","sub":"Нужна еда"}
     if _inventory_weight() > _carry_limit() * 0.94:
         return {"title":"РАЗГРУЗИТЬ РЮКЗАК","sub":"Вернуться к убежищу"}
+    # dev84: a new survivor's first steps come before the long road
+    if field_hints != null and field_hints.steps_active:
+        var step = field_hints.current_step()
+        if not step.is_empty():
+            return {"title":str(step["title"]),"sub":str(step["sub"])}
     if expedition_active:
         if expedition_target_reached or bool(expedition_journal.get("returning",false)):
             return {"title":"ВЕРНУТЬСЯ С ВЫЛАЗКИ","sub":_home_navigation_text()}
@@ -12613,6 +12624,8 @@ func _toggle_region_map():
         _close_region_map()
     else:
         _open_region_map()
+        if field_hints != null:
+            field_hints.step_done("map")
 
 func _open_region_map():
     if mod_panel_open:
@@ -13777,6 +13790,8 @@ func _home_world_position():
 
 func _objective_target_world():
     # the same goal the objective panel names; null when there is none to walk to
+    if _first_steps_on():
+        return field_hints.step_target()
     if expedition_active:
         if expedition_target_reached or bool(expedition_journal.get("returning",false)):
             var home = _home_world_position()
@@ -13802,7 +13817,14 @@ func _objective_pointer_wanted() -> bool:
     if hud_interaction_panel != null and is_instance_valid(hud_interaction_panel) and hud_interaction_panel.visible:
         return false
     var target = _objective_target_world()
-    return target != null and player.global_position.distance_to(target) > OBJECTIVE_POINTER_NEAR
+    # a first step's thing (a bottle, a crate) is close by: point until he is at it
+    var near = OBJECTIVE_POINTER_NEAR_STEP if _first_steps_on() else OBJECTIVE_POINTER_NEAR
+    return target != null and player.global_position.distance_to(target) > near
+
+const OBJECTIVE_POINTER_NEAR_STEP = 36.0
+
+func _first_steps_on() -> bool:
+    return field_hints != null and field_hints.steps_active and not field_hints.current_step().is_empty() and not bleeding
 
 func _update_objective_pointer(delta:float) -> void:
     if objective_pointer == null or not is_instance_valid(objective_pointer):
@@ -13821,9 +13843,10 @@ func _draw_objective_pointer() -> void:
         return
     var screen = get_viewport().get_canvas_transform() * (player.global_position + Vector2(0,-14))
     var dir = (Vector2(target) - player.global_position).normalized()
-    var tip = screen + dir * (OBJECTIVE_POINTER_RING + 8.0)
+    # dev84: twice the old 8 px - new players did not see it
+    var tip = screen + dir * (OBJECTIVE_POINTER_RING + 12.0)
     var base = screen + dir * OBJECTIVE_POINTER_RING
-    var side = dir.orthogonal() * 4.5
+    var side = dir.orthogonal() * 6.5
     var pulse = 0.78 + 0.22 * sin(Time.get_ticks_msec() / 1000.0 * 3.2)
     var col = Color(0.91,0.73,0.31,0.85 * _objective_pointer_alpha * pulse)
     var shade = Color(0.0,0.0,0.0,0.55 * _objective_pointer_alpha)
@@ -15491,6 +15514,12 @@ func _inventory_item_gui_input(event,index,id):
     elif use_type == "weapon_mod" and weapon_defs.has(current_weapon_id):
         selected_inventory_index = index
         _open_weapon_mod_panel(current_weapon_id,current_weapon_instance_id)
+    elif use_type != "":
+        # dev84: right click uses the thing - drink, eat, bandage, put on - as
+        # every hint says (it used to do nothing outside the weapons; drinking
+        # took a click and the ИСП. button)
+        selected_inventory_index = index
+        _use_selected_inventory()
 
 func _create_inventory_ui():
     var canvas = CanvasLayer.new()
@@ -15515,7 +15544,7 @@ func _create_inventory_ui():
 
     var inv_hint = Label.new()
     inv_hint.position = Vector2(16,31)
-    inv_hint.text = "ЛКМ выбрать / перетащить  •  ПКМ оружие"
+    inv_hint.text = "ЛКМ — выбрать, перетащить  •  ПКМ — использовать"
     inv_hint.add_theme_font_size_override("font_size",7)
     inv_hint.modulate = Color(0.62,0.65,0.61)
     inventory_panel.add_child(inv_hint)
@@ -17958,6 +17987,8 @@ func _open_container(key):
         return
     active_container_key = key
     inventory_open = true
+    if field_hints != null:
+        field_hints.step_done("search")
     _play_ui_sfx("open")
     _play_world_sfx("container_open",-13.0,0.04)
     selected_inventory_index = -1
@@ -19491,6 +19522,8 @@ func _interact():
 func _pickup_world_item(node):
     if not is_instance_valid(node) or node.is_queued_for_deletion():
         return
+    if field_hints != null:
+        field_hints.step_done("pickup")
     var id = str(node.get_meta("item_id",""))
     var qty = int(node.get_meta("qty",1))
     var instance_id = str(node.get_meta("instance_id",""))

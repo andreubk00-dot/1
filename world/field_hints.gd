@@ -20,9 +20,27 @@ const KIND_HINTS = {
     "armored": "Бронированный: пули вязнут в бронежилете. Стреляйте в спину или бейте холодным оружием.",
 }
 
+# dev84: "first steps" - five short things a new survivor does in the start
+# yard, shown as the current goal (the gold arrow points at the thing). Any
+# order; walking off from the start area ends it, so it never holds anyone.
+const STEPS = [
+    {"id": "pickup", "title": "ПОДОБРАТЬ ВЕЩЬ", "sub": "{interact} — взять вещь с земли", "target": "world_item"},
+    {"id": "drink", "title": "ПОПИТЬ ВОДЫ", "sub": "{inventory}, ПКМ по бутылке", "target": ""},
+    {"id": "search", "title": "ОБЫСКАТЬ ЯЩИК", "sub": "{interact} у ящика, «Забрать всё»", "target": "container"},
+    {"id": "fight", "title": "ОТБИТЬСЯ ОТ ЗАРАЖЁННОГО", "sub": "ЛКМ — огонь, {shove} — толчок", "target": "infected"},
+    {"id": "map", "title": "ОТКРЫТЬ КАРТУ", "sub": "{region_map} — путь к Лазарету", "target": ""},
+]
+const STEPS_AREA = 2            # sectors from the start; beyond, the steps are over
+const STEP_TARGET_RANGE = 640.0
+
 var game = null
 var enabled = false
 var seen = {}
+# every hint shown, to read again (Esc -> Советы)
+var texts = {}
+var steps_active = false
+var steps_done = {}
+var _thirst_seen = -1.0
 var _queue = []
 var _panel: PanelContainer = null
 var _title: Label = null
@@ -40,7 +58,8 @@ func _init():
 
 
 func state() -> Dictionary:
-    return {"enabled": enabled, "seen": seen.duplicate()}
+    return {"enabled": enabled, "seen": seen.duplicate(), "texts": texts.duplicate(),
+        "steps_active": steps_active, "steps_done": steps_done.duplicate()}
 
 
 func load_state(raw) -> void:
@@ -52,6 +71,93 @@ func load_state(raw) -> void:
     if typeof(raw_seen) == TYPE_DICTIONARY:
         for k in raw_seen:
             seen[str(k)] = true
+    texts = {}
+    var raw_texts = raw.get("texts", {})
+    if typeof(raw_texts) == TYPE_DICTIONARY:
+        for k in raw_texts:
+            texts[str(k)] = str(raw_texts[k])
+    steps_active = bool(raw.get("steps_active", false))
+    steps_done = {}
+    var raw_done = raw.get("steps_done", {})
+    if typeof(raw_done) == TYPE_DICTIONARY:
+        for k in raw_done:
+            steps_done[str(k)] = true
+
+
+# --- first steps -------------------------------------------------------------
+func step_done(id: String) -> void:
+    if not steps_active or steps_done.has(id):
+        return
+    var step = {}
+    for st in STEPS:
+        if st["id"] == id:
+            step = st
+    if step.is_empty():
+        return
+    steps_done[id] = true
+    if game != null and game.has_method("_set_survival_feedback"):
+        game._set_survival_feedback("ГОТОВО: %s  •  %d из %d" % [step["title"], steps_done.size(), STEPS.size()], 2.2)
+    if game != null and game.has_method("_play_ui_sfx"):
+        game._play_ui_sfx("open")
+    if steps_done.size() >= STEPS.size():
+        finish_steps()
+
+
+func finish_steps() -> void:
+    if not steps_active:
+        return
+    steps_active = false
+    hint("steps_done", "Основы освоены. Дальше — Лазарет, поселение выживших: золотая стрелка у персонажа ведёт туда, {region_map} — карта. Любой совет можно перечитать: Esc → Советы.")
+
+
+func current_step() -> Dictionary:
+    if not steps_active:
+        return {}
+    for st in STEPS:
+        if not steps_done.has(st["id"]):
+            return {"id": st["id"], "title": st["title"],
+                "sub": "Шаг %d/%d • %s" % [steps_done.size() + 1, STEPS.size(), InputBindings.fill(st["sub"])],
+                "target": st["target"]}
+    return {}
+
+
+func step_target():
+    # where the gold arrow points for the current step (null: no arrow)
+    var st = current_step()
+    if st.is_empty() or game == null or game.player == null:
+        return null
+    var kind = str(st["target"])
+    if kind == "":
+        return null
+    var group = "infected" if kind == "infected" else "interactable"
+    var best = null
+    var bd = STEP_TARGET_RANGE
+    for n in get_tree().get_nodes_in_group(group):
+        if not is_instance_valid(n) or not n.is_visible_in_tree():
+            continue
+        if group == "interactable" and str(n.get_meta("interaction_type", "")) != kind:
+            continue
+        if kind == "container" and game.has_method("_container_locked") and game._container_locked(str(n.get_meta("container_key", ""))):
+            continue
+        var d = n.global_position.distance_to(game.player.global_position)
+        if d < bd:
+            bd = d
+            best = n
+    return best.global_position if best != null else null
+
+
+func _check_steps() -> void:
+    if not steps_active or game.player_death_time > 0.0:
+        return
+    # drinking shows as thirst going up (a bottle, a flask, a pump)
+    var th = float(game.thirst)
+    if _thirst_seen >= 0.0 and th > _thirst_seen + 3.0:
+        step_done("drink")
+    _thirst_seen = th
+    # walked off from the start area: the basics are his already
+    var c = game._world_to_chunk(game.player.global_position)
+    if max(abs(c.x), abs(c.y)) > STEPS_AREA:
+        finish_steps()
 
 
 func _build() -> void:
@@ -111,6 +217,7 @@ func _show(entry: Dictionary) -> void:
         _build()
     if not bool(entry["warn"]):
         seen[entry["id"]] = true
+        texts[entry["id"]] = InputBindings.fill(str(entry["text"]))
     _title.text = entry["title"]
     _title.add_theme_color_override("font_color", RED if entry["warn"] else GOLD)
     _text.text = InputBindings.fill(str(entry["text"]))
@@ -152,6 +259,7 @@ func update(delta: float) -> void:
         return
     _check = 0.5
     _check_warnings()
+    _check_steps()
     if enabled:
         _check_hints()
 
@@ -202,6 +310,7 @@ func _check_hints() -> void:
         # the goal comes straight after the controls: it is what a new
         # survivor needs next, before the first door or the first infected
         hint("goal", "Текущая цель — справа вверху; золотая стрелка у персонажа показывает, куда идти. {region_map} — карта.")
+        hint("vitals", "Слева вверху — ваше состояние: здоровье, силы, голод, жажда, тепло. Если что-то станет опасным, здесь появится красное предупреждение.")
     if not seen.has("move"):
         return
     var near = game._nearest_interactable() if game.has_method("_nearest_interactable") else null
