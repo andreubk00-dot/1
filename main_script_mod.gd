@@ -14156,25 +14156,26 @@ func _create_hud():
 
     hud_interaction_panel = Panel.new()
     hud_interaction_panel.name = "InteractionPrompt"
-    hud_interaction_panel.position = Vector2(240,204)
-    hud_interaction_panel.size = Vector2(160,22)
+    # dev84: a slim strip just above the quick bar - it used to sit right under
+    # the survivor, a 160x22 card over the ground he walks onto
+    hud_interaction_panel.position = Vector2(PROMPT_RECT.position)
+    hud_interaction_panel.size = Vector2(PROMPT_RECT.size)
     hud_interaction_panel.add_theme_stylebox_override("panel",_hud_panel_style(true))
     hud_interaction_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     hud_interaction_panel.clip_contents = true
     hud_interaction_panel.visible = false
     hud_world_root.add_child(hud_interaction_panel)
-    _hud_add_panel_detail(hud_interaction_panel,hud_interaction_panel.size,accent)
 
     hud_interaction_key_badge = Panel.new()
     hud_interaction_key_badge.name = "InteractionKeyBadge"
-    hud_interaction_key_badge.position = Vector2(5,3)
-    hud_interaction_key_badge.size = Vector2(16,16)
+    hud_interaction_key_badge.position = Vector2(2,1)
+    hud_interaction_key_badge.size = Vector2(11,11)
     hud_interaction_key_badge.add_theme_stylebox_override("panel",_hud_panel_style(true))
     hud_interaction_key_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
     hud_interaction_panel.add_child(hud_interaction_key_badge)
-    hud_interaction_key_label = _hud_make_key_e_glyph(hud_interaction_key_badge,Vector2(5,3),Color(0.96,0.94,0.86))
+    hud_interaction_key_label = _hud_make_key_e_glyph(hud_interaction_key_badge,Vector2(2.5,1),Color(0.96,0.94,0.86))
     hud_interaction_key_label.name = "InteractionKeyGlyph"
-    interaction_label = _hud_make_row_label(hud_interaction_panel,25,11.0,130,17,"",6,Color(0.94,0.92,0.84),HORIZONTAL_ALIGNMENT_CENTER)
+    interaction_label = _hud_make_row_label(hud_interaction_panel,15,6.5,PROMPT_RECT.size.x - 18,11,"",5,Color(0.94,0.92,0.84),HORIZONTAL_ALIGNMENT_CENTER)
 
     # 1.23-dev15: survival_feedback existed for years but was never rendered by the
     # reference HUD. Keep it as a short-lived, non-interactive world message so NPC
@@ -14210,6 +14211,8 @@ func _create_hud():
 
 const FEEDBACK_MAX_W = 280.0
 const FEEDBACK_CENTER_X = 334.0
+# dev84: the interaction prompt - centred over the quick bar, clear of the play area
+const PROMPT_RECT = Rect2(250,287,140,13)
 
 func _update_hud():
     if hud == null or hud_world_root == null:
@@ -19279,9 +19282,12 @@ func _update_interaction_prompt():
         interaction_label.text = ""
 
 
-    _hud_set_fitted_text(interaction_label,interaction_label.text,6,5,18,28)
+    _hud_set_fitted_text(interaction_label,interaction_label.text,5,4,18,28)
     if hud_interaction_panel != null:
         hud_interaction_panel.visible = interaction_label.text != ""
+        # the rig's quick pockets take the strip over the quick bar: step above them
+        var pockets = hud_rig_quick_panel != null and is_instance_valid(hud_rig_quick_panel) and hud_rig_quick_panel.visible
+        hud_interaction_panel.position.y = PROMPT_RECT.position.y - (16.0 if pockets else 0.0)
 
 # dev83: a prompt appears only when the survivor stands right at the thing -
 # the gap between his body and the object's own footprint, not the distance to
