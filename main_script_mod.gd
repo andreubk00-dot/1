@@ -23695,7 +23695,12 @@ func _create_faction_npc(chunk,record:Dictionary):
 # clothes (tools/survivor3d.py NPC_OUTFITS): they breathe, shift their weight
 # now and then, and turn to face a survivor who walks up to them.
 const NPC_SPRITE_DIR = "res://art/npcs/"
-const NPC_SPRITE_OFFSET = Vector2(0,-11)
+# dev84: the same size as the survivor, the raiders and the infected (sheet
+# scale x PLAYER_VISUAL_SCALE = 0.5 world px per texel); they were drawn at 0.39
+# - a settlement of people a fifth smaller than the man who walks in. The feet
+# (texel row 92 of a 128 cell) stand on the node.
+const NPC_SPRITE_SCALE = SURVIVOR_SPRITE_SCALE * PLAYER_VISUAL_SCALE
+const NPC_SPRITE_OFFSET = Vector2(0,-14)
 const NPC_FACE_RADIUS = 150.0
 const NPC_IDLE_FPS = 7.0
 # the second clip plays once at the end of a 14 s round: 12 frames at 7 fps
@@ -23716,7 +23721,7 @@ func _attach_npc_sprite(node,npc_id:String) -> bool:
     sprite.texture = load(path)
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.region_enabled = true
-    sprite.scale = Vector2(SURVIVOR_SPRITE_SCALE,SURVIVOR_SPRITE_SCALE)
+    sprite.scale = Vector2(NPC_SPRITE_SCALE,NPC_SPRITE_SCALE)
     sprite.position = NPC_SPRITE_OFFSET
     node.add_child(sprite)
     var alt = NPC_SPRITE_DIR + outfit + "_Idle2.png"
