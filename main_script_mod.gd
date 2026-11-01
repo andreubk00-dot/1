@@ -4432,6 +4432,8 @@ func _process(delta):
         var now_chunk = _world_to_chunk(player.global_position)
         if now_chunk != current_chunk:
             _refresh_chunks(false)
+        else:
+            _stream_chunks()
         # Check entry into the actual home, even without crossing a chunk boundary.
         _update_expedition_progress()
 
@@ -22131,13 +22133,92 @@ func _refresh_chunks(force):
             if not loaded_chunks.has(coord):
                 _load_chunk(coord)
 
+    # dev84: the sectors a survivor walks toward are already built (see
+    # _stream_chunks); the ones left behind go one a frame, not all at once
+    for coord in _chunk_prefetch_set():
+        wanted[coord] = true
+        # kept only for being ahead: freed by the stream once he turns away
+        if loaded_chunks.has(coord):
+            chunk_streamed[coord] = true
     var remove_list = []
     for coord in loaded_chunks.keys():
         if not wanted.has(coord):
             remove_list.append(coord)
 
     for coord in remove_list:
+        if force:
+            _unload_chunk(coord)
+        elif not chunk_unload_queue.has(coord):
+            chunk_unload_queue.append(coord)
+
+# dev84: streaming. Crossing into a sector used to build the three sectors
+# ahead (35-70 ms each) and free the three behind in the same frame - a 150-800
+# ms hitch on every border. Now, within CHUNK_PREFETCH_MARGIN of an edge the
+# sectors past it are built one a frame ahead of time, and the ones out of
+# reach are freed one a frame.
+const CHUNK_PREFETCH_MARGIN = 260.0
+const CHUNK_KEEP_EXTRA = 80.0
+var chunk_unload_queue = []
+var chunk_streamed = {}
+
+func _chunk_prefetch_set(margin:float = CHUNK_PREFETCH_MARGIN) -> Array:
+    var out = []
+    if player == null:
+        return out
+    var c = _world_to_chunk(player.global_position)
+    var local = player.global_position - Vector2(c) * CHUNK_SIZE
+    var dx = 0
+    var dy = 0
+    if local.x > CHUNK_SIZE - margin:
+        dx = 1
+    elif local.x < margin:
+        dx = -1
+    if local.y > CHUNK_SIZE - margin:
+        dy = 1
+    elif local.y < margin:
+        dy = -1
+    var r = ACTIVE_RADIUS
+    if dx != 0:
+        for oy in range(-r,r + 1):
+            out.append(Vector2i(c.x + dx * (r + 1),c.y + oy))
+    if dy != 0:
+        for ox in range(-r,r + 1):
+            out.append(Vector2i(c.x + ox,c.y + dy * (r + 1)))
+    if dx != 0 and dy != 0:
+        out.append(Vector2i(c.x + dx * (r + 1),c.y + dy * (r + 1)))
+    return out
+
+func _stream_chunks() -> void:
+    if player == null or _high_risk_floor_active():
+        return
+    var c = _world_to_chunk(player.global_position)
+    var prefetch = _chunk_prefetch_set()
+    # one piece of work a frame: a sector ahead first, else a sector behind
+    for coord in prefetch:
+        if not loaded_chunks.has(coord):
+            chunk_unload_queue.erase(coord)
+            _load_chunk(coord)
+            chunk_streamed[coord] = true
+            return
+    # kept a little past the prefetch line, so a survivor pacing at the
+    # margin does not build and free the same sector over and over
+    var keep = _chunk_prefetch_set(CHUNK_PREFETCH_MARGIN + CHUNK_KEEP_EXTRA)
+    while not chunk_unload_queue.is_empty():
+        var coord = chunk_unload_queue.pop_front()
+        var near = abs(coord.x - c.x) <= ACTIVE_RADIUS and abs(coord.y - c.y) <= ACTIVE_RADIUS
+        if near or keep.has(coord) or not loaded_chunks.has(coord):
+            continue
         _unload_chunk(coord)
+        return
+    # a sector built ahead that the survivor turned away from (sectors loaded
+    # by hand - a tool, a test - are left to the next border crossing)
+    for coord in chunk_streamed.keys():
+        var near = abs(coord.x - c.x) <= ACTIVE_RADIUS and abs(coord.y - c.y) <= ACTIVE_RADIUS
+        if not loaded_chunks.has(coord):
+            chunk_streamed.erase(coord)
+        elif not near and not keep.has(coord):
+            _unload_chunk(coord)
+            return
 
 func _unload_chunk(coord):
     var chunk = loaded_chunks.get(coord)
@@ -22148,6 +22229,7 @@ func _unload_chunk(coord):
                 roof_records.remove_at(i)
         chunk.queue_free()
     loaded_chunks.erase(coord)
+    chunk_streamed.erase(coord)
 
 func _load_chunk(coord):
     var chunk = Node2D.new()
