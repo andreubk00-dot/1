@@ -1,4 +1,4 @@
 # OSTATOK — скачать игру
 
-Последняя сборка для Windows: [OSTATOK_1_38_0_WIN.7z](OSTATOK_1_38_0_WIN.7z) (92 МБ, версия 1.39.0 Stable).
+Последняя сборка для Windows: [OSTATOK_1_38_0_WIN.7z](OSTATOK_1_38_0_WIN.7z) (92 МБ, версия 1.39.1 Stable).
 Распакуйте 7-Zip или проводником Windows 11 и запустите OSTATOK.exe.
