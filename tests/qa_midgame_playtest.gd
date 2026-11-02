@@ -104,8 +104,14 @@ func run():
     await frames(60)
     await snap("clinic_outside")
     # the ending
-    var ending = game.RegionalEndgame.outcome_definition(game.faction_state)
-    game._show_ending_screen({}, ending, 30)
-    await frames(30)
-    await snap("ending")
+    # (the game keeps the ending out of QA runs; shown here directly)
+    for id in game.RegionalEndgame.GLOBAL_OUTCOMES:
+        var screen = game.EndingScreen.new()
+        screen.game = game
+        game.add_child(screen)
+        screen.show_outcome({"id": id}, game.RegionalEndgame.GLOBAL_OUTCOMES[id], {"day": 31, "sectors": 140, "kills": 212})
+        await frames(240)
+        await snap("ending_" + str(id))
+        screen.queue_free()
+        await frames(5)
     quit(0)

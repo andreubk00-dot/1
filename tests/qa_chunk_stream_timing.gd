@@ -35,7 +35,7 @@ func run():
                 var gone = []
                 for k in prev_keys:
                     if not keys.has(k): gone.append(k)
-                print("LONG %d us at %s cross=%s +%s -%s" % [dt, game.current_chunk, game.current_chunk != last, added, gone])
+                print("LONG %d us at %s cross=%s +%s -%s  proc=%.1fms phys=%.1fms nodes=%d" % [dt, game.current_chunk, game.current_chunk != last, added, gone, Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))])
             prev_keys = keys
             if game.current_chunk != last:
                 crossings += 1

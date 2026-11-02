@@ -270,6 +270,8 @@ func _menu_open() -> bool:
     for flag in ["inventory_open", "region_map_open", "trader_open", "contract_open", "crafting_open", "base_build_open", "rest_open", "mod_panel_open"]:
         if bool(game.get(flag)):
             return true
+    if game.get_node_or_null("EndingScreen") != null:
+        return true
     return get_tree().paused
 
 

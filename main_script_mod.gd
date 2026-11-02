@@ -28792,6 +28792,8 @@ const CAR_DEPTH_RANGE = 110.0
 # layer: trees, lamp posts, barrels, the set pieces of sites and settlements.
 const DEPTH_PROP_GROUPS = ["world_cars","depth_props","poi_set_pieces"]
 const TREE_BEHIND_ALPHA = 0.6
+const DEPTH_WATCH_RADIUS = 520.0   # props and bodies further off are left on their layer
+const DEPTH_FRONT_BAND = 40.0
 const CHAR_Z_FRONT = 24        # over the survivor's sprite and arms (20 + up to 3)
 const CHAR_DEPTH_RANGE = 90.0
 
@@ -28799,24 +28801,50 @@ func _update_car_depth() -> void:
     if player == null:
         return
     var p = player.global_position
+    # dev86: everyone who can stand behind a car, not only the survivor - an
+    # infected walking past behind a car was drawn over its roof
+    var bodies = [p]
+    for group in ["infected","marauders","dog"]:
+        for body in get_tree().get_nodes_in_group(group):
+            if is_instance_valid(body) and body is Node2D and body.global_position.distance_squared_to(p) < DEPTH_WATCH_RADIUS * DEPTH_WATCH_RADIUS:
+                bodies.append(body.global_position)
     for group in DEPTH_PROP_GROUPS:
         for prop in get_tree().get_nodes_in_group(group):
             if not is_instance_valid(prop):
                 continue
-            # the layer it was made on is its place when he is not behind it
+            # the layer it was made on is its place when nobody is behind it
             var under = int(prop.get_meta("depth_z_under",-1))
             if under < 0:
                 under = prop.z_index if not prop.z_as_relative and prop.z_index >= 4 and prop.z_index < 20 else 0
                 prop.set_meta("depth_z_under",under)
             if under == 0:
                 continue
-            var near = abs(prop.global_position.x - p.x) < CAR_DEPTH_RANGE and abs(prop.global_position.y - p.y) < CAR_DEPTH_RANGE
-            var z = CAR_Z_OVER if near and p.y < prop.global_position.y else under
+            var base = prop.global_position
+            var z = under
+            var player_behind = false
+            if base.distance_squared_to(p) < DEPTH_WATCH_RADIUS * DEPTH_WATCH_RADIUS:
+                # over whoever stands behind it - unless someone stands right in
+                # front of it too (he would vanish under the raised thing)
+                var behind = false
+                var front = false
+                for b in bodies:
+                    if abs(b.x - base.x) >= CAR_DEPTH_RANGE:
+                        continue
+                    var dy = base.y - b.y
+                    if dy > 0.0 and dy < CAR_DEPTH_RANGE:
+                        behind = true
+                    elif dy <= 0.0 and dy > -DEPTH_FRONT_BAND:
+                        front = true
+                player_behind = abs(p.x - base.x) < CAR_DEPTH_RANGE and base.y - p.y > 0.0 and base.y - p.y < CAR_DEPTH_RANGE
+                if player_behind or (behind and not front):
+                    z = CAR_Z_OVER
             if prop.z_index != z:
                 prop.z_index = z
-                # a crown he stands behind thins out, so he is never lost under it
-                if bool(prop.get_meta("world_tree",false)):
-                    prop.modulate.a = TREE_BEHIND_ALPHA if z == CAR_Z_OVER else 1.0
+            # a crown the survivor stands behind thins out, so he is never lost under it
+            if bool(prop.get_meta("world_tree",false)):
+                var a = TREE_BEHIND_ALPHA if player_behind else 1.0
+                if prop.modulate.a != a:
+                    prop.modulate.a = a
     # and the living: an infected, a raider or a dog nearer the camera than the
     # survivor (south of him) is drawn in front of him - they all stood on
     # layer 9 under his 20, so one at his chest was drawn behind his back

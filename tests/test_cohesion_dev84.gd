@@ -83,6 +83,17 @@ func run():
         game.player.global_position = inf.global_position + Vector2(0, 20)
         game._update_car_depth()
         check(inf.z_index < game.player.z_index, "an infected behind the survivor is drawn over him")
+    # dev86: an infected behind a parked car is covered by it too
+    if car != null and inf != null:
+        game.player.global_position = car.global_position + Vector2(0, 260)
+        var old_inf = inf.global_position
+        inf.global_position = car.global_position + Vector2(0, -24)
+        game._update_car_depth()
+        check(car.z_index > inf.z_index, "an infected behind a car is drawn over its roof")
+        inf.global_position = car.global_position + Vector2(0, 26)
+        game._update_car_depth()
+        check(car.z_index < inf.z_index, "an infected in front of a car is hidden by it")
+        inf.global_position = old_inf
     # dev85: the inventory windows stay off the vitals panel and on the screen
     var vitals = game.hud_world_root.get_node_or_null("VitalsPanel")
     if vitals != null:
