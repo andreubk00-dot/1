@@ -435,7 +435,7 @@ static func objective(state:Dictionary,world_day:int,at_lazaret:bool,clinical_di
     var contract_done = bool(rec.get("crisis_contract_completed",false))
     var contract_active = crisis_contract_active(state)
     if not contract_active and not contract_done:
-        return {"title":"ВЗЯТЬ АВАРИЙНЫЙ ЗАКАЗ","sub":"Медрезерв в дефиците • поговорите с Мироновой"}
+        return {"title":"ВЗЯТЬ АВАРИЙНЫЙ ЗАКАЗ","sub":"Доска Мироновой • строка [ЦЕЛЬ]"}
     if not bool(rec.get("supply_resolved",false)):
         return {"title":"ПОДГОТОВИТЬСЯ К РЕЙСУ","sub":"Сигнал ожидается в ближайшие сутки • проверьте воду, лечение и боезапас"}
     if bool(rec.get("recovery_pending",false)) and at_lazaret and not bool(rec.get("clinical_cargo_secured",false)):

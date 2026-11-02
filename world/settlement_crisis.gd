@@ -39,6 +39,18 @@ static func stage_label(stage:String) -> String:
 static func resource_label(resource_id:String) -> String:
     return str(RESOURCE_LABELS.get(resource_id,resource_id))
 
+# dev85: "плохо с ...", "связано с ..." - the instrumental case (an NPC said
+# "не хватает того, что связано с медицина")
+const RESOURCE_LABELS_WITH = {
+    "food":"едой",
+    "medicine":"медициной",
+    "technical":"техникой",
+    "security":"охраной"
+}
+
+static func resource_label_with(resource_id:String) -> String:
+    return str(RESOURCE_LABELS_WITH.get(resource_id,resource_label(resource_id)))
+
 static func resource_for_category(category:String) -> String:
     if category in ["food","water","household"]:
         return "food"

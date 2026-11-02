@@ -83,5 +83,12 @@ func run():
         game.player.global_position = inf.global_position + Vector2(0, 20)
         game._update_car_depth()
         check(inf.z_index < game.player.z_index, "an infected behind the survivor is drawn over him")
+    # dev85: the inventory windows stay off the vitals panel and on the screen
+    var vitals = game.hud_world_root.get_node_or_null("VitalsPanel")
+    if vitals != null:
+        var vb = vitals.position.y + vitals.size.y
+        check(game.inventory_panel.position.y >= vb, "the inventory covers the vitals panel (%.0f < %.0f)" % [game.inventory_panel.position.y, vb])
+    for panel in [game.inventory_panel, game.equipment_panel]:
+        check(panel.position.y + panel.size.y * panel.scale.y <= 360.0, "an inventory window runs off the screen")
     print("COHESION dev84: ", checks, " checks, ", failures, " failures")
     quit(1 if failures else 0)

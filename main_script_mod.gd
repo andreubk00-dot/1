@@ -4530,7 +4530,8 @@ func _update_hud_focus(delta):
         if panel == null:
             continue
         hud_focus[panel_name] = max(0.0,float(hud_focus.get(panel_name,0.0)) - delta)
-        var full = not enabled or inventory_open or float(hud_focus[panel_name]) > 0.0 or panel.get_global_rect().grow(6.0).has_point(mouse)
+        # a new survivor learning the screen sees it whole (dev85)
+        var full = not enabled or inventory_open or _first_steps_on() or float(hud_focus[panel_name]) > 0.0 or panel.get_global_rect().grow(6.0).has_point(mouse)
         var target = 1.0 if full else HUD_IDLE_ALPHA
         # quick to appear, slow to leave
         panel.modulate.a = move_toward(panel.modulate.a,target,delta * (5.0 if target > panel.modulate.a else 0.8))
@@ -15522,6 +15523,9 @@ func _inventory_item_gui_input(event,index,id):
         selected_inventory_index = index
         _use_selected_inventory()
 
+const INV_WINDOW_TOP = 146.0
+const INV_WINDOW_SCALE = 0.65
+
 func _create_inventory_ui():
     var canvas = CanvasLayer.new()
     canvas.layer = 20
@@ -15530,9 +15534,11 @@ func _create_inventory_ui():
 
     # Main storage.
     inventory_panel = Panel.new()
-    inventory_panel.position = Vector2(8,132)
+    # dev85: below the vitals panel (it ends at y 143; the window covered its
+    # lower frame), a hair smaller to keep the whole window on a 360 px screen
+    inventory_panel.position = Vector2(8,INV_WINDOW_TOP)
     inventory_panel.size = Vector2(372,326)
-    inventory_panel.scale = Vector2(0.68,0.68)
+    inventory_panel.scale = Vector2(INV_WINDOW_SCALE,INV_WINDOW_SCALE)
     inventory_panel.add_theme_stylebox_override("panel",_visual_panel_style())
     canvas.add_child(inventory_panel)
     _hud_add_panel_detail(inventory_panel,inventory_panel.size,Color(0.49,0.47,0.36))
@@ -15574,9 +15580,9 @@ func _create_inventory_ui():
 
     # Equipment is permanently visible at the side of normal inventory.
     equipment_panel = Panel.new()
-    equipment_panel.position = Vector2(270,132)
+    equipment_panel.position = Vector2(262,INV_WINDOW_TOP)
     equipment_panel.size = Vector2(238,326)
-    equipment_panel.scale = Vector2(0.68,0.68)
+    equipment_panel.scale = Vector2(INV_WINDOW_SCALE,INV_WINDOW_SCALE)
     equipment_panel.add_theme_stylebox_override("panel",_visual_panel_style())
     canvas.add_child(equipment_panel)
     _hud_add_panel_detail(equipment_panel,equipment_panel.size,Color(0.43,0.49,0.45))
@@ -15609,9 +15615,9 @@ func _create_inventory_ui():
 
     # Container replaces equipment side panel during looting.
     container_panel = Panel.new()
-    container_panel.position = Vector2(270,113)
+    container_panel.position = Vector2(262,122)
     container_panel.size = Vector2(238,348)
-    container_panel.scale = Vector2(0.68,0.68)
+    container_panel.scale = Vector2(INV_WINDOW_SCALE,INV_WINDOW_SCALE)
     container_panel.add_theme_stylebox_override("panel",_visual_panel_style())
     canvas.add_child(container_panel)
     _hud_add_panel_detail(container_panel,container_panel.size,Color(0.43,0.49,0.45))
@@ -23965,11 +23971,11 @@ func _talk_faction_npc(node):
         "lazaret_researcher": line = "Образцы и реагенты интересуют нас больше оружия."
     var settlement = SettlementCrisis.faction_status(faction_state,faction_id)
     var settlement_stage = str(settlement.get("stage","stable"))
-    var shortage_name = SettlementCrisis.resource_label(str(settlement.get("worst_resource","food")))
+    var shortage_name = SettlementCrisis.resource_label_with(str(settlement.get("worst_resource","food")))
     if settlement_stage == "crisis":
         line += " Сейчас у нас настоящий кризис: хуже всего с %s." % shortage_name
     elif settlement_stage == "shortage":
-        line += " Запасы просели; особенно не хватает того, что связано с %s." % shortage_name
+        line += " Запасы просели; особенно плохо с %s." % shortage_name
     elif settlement_stage == "strain":
         line += " Пока держимся, но снабжение уже чувствуется на каждом складе."
     var sandbox_route_note = SandboxRouteConsequences.npc_note(faction_state,faction_id)
@@ -35164,7 +35170,8 @@ func _create_base_build_ui():
     add_child(canvas)
 
     base_build_panel = Panel.new()
-    base_build_panel.position = Vector2(370,58)
+    # dev85: 58 + 326 ran 24 px off a 360 px screen - the close button was cut
+    base_build_panel.position = Vector2(370,24)
     base_build_panel.size = Vector2(254,326)
     canvas.add_child(base_build_panel)
 
@@ -36535,6 +36542,9 @@ func _refresh_contract_ui():
                     offer_prefix = "[РАЗВЕДКА • РИСК %d]" % route_risk if route_risk > 0 else "[РАЗВЕДКА]"
                 else:
                     offer_prefix = "[ПОСТАВКА]"
+            # dev85: the story's own order stands out - the goal points at it
+            if str(contract.get("template_id","")) == VerticalSlice.CRISIS_TEMPLATE_ID:
+                offer_prefix = "[ЦЕЛЬ]"
             var row = "%s  %s  •  предложение до дня %d" % [offer_prefix,str(contract.get("title","КОНТРАКТ")),int(contract.get("offer_expires_day",world_day))]
             contract_list.add_item(row)
             var idx = contract_list.item_count - 1
@@ -36544,6 +36554,8 @@ func _refresh_contract_ui():
     for contract in active_contracts:
         var ready = _contract_is_ready(contract)
         var prefix = "[ГОТОВО]" if ready else "[АКТИВНО]"
+        if str(contract.get("template_id","")) == VerticalSlice.CRISIS_TEMPLATE_ID:
+            prefix = "[ЦЕЛЬ • ГОТОВО]" if ready else "[ЦЕЛЬ]"
         var deadline = int(contract.get("deadline_day",0))
         var deadline_text = " • срок до дня %d" % deadline if deadline > 0 else ""
         contract_list.add_item("%s  %s%s" % [prefix,str(contract.get("title","КОНТРАКТ")),deadline_text])
@@ -36557,7 +36569,7 @@ func _refresh_contract_ui():
         if ContractCatalog.is_personal_board(active_contract_npc_id):
             contract_status.text = "Это личные поручения конкретного человека. Предложения недолговечны, а после принятия у части задач идёт срок. Отказ и просрочка могут повлиять на отношение и ресурсы поселения."
         else:
-            contract_status.text = RegionalEndgame.board_text(faction_state,world_day) + "\n\nВыберите предложение. Активный контракт сдаётся тому же ответственному NPC после выполнения условий. Точных маркеров разведки нет — работают названия и ориентиры."
+            contract_status.text = RegionalEndgame.board_text(faction_state,world_day) + "\n\nВыберите предложение. Выполненный контракт сдаётся тому же человеку, который его дал. Точных маркеров разведки нет — работают названия и ориентиры."
     else:
         _refresh_contract_selection_status()
 

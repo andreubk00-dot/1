@@ -265,7 +265,12 @@ func update(delta: float) -> void:
 
 
 func _menu_open() -> bool:
-    return bool(game.inventory_open) or bool(game.region_map_open) or bool(game.trader_open) or get_tree().paused
+    # dev85: and every other window - a card used to sit over the title of the
+    # contract board, the trader, the workbench
+    for flag in ["inventory_open", "region_map_open", "trader_open", "contract_open", "crafting_open", "base_build_open", "rest_open", "mod_panel_open"]:
+        if bool(game.get(flag)):
+            return true
+    return get_tree().paused
 
 
 func _danger(id: String) -> bool:
