@@ -227,9 +227,25 @@ func _show(entry: Dictionary) -> void:
     _panel.reset_size()
     _panel.position = Vector2(round(320.0 - _panel.size.x * 0.5), 6)
     _panel.visible = true
+    _fit_panel.call_deferred()
     _time_left = WARN_TIME if entry["warn"] else HINT_TIME
     if game != null and game.has_method("_play_ui_sfx"):
         game._play_ui_sfx("open")
+
+
+func _fit_panel() -> void:
+    if _panel == null:
+        return
+    var want = _panel.get_combined_minimum_size()
+    if not _panel.size.is_equal_approx(want):
+        _panel.reset_size()
+        _panel.position = Vector2(round(320.0 - _panel.size.x * 0.5), 6)
+
+
+func hide_under_menu() -> void:
+    # the pause menu stops the game's clock, and with it this card's fade
+    if _panel != null:
+        _panel.modulate.a = 0.0
 
 
 func update(delta: float) -> void:
@@ -247,6 +263,9 @@ func update(delta: float) -> void:
     while not _queue.is_empty() and bool(_queue[0]["warn"]) and not _danger(str(_queue[0]["id"])):
         _queue.pop_front()
     if _panel != null and _panel.visible:
+        # a wrapped text knows its line count only once it has its width: the
+        # card is refitted every frame, or its second line is cut off (1.42)
+        _fit_panel()
         _time_left -= delta
         var a = clamp(min(_time_left, HINT_TIME - _time_left + 0.35) / 0.35, 0.0, 1.0)
         _panel.modulate.a = a

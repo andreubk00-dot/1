@@ -708,6 +708,7 @@ var crafting_open = false
 var craft_title = null
 var selected_recipe_id = ""
 var craft_panel = null
+var craft_detail_art = null
 var craft_list = null
 var craft_details = null
 var craft_status = null
@@ -2982,6 +2983,7 @@ func _menu_new_game():
     get_tree().reload_current_scene()
 
 func _apply_pixel_ui_font():
+    _fix_default_font_size()
     if pixel_ui_font != null or not ResourceLoader.exists(PIXEL_UI_FONT):
         return
     var f = load(PIXEL_UI_FONT)
@@ -3000,6 +3002,25 @@ func _apply_pixel_ui_font():
     pixel_ui_font = f
     ThemeDB.get_default_theme().default_font = f
     ThemeDB.fallback_font = f
+
+func _fix_default_font_size():
+    # 1.42: a Label or a Button sized before it joins the scene measures its
+    # text at the theme's default size (16) - every small label set to, say,
+    # 16x10 became 22x19, and its centred text slid down past the panel's
+    # bottom edge ("the fonts are cut at the bottom"). Every label here sets
+    # its own size; the default only measures, so it is made small. The kinds
+    # that do read the default keep the 16 they always drew at.
+    var th = ThemeDB.get_default_theme()
+    if th.default_font_size == 6:
+        return
+    var keep = th.default_font_size
+    for t in ["TooltipLabel","LineEdit","OptionButton","PopupMenu","ItemList","TextEdit","SpinBox","TabBar","TabContainer","Tree","AcceptDialog"]:
+        if not th.has_font_size("font_size",t):
+            th.set_font_size("font_size",t,keep)
+    for key in ["normal_font_size","bold_font_size","italics_font_size","bold_italics_font_size","mono_font_size"]:
+        if not th.has_font_size(key,"RichTextLabel"):
+            th.set_font_size(key,"RichTextLabel",keep)
+    th.default_font_size = 6
 
 func _ready():
     # Keep application/config/name stable: Godot derives the existing user:// path from it.
@@ -4054,13 +4075,13 @@ func _create_developer_ui() -> void:
     add_child(layer)
 
     developer_hud_button = Button.new()
+    developer_hud_button.add_theme_font_size_override("font_size",7)
     developer_hud_button.name = "DeveloperButton"
     developer_hud_button.position = Vector2(557,8)
-    developer_hud_button.size = Vector2(75,20)
-    developer_hud_button.add_theme_font_size_override("font_size",7)
     _visual_button_style(developer_hud_button)
     developer_hud_button.pressed.connect(_toggle_developer_panel)
     layer.add_child(developer_hud_button)
+    developer_hud_button.size = Vector2(75,20)
 
     developer_panel = Panel.new()
     developer_panel.name = "DeveloperPanel"
@@ -4071,12 +4092,12 @@ func _create_developer_ui() -> void:
     layer.add_child(developer_panel)
 
     var title = Label.new()
-    title.position = Vector2(12,8)
-    title.size = Vector2(430,22)
-    title.text = "РЕЖИМ РАЗРАБОТЧИКА • DEV ONLY"
     title.add_theme_font_size_override("font_size",10)
+    title.position = Vector2(12,8)
+    title.text = "РЕЖИМ РАЗРАБОТЧИКА • DEV ONLY"
     title.add_theme_color_override("font_color",Color(0.96,0.76,0.34))
     developer_panel.add_child(title)
+    title.size = Vector2(430,22)
 
     var close_button = _make_button(developer_panel,Vector2(484,7),Vector2(38,20),"X",_close_developer_panel)
     close_button.name = "DeveloperClose"
@@ -4093,57 +4114,57 @@ func _create_developer_ui() -> void:
     tabs.add_child(cheats)
 
     var info = Label.new()
+    info.add_theme_font_size_override("font_size",8)
     info.position = Vector2(12,12)
-    info.size = Vector2(470,32)
     info.text = "Инструменты QA. Состояние читов не сохраняется в save-файл."
     info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    info.add_theme_font_size_override("font_size",8)
     info.add_theme_color_override("font_color",Color(0.70,0.73,0.69))
     cheats.add_child(info)
+    info.size = Vector2(470,32)
 
     developer_invulnerable_toggle = CheckButton.new()
+    developer_invulnerable_toggle.add_theme_font_size_override("font_size",9)
     developer_invulnerable_toggle.name = "InvulnerabilityToggle"
     developer_invulnerable_toggle.position = Vector2(14,54)
-    developer_invulnerable_toggle.size = Vector2(310,28)
     developer_invulnerable_toggle.text = "НЕУЯЗВИМОСТЬ"
-    developer_invulnerable_toggle.add_theme_font_size_override("font_size",9)
     developer_invulnerable_toggle.toggled.connect(_developer_set_invulnerable)
     cheats.add_child(developer_invulnerable_toggle)
+    developer_invulnerable_toggle.size = Vector2(310,28)
 
     var inv_note = Label.new()
+    inv_note.add_theme_font_size_override("font_size",7)
     inv_note.position = Vector2(35,80)
-    inv_note.size = Vector2(430,28)
     inv_note.text = "HP = 100; боевые/средовые травмы, кровотечение и заражение ран очищаются."
     inv_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    inv_note.add_theme_font_size_override("font_size",7)
     inv_note.add_theme_color_override("font_color",Color(0.63,0.67,0.64))
     cheats.add_child(inv_note)
+    inv_note.size = Vector2(430,28)
 
     developer_no_aggro_toggle = CheckButton.new()
+    developer_no_aggro_toggle.add_theme_font_size_override("font_size",9)
     developer_no_aggro_toggle.name = "NoAggroToggle"
     developer_no_aggro_toggle.position = Vector2(14,116)
-    developer_no_aggro_toggle.size = Vector2(310,28)
     developer_no_aggro_toggle.text = "ЗАРАЖЁННЫЕ НЕ АГРЯТСЯ"
-    developer_no_aggro_toggle.add_theme_font_size_override("font_size",9)
     developer_no_aggro_toggle.toggled.connect(_developer_set_no_aggro)
     cheats.add_child(developer_no_aggro_toggle)
+    developer_no_aggro_toggle.size = Vector2(310,28)
 
     var aggro_note = Label.new()
+    aggro_note.add_theme_font_size_override("font_size",7)
     aggro_note.position = Vector2(35,142)
-    aggro_note.size = Vector2(430,28)
     aggro_note.text = "Заражённые сбрасывают chase/search/suspicion и не атакуют игрока или убежище."
     aggro_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    aggro_note.add_theme_font_size_override("font_size",7)
     aggro_note.add_theme_color_override("font_color",Color(0.63,0.67,0.64))
     cheats.add_child(aggro_note)
+    aggro_note.size = Vector2(430,28)
 
     developer_status_label = Label.new()
+    developer_status_label.add_theme_font_size_override("font_size",8)
     developer_status_label.name = "DeveloperStatus"
     developer_status_label.position = Vector2(14,180)
-    developer_status_label.size = Vector2(250,54)
-    developer_status_label.add_theme_font_size_override("font_size",8)
     developer_status_label.add_theme_color_override("font_color",Color(0.86,0.78,0.55))
     cheats.add_child(developer_status_label)
+    developer_status_label.size = Vector2(250,54)
 
     _make_button(cheats,Vector2(310,190),Vector2(160,28),"ВЫКЛЮЧИТЬ ВСЁ",_developer_disable_all)
 
@@ -4152,12 +4173,12 @@ func _create_developer_ui() -> void:
     tabs.add_child(teleport)
 
     var tp_info = Label.new()
-    tp_info.position = Vector2(10,8)
-    tp_info.size = Vector2(480,24)
-    tp_info.text = "Основные POI • телепорт к безопасной точке входа/центру сектора"
     tp_info.add_theme_font_size_override("font_size",8)
+    tp_info.position = Vector2(10,8)
+    tp_info.text = "Основные POI • телепорт к безопасной точке входа/центру сектора"
     tp_info.add_theme_color_override("font_color",Color(0.70,0.73,0.69))
     teleport.add_child(tp_info)
+    tp_info.size = Vector2(480,24)
 
     var scroll = ScrollContainer.new()
     scroll.name = "TeleportScroll"
@@ -10919,40 +10940,40 @@ func _create_crafting_ui():
     craft_title = title
 
     workbench_craft_tab = Button.new()
-    workbench_craft_tab.position = Vector2(102,7)
-    workbench_craft_tab.size = Vector2(90,28)
-    workbench_craft_tab.text = "КРАФТ"
     workbench_craft_tab.add_theme_font_size_override("font_size",8)
+    workbench_craft_tab.position = Vector2(102,7)
+    workbench_craft_tab.text = "КРАФТ"
     _visual_button_style(workbench_craft_tab)
     workbench_craft_tab.pressed.connect(_set_workbench_mode.bind("craft"))
     craft_panel.add_child(workbench_craft_tab)
+    workbench_craft_tab.size = Vector2(90,28)
 
     workbench_service_tab = Button.new()
-    workbench_service_tab.position = Vector2(198,7)
-    workbench_service_tab.size = Vector2(106,28)
-    workbench_service_tab.text = "ОРУЖЕЙНИК"
     workbench_service_tab.add_theme_font_size_override("font_size",8)
+    workbench_service_tab.position = Vector2(198,7)
+    workbench_service_tab.text = "ОРУЖЕЙНИК"
     _visual_button_style(workbench_service_tab)
     workbench_service_tab.pressed.connect(_set_workbench_mode.bind("service"))
     craft_panel.add_child(workbench_service_tab)
+    workbench_service_tab.size = Vector2(106,28)
 
     workbench_salvage_tab = Button.new()
-    workbench_salvage_tab.position = Vector2(310,7)
-    workbench_salvage_tab.size = Vector2(104,28)
-    workbench_salvage_tab.text = "РАЗБОР"
     workbench_salvage_tab.add_theme_font_size_override("font_size",8)
+    workbench_salvage_tab.position = Vector2(310,7)
+    workbench_salvage_tab.text = "РАЗБОР"
     _visual_button_style(workbench_salvage_tab)
     workbench_salvage_tab.pressed.connect(_set_workbench_mode.bind("salvage"))
     craft_panel.add_child(workbench_salvage_tab)
+    workbench_salvage_tab.size = Vector2(104,28)
 
     var close_button = Button.new()
-    close_button.position = Vector2(430,7)
-    close_button.size = Vector2(32,28)
-    close_button.text = "×"
     close_button.add_theme_font_size_override("font_size",12)
+    close_button.position = Vector2(430,7)
+    close_button.text = "×"
     _visual_button_style(close_button)
     close_button.pressed.connect(_close_crafting)
     craft_panel.add_child(close_button)
+    close_button.size = Vector2(32,28)
 
     # Crafting content.
     workbench_craft_content = Control.new()
@@ -10962,8 +10983,8 @@ func _create_crafting_ui():
 
     var craft_scroll = ScrollContainer.new()
     craft_scroll.name = "CraftRecipeScroll"
-    craft_scroll.position = Vector2(14,8)
-    craft_scroll.size = Vector2(188,190)
+    craft_scroll.position = Vector2(14,6)
+    craft_scroll.size = Vector2(190,246)
     craft_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     craft_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
     workbench_craft_content.add_child(craft_scroll)
@@ -10975,20 +10996,26 @@ func _create_crafting_ui():
     craft_scroll.add_child(craft_list)
 
     craft_details = Label.new()
+    craft_details.add_theme_font_size_override("font_size",9)
     craft_details.position = Vector2(215,10)
-    craft_details.size = Vector2(242,148)
-    craft_details.add_theme_font_size_override("font_size",8)
     craft_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    craft_details.clip_text = true
     workbench_craft_content.add_child(craft_details)
+    craft_details.size = Vector2(242,40)
+
+    # 1.42: the recipe in pictures - result, where, tool, schematic, materials
+    craft_detail_art = Control.new()
+    craft_detail_art.name = "CraftDetailArt"
+    craft_detail_art.position = Vector2(215,8)
+    craft_detail_art.size = Vector2(244,156)
+    workbench_craft_content.add_child(craft_detail_art)
 
     craft_status = Label.new()
-    craft_status.position = Vector2(215,160)
-    craft_status.size = Vector2(242,40)
     craft_status.add_theme_font_size_override("font_size",8)
+    craft_status.position = Vector2(215,168)
     craft_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     craft_status.modulate = Color(0.86,0.80,0.62)
     workbench_craft_content.add_child(craft_status)
+    craft_status.size = Vector2(242,32)
 
     _make_button(workbench_craft_content,Vector2(215,205),Vector2(120,32),"СОЗДАТЬ",_craft_selected_recipe)
 
@@ -11039,17 +11066,17 @@ func _create_crafting_ui():
     workbench_service_content.add_child(service_weapon_icon)
 
     service_title = Label.new()
-    service_title.position = Vector2(278,10)
-    service_title.size = Vector2(180,20)
     service_title.add_theme_font_size_override("font_size",11)
+    service_title.position = Vector2(278,10)
     service_title.modulate = Color(0.95,0.91,0.75)
     workbench_service_content.add_child(service_title)
+    service_title.size = Vector2(180,20)
 
     service_condition_label = Label.new()
-    service_condition_label.position = Vector2(278,31)
-    service_condition_label.size = Vector2(180,20)
     service_condition_label.add_theme_font_size_override("font_size",8)
+    service_condition_label.position = Vector2(278,31)
     workbench_service_content.add_child(service_condition_label)
+    service_condition_label.size = Vector2(180,20)
 
     service_condition_bar = ProgressBar.new()
     service_condition_bar.position = Vector2(172,59)
@@ -11060,21 +11087,21 @@ func _create_crafting_ui():
     workbench_service_content.add_child(service_condition_bar)
 
     service_requirements = Label.new()
-    service_requirements.position = Vector2(172,85)
-    service_requirements.size = Vector2(286,92)
     service_requirements.add_theme_font_size_override("font_size",7)
+    service_requirements.position = Vector2(172,85)
     service_requirements.modulate = Color(0.76,0.78,0.71)
     workbench_service_content.add_child(service_requirements)
+    service_requirements.size = Vector2(286,92)
 
     _make_button(workbench_service_content,Vector2(172,184),Vector2(136,34),"ОБСЛУЖИТЬ",_service_selected_maintenance)
     _make_button(workbench_service_content,Vector2(316,184),Vector2(142,34),"КАПРЕМОНТ",_service_selected_overhaul)
 
     service_status = Label.new()
-    service_status.position = Vector2(172,224)
-    service_status.size = Vector2(286,28)
     service_status.add_theme_font_size_override("font_size",7)
+    service_status.position = Vector2(172,224)
     service_status.modulate = Color(0.74,0.78,0.68)
     workbench_service_content.add_child(service_status)
+    service_status.size = Vector2(286,28)
 
     workbench_salvage_content = Control.new()
     workbench_salvage_content.position = Vector2(0,40)
@@ -11103,17 +11130,17 @@ func _create_crafting_ui():
     salvage_scroll.add_child(salvage_list)
 
     salvage_details = Label.new()
-    salvage_details.position = Vector2(215,30)
-    salvage_details.size = Vector2(242,142)
     salvage_details.add_theme_font_size_override("font_size",8)
+    salvage_details.position = Vector2(215,30)
     workbench_salvage_content.add_child(salvage_details)
+    salvage_details.size = Vector2(242,142)
 
     salvage_status = Label.new()
-    salvage_status.position = Vector2(215,174)
-    salvage_status.size = Vector2(242,34)
     salvage_status.add_theme_font_size_override("font_size",8)
+    salvage_status.position = Vector2(215,174)
     salvage_status.modulate = Color(0.74,0.78,0.68)
     workbench_salvage_content.add_child(salvage_status)
+    salvage_status.size = Vector2(242,34)
 
     _make_button(
         workbench_salvage_content,
@@ -11128,6 +11155,86 @@ func _create_crafting_ui():
     _rebuild_salvage_ui()
     _refresh_workbench_mode()
 
+const UI_ICON_REGIONS = {
+    "hand":Rect2i(0,0,12,12),
+    "bench":Rect2i(14,0,12,12),
+    "lock":Rect2i(28,0,12,12),
+    "check":Rect2i(42,0,12,12),
+    "cross":Rect2i(56,0,12,12),
+    "wrench":Rect2i(70,0,12,12),
+    "book":Rect2i(84,0,12,12),
+    "coin":Rect2i(98,0,12,12),
+    "weight":Rect2i(112,0,12,12),
+    "star":Rect2i(126,0,12,12),
+    "clock":Rect2i(140,0,12,12),
+    "house":Rect2i(154,0,12,12),
+    "wind":Rect2i(168,0,12,12),
+    "shield":Rect2i(182,0,12,12),
+    "flame":Rect2i(196,0,12,12),
+    "drop":Rect2i(210,0,12,12),
+    "skull":Rect2i(0,14,12,12),
+    "box":Rect2i(14,14,12,12),
+    "food":Rect2i(28,14,12,12),
+    "med":Rect2i(42,14,12,12),
+    "gear":Rect2i(56,14,12,12),
+    "buy":Rect2i(70,14,12,12),
+    "sell":Rect2i(84,14,12,12),
+    "swap":Rect2i(98,14,12,12),
+    "user":Rect2i(112,14,12,12),
+    "map":Rect2i(126,14,12,12),
+    "route":Rect2i(140,14,12,12),
+    "base_stash":Rect2i(0,30,24,24),
+    "base_heater":Rect2i(26,30,24,24),
+    "base_lamp":Rect2i(52,30,24,24),
+    "base_cot":Rect2i(78,30,24,24),
+    "base_barricade":Rect2i(104,30,24,24),
+    "base_campfire":Rect2i(130,30,24,24),
+    "base_rain_collector":Rect2i(156,30,24,24),
+    "base_workbench":Rect2i(182,30,24,24)
+}
+
+var ui_icon_atlas = null
+var ui_icon_cache = {}
+
+func _ui_icon(name:String):
+    # 1.42: the small pictures that stand for words in the windows and the HUD
+    if ui_icon_cache.has(name):
+        return ui_icon_cache[name]
+    if not UI_ICON_REGIONS.has(name):
+        return null
+    if ui_icon_atlas == null:
+        ui_icon_atlas = load("res://ui_icons_v1.png")
+    if ui_icon_atlas == null:
+        return null
+    var t = AtlasTexture.new()
+    t.atlas = ui_icon_atlas
+    t.region = Rect2(UI_ICON_REGIONS[name])
+    ui_icon_cache[name] = t
+    return t
+
+func _ui_icon_rect(parent,name:String,pos:Vector2,size:Vector2,tint:Color = Color.WHITE):
+    var r = TextureRect.new()
+    r.name = "UiIcon_" + name
+    _fit_icon_rect(r,_ui_icon(name),pos,size,3.0)
+    r.modulate = tint
+    parent.add_child(r)
+    return r
+
+func _item_icon_rect(parent,item_id:String,pos:Vector2,size:Vector2,max_up:float = 1.5):
+    var r = TextureRect.new()
+    r.name = "ItemIcon"
+    _fit_icon_rect(r,_make_item_icon(item_id),pos,size,max_up)
+    parent.add_child(r)
+    return r
+
+func _icon_tile_style(fill:Color,edge:Color):
+    var st = StyleBoxFlat.new()
+    st.bg_color = fill
+    st.border_color = edge
+    st.set_border_width_all(1)
+    st.set_corner_radius_all(1)
+    return st
+
 func _rebuild_crafting_ui():
     if craft_list == null:
         return
@@ -11136,8 +11243,8 @@ func _rebuild_crafting_ui():
         craft_list.remove_child(child)
         child.queue_free()
 
-    # 1.40: under headings, what can be made first; a recipe from an unread
-    # schematic or one that wants a workbench says so on its button
+    # 1.42: a picture per recipe under a heading, what can be made first; a
+    # lock says "schematic", a bench says "workbench" - the name is on hover
     for group in CRAFT_GROUPS:
         var ids = []
         for recipe_id in recipe_defs:
@@ -11152,22 +11259,72 @@ func _rebuild_crafting_ui():
         )
         var heading = Label.new()
         heading.text = group
+        heading.custom_minimum_size = Vector2(170,12)
         heading.add_theme_font_size_override("font_size",7)
         heading.modulate = Color(0.86,0.66,0.34)
         craft_list.add_child(heading)
+        var grid = GridContainer.new()
+        grid.columns = 5
+        grid.add_theme_constant_override("h_separation",2)
+        grid.add_theme_constant_override("v_separation",2)
+        craft_list.add_child(grid)
         for recipe_id in ids:
-            var recipe = recipe_defs[recipe_id]
-            var button = Button.new()
-            button.text = _recipe_button_text(recipe)
-            button.custom_minimum_size = Vector2(170,26)
-            button.add_theme_font_size_override("font_size",7)
-            button.set_meta("recipe_id",str(recipe_id))
-            _visual_button_style(button)
-            button.pressed.connect(_select_recipe.bind(str(recipe_id)))
-            craft_list.add_child(button)
+            grid.add_child(_make_recipe_tile(str(recipe_id)))
 
     _refresh_crafting_details()
     _refresh_recipe_button_states()
+
+func _make_recipe_tile(recipe_id:String):
+    var recipe = recipe_defs[recipe_id]
+    var button = Button.new()
+    button.custom_minimum_size = Vector2(33,33)
+    button.size = Vector2(33,33)
+    button.text = ""
+    button.focus_mode = Control.FOCUS_NONE
+    button.clip_contents = true
+    button.tooltip_text = _recipe_button_text(recipe)
+    button.set_meta("recipe_id",recipe_id)
+    button.pressed.connect(_select_recipe.bind(recipe_id))
+    var out_id = str(recipe.get("output",""))
+    _item_icon_rect(button,out_id,Vector2(3,3),Vector2(27,27),1.5)
+    var badge = ""
+    if not _recipe_known(recipe):
+        badge = "lock"
+    elif not _recipe_station_ok(recipe):
+        badge = "bench"
+    if badge != "":
+        var plate = ColorRect.new()
+        plate.color = Color(0.02,0.02,0.02,0.85)
+        plate.position = Vector2(20,1)
+        plate.size = Vector2(12,12)
+        plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        button.add_child(plate)
+        _ui_icon_rect(button,badge,Vector2(20,1),Vector2(12,12))
+    var qty = int(recipe.get("output_qty",1))
+    if qty > 1:
+        var q = Label.new()
+        q.add_theme_font_size_override("font_size",6)
+        q.text = "×%d" % qty
+        q.position = Vector2(14,22)
+        q.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        q.add_theme_color_override("font_color",Color(0.96,0.89,0.66))
+        q.add_theme_color_override("font_outline_color",Color(0.02,0.02,0.02,1.0))
+        q.add_theme_constant_override("outline_size",2)
+        q.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        button.add_child(q)
+        q.size = Vector2(17,10)
+    return button
+
+func _recipe_tiles() -> Array:
+    var out = []
+    if craft_list == null:
+        return out
+    for grid in craft_list.get_children():
+        if grid is GridContainer:
+            for b in grid.get_children():
+                if b is Button:
+                    out.append(b)
+    return out
 
 func _recipe_sort_key(recipe_id:String) -> String:
     var recipe = recipe_defs[recipe_id]
@@ -11190,68 +11347,131 @@ func _select_recipe(recipe_id):
 func _refresh_recipe_button_states():
     if craft_list == null:
         return
-    for child in craft_list.get_children():
-        if not (child is Button):
-            continue
+    for child in _recipe_tiles():
         var rid = str(child.get_meta("recipe_id",""))
         var is_selected = rid == selected_recipe_id and selected_recipe_id != ""
-        # ready ones bright, the rest dimmed
+        # ready ones bright on a green edge, the rest dimmed
         var ready = recipe_defs.has(rid) and _can_craft(rid)
-        child.modulate = Color(1.0,0.92,0.66) if is_selected else (Color.WHITE if ready else Color(0.62,0.62,0.60))
+        var state = "%s:%s" % [is_selected,ready]
+        if str(child.get_meta("tile_state","")) == state:
+            continue
+        child.set_meta("tile_state",state)
+        var edge = Color(0.86,0.70,0.34) if is_selected else (Color(0.30,0.52,0.30) if ready else Color(0.16,0.19,0.18))
+        var fill = Color(0.10,0.09,0.06) if is_selected else Color(0.035,0.042,0.042)
+        var st = _icon_tile_style(fill,edge)
+        if is_selected:
+            st.set_border_width_all(2)
+        child.add_theme_stylebox_override("normal",st)
+        var hv = _icon_tile_style(Color(0.07,0.08,0.075),Color(0.60,0.58,0.44))
+        child.add_theme_stylebox_override("hover",hv)
+        child.add_theme_stylebox_override("pressed",st)
+        child.add_theme_stylebox_override("focus",st)
+        for icon in child.get_children():
+            if icon.name == "ItemIcon":
+                icon.modulate = Color.WHITE if ready or is_selected else Color(0.58,0.58,0.56,0.80)
 
 func _refresh_crafting_details():
     if craft_details == null:
         return
+    _clear_craft_detail_art()
 
     if selected_recipe_id == "" or not recipe_defs.has(selected_recipe_id):
-        craft_details.text = "Выбери рецепт." if crafting_station == "bench" else "Руками: бинты, шины, простое снаряжение. Остальное — на верстаке (его можно построить дома: %s)." % InputBindings.key("base_build")
+        craft_details.text = "Выбери рецепт." if crafting_station == "bench" else "Руками — простое. Остальное — на верстаке (%s → верстак)." % InputBindings.key("base_build")
+        craft_details.position = Vector2(215,10)
         if craft_status != null:
             craft_status.text = ""
         return
 
     var recipe = recipe_defs[selected_recipe_id]
-    var lines = [str(recipe.get("name",selected_recipe_id))]
-    var where = "Руками, в любом месте" if str(recipe.get("station","bench")) == "hand" else "На верстаке"
+    var art = craft_detail_art
+    var out_id = str(recipe.get("output",""))
+    var out_qty = int(recipe.get("output_qty",1))
+    # the result: a big picture and its name
+    var frame = Panel.new()
+    frame.position = Vector2(0,0)
+    frame.size = Vector2(46,46)
+    frame.add_theme_stylebox_override("panel",_icon_tile_style(Color(0.03,0.036,0.036),Color(0.30,0.32,0.28)))
+    frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    art.add_child(frame)
+    _item_icon_rect(frame,out_id,Vector2(3,3),Vector2(40,40),2.0)
+    craft_details.position = Vector2(266,8)
+    craft_details.size = Vector2(192,24)
+    craft_details.text = str(recipe.get("name",selected_recipe_id)) + ("  ×%d" % out_qty if out_qty > 1 else "")
+    # where and with what: hand / bench, a tool, a schematic - each ticked or crossed
+    var x = 51.0
+    var chips = []
+    var hand = str(recipe.get("station","bench")) == "hand"
+    chips.append({"icon":"hand" if hand else "bench","ok":_recipe_station_ok(recipe),"tip":"Руками, в любом месте" if hand else "Только на верстаке"})
     for tool_id in recipe.get("tools",[]):
-        where += " • %s: %s" % [str(item_defs.get(str(tool_id),{}).get("name",tool_id)).to_lower(),"есть" if _inventory_count(str(tool_id)) > 0 else "нет"]
-    lines.append(where)
+        chips.append({"item":str(tool_id),"ok":_inventory_count(str(tool_id)) > 0,"tip":"Нужен инструмент: " + str(item_defs.get(str(tool_id),{}).get("name",tool_id))})
     var sch = str(recipe.get("schematic",""))
     if sch != "":
-        lines.append("Схема: %s%s" % [str(SCHEMATIC_NAMES.get(sch,sch)),"" if known_schematics.has(sch) else " — не изучена"])
-
+        chips.append({"item":str(SCHEMATIC_ITEMS.get(sch,"")),"ok":known_schematics.has(sch),"tip":"Схема: " + str(SCHEMATIC_NAMES.get(sch,sch))})
+    for chip in chips:
+        var holder = Control.new()
+        holder.position = Vector2(x,28)
+        holder.size = Vector2(30,18)
+        holder.tooltip_text = str(chip["tip"])
+        holder.mouse_filter = Control.MOUSE_FILTER_PASS
+        art.add_child(holder)
+        if chip.has("icon"):
+            _ui_icon_rect(holder,str(chip["icon"]),Vector2(0,0),Vector2(18,18))
+        else:
+            _item_icon_rect(holder,str(chip["item"]),Vector2(0,0),Vector2(18,18),1.0)
+        _ui_icon_rect(holder,"check" if bool(chip["ok"]) else "cross",Vector2(18,6),Vector2(12,12))
+        x += 34.0
+    # what goes in: a picture of each with have / need
     var ingredients = recipe.get("ingredients",{})
+    var i = 0
     for id in ingredients.keys():
         var need = int(ingredients[id])
         var have = _inventory_count(str(id))
-        var item_name = str(id)
-        if item_defs.has(str(id)):
-            item_name = str(item_defs[str(id)].get("name",id))
-        lines.append("%s: %d/%d" % [item_name,have,need])
-
-    var out_id = str(recipe.get("output",""))
-    var out_qty = int(recipe.get("output_qty",1))
-    var out_name = out_id
-    if item_defs.has(out_id):
-        out_name = str(item_defs[out_id].get("name",out_id))
-
-    lines.append("Результат: %s x%d" % [out_name,out_qty])
-    craft_details.text = "\n".join(lines)
+        var cell = Panel.new()
+        cell.position = Vector2((i % 5) * 48,54 + int(i / 5) * 50)
+        cell.size = Vector2(44,46)
+        var enough = have >= need
+        cell.add_theme_stylebox_override("panel",_icon_tile_style(Color(0.03,0.036,0.036),Color(0.28,0.46,0.28) if enough else Color(0.52,0.22,0.18)))
+        cell.tooltip_text = str(item_defs.get(str(id),{}).get("name",id))
+        cell.mouse_filter = Control.MOUSE_FILTER_PASS
+        art.add_child(cell)
+        _item_icon_rect(cell,str(id),Vector2(4,3),Vector2(36,28),1.5)
+        var n = Label.new()
+        n.add_theme_font_size_override("font_size",7)
+        n.text = "%d/%d" % [have,need]
+        n.position = Vector2(1,31)
+        n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        n.add_theme_color_override("font_color",Color(0.66,0.90,0.62) if enough else Color(0.95,0.52,0.44))
+        n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        cell.add_child(n)
+        n.size = Vector2(42,13)
+        i += 1
 
     if craft_status != null:
         craft_status.text = _recipe_status_text(selected_recipe_id)
 
+func _clear_craft_detail_art():
+    if craft_detail_art == null:
+        return
+    for c in craft_detail_art.get_children():
+        craft_detail_art.remove_child(c)
+        c.queue_free()
+
 func _recipe_status_text(recipe_id:String) -> String:
     var recipe = recipe_defs[recipe_id]
     if not _recipe_known(recipe):
-        return "Нужна схема «%s». Схемы находят в мире и покупают у торговцев." % str(SCHEMATIC_NAMES.get(str(recipe.get("schematic","")),""))
+        return "Нужна схема «%s» — найди или купи." % str(SCHEMATIC_NAMES.get(str(recipe.get("schematic","")),""))
     if not _recipe_station_ok(recipe):
-        return "Это делают на верстаке."
+        return "Только на верстаке."
     var tools = _recipe_missing_tools(recipe)
     if not tools.is_empty():
-        return "Нужен инструмент: %s." % str(item_defs.get(tools[0],{}).get("name",tools[0]))
+        return "Нет инструмента: %s." % str(item_defs.get(tools[0],{}).get("name",tools[0]))
     if _can_craft(recipe_id):
-        return "Готово к работе."
-    return "Не хватает материалов или места в рюкзаке."
+        return "Готово."
+    for id in recipe.get("ingredients",{}).keys():
+        if _inventory_count(str(id)) < int(recipe["ingredients"][id]):
+            return "Не хватает материалов."
+    return "Нет места в рюкзаке."
 
 func _open_hand_crafting():
     # 1.40: the simple things anywhere, from the backpack
@@ -11496,18 +11716,18 @@ func _hud_add_screen_frame(parent):
 
 func _hud_make_label(parent,pos,size,text,font_size,color,align = HORIZONTAL_ALIGNMENT_LEFT):
     var label = Label.new()
+    label.add_theme_font_size_override("font_size",font_size)
     label.position = pos
-    label.size = size
     label.text = text
     label.horizontal_alignment = align
     label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     label.clip_text = true
-    label.add_theme_font_size_override("font_size",font_size)
     label.add_theme_color_override("font_color",color)
     label.add_theme_color_override("font_outline_color",Color(0.0,0.0,0.0,0.88))
     label.add_theme_constant_override("outline_size",1 if font_size >= 5 else 0)
     label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     parent.add_child(label)
+    label.size = size
     return label
 
 func _hud_make_row_label(parent,x,center_y,width,height,text,font_size,color,align = HORIZONTAL_ALIGNMENT_LEFT):
@@ -12579,12 +12799,12 @@ func _create_world_chronicle_ui():
     world_chronicle_title = _hud_make_label(world_chronicle_panel,Vector2(16,12),Vector2(430,20),"ЭФИР / ПОЛЕВАЯ ХРОНИКА",11,Color(0.92,0.88,0.72))
     world_chronicle_status = _hud_make_label(world_chronicle_panel,Vector2(16,38),Vector2(568,16),"",7,Color(0.68,0.70,0.62))
     world_chronicle_text = RichTextLabel.new()
+    world_chronicle_text.add_theme_font_size_override("normal_font_size",8)
     world_chronicle_text.position = Vector2(16,60)
     world_chronicle_text.size = Vector2(568,218)
     world_chronicle_text.bbcode_enabled = false
     world_chronicle_text.scroll_active = true
     world_chronicle_text.fit_content = false
-    world_chronicle_text.add_theme_font_size_override("normal_font_size",8)
     world_chronicle_text.add_theme_color_override("default_color",Color(0.78,0.80,0.72))
     world_chronicle_panel.add_child(world_chronicle_text)
     _make_button(world_chronicle_panel,Vector2(16,288),Vector2(104,24),"КАРТА",_return_to_region_map)
@@ -13263,13 +13483,13 @@ func _create_home_journal_ui():
     home_supply_button = _make_button(home_journal_panel,Vector2(352,288),Vector2(104,24),"СНАБЖЕНИЕ",_toggle_home_supply_view)
     _make_button(home_journal_panel,Vector2(464,288),Vector2(120,24),"ЗАКРЫТЬ",_close_region_map)
     home_supply_preset = OptionButton.new()
-    home_supply_preset.position = Vector2(16,240)
-    home_supply_preset.size = Vector2(274,24)
     home_supply_preset.add_theme_font_size_override("font_size",8)
+    home_supply_preset.position = Vector2(16,240)
     for name in SupplyPlan.PRESETS:
         home_supply_preset.add_item(name)
     home_supply_preset.item_selected.connect(_set_supply_preset)
     home_journal_panel.add_child(home_supply_preset)
+    home_supply_preset.size = Vector2(274,24)
     home_unload_button = _make_button(home_journal_panel,Vector2(310,240),Vector2(132,24),"РАЗГРУЗИТЬ",_home_unload_resources)
     home_pack_button = _make_button(home_journal_panel,Vector2(452,240),Vector2(132,24),"ДОПОЛНИТЬ",_pack_home_supplies)
     home_supply_status = _hud_make_label(home_journal_panel,Vector2(16,267),Vector2(568,16),"",7,Color(0.76,0.72,0.54))
@@ -13295,11 +13515,11 @@ func _create_home_journal_ui():
 
 func _home_scroll_text(pos):
     var text = RichTextLabel.new()
+    text.add_theme_font_size_override("normal_font_size",8)
     text.position = pos
     text.size = Vector2(274,158)
     text.bbcode_enabled = false
     text.scroll_active = true
-    text.add_theme_font_size_override("normal_font_size",8)
     text.add_theme_color_override("default_color",Color(0.76,0.79,0.73))
     home_journal_panel.add_child(text)
     return text
@@ -14078,15 +14298,15 @@ func _on_bindings_changed() -> void:
     var text_label = hud_interaction_key_badge.get_node_or_null("InteractionKeyText")
     if text_label == null:
         text_label = Label.new()
+        text_label.add_theme_font_size_override("font_size",5)
         text_label.name = "InteractionKeyText"
         text_label.position = Vector2.ZERO
-        text_label.size = hud_interaction_key_badge.size
         text_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         text_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-        text_label.add_theme_font_size_override("font_size",5)
         text_label.add_theme_color_override("font_color",Color(0.96,0.94,0.86))
         text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         hud_interaction_key_badge.add_child(text_label)
+        text_label.size = hud_interaction_key_badge.size
     if home_defense_hint != null and is_instance_valid(home_defense_hint):
         home_defense_hint.text = _home_defense_hint_text()
     for i in range(hud_quick_slots.size()):
@@ -14100,14 +14320,14 @@ func _on_bindings_changed() -> void:
         var key_text = b.get_node_or_null("QuickKeyText")
         if key_text == null:
             key_text = Label.new()
+            key_text.add_theme_font_size_override("font_size",5)
             key_text.name = "QuickKeyText"
             key_text.position = Vector2(3,0)
-            key_text.size = Vector2(20,9)
             key_text.z_index = 4
-            key_text.add_theme_font_size_override("font_size",5)
             key_text.add_theme_color_override("font_color",Color(0.78,0.76,0.68))
             key_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
             b.add_child(key_text)
+            key_text.size = Vector2(20,9)
         key_text.text = slot_key
         key_text.visible = slot_key != str(i + 1)
         if digit != null and is_instance_valid(digit):
@@ -14305,7 +14525,6 @@ func _create_hud():
         var item_id = quick_ids[i]
         var slot_button = Button.new()
         slot_button.position = Vector2(i * 41,0)
-        slot_button.size = Vector2(40,40)
         slot_button.flat = false
         slot_button.text = ""
         slot_button.tooltip_text = _quick_slot_tooltip(i,item_id)
@@ -14317,6 +14536,7 @@ func _create_hud():
         slot_button.add_theme_stylebox_override("focus",hud_quick_style_active)
         slot_button.pressed.connect(_select_quick_slot.bind(i + 1))
         quick_root.add_child(slot_button)
+        slot_button.size = Vector2(40,40)
         if i > 0:
             _hud_add_accent_strip(quick_root,Vector2(i * 41 - 1,4),Vector2(1,32),Color(0.15,0.18,0.18,0.88))
 
@@ -14343,18 +14563,18 @@ func _create_hud():
         active_rail.z_index = 3
         slot_button.add_child(active_rail)
         var count_label = Label.new()
+        count_label.add_theme_font_size_override("font_size",5)
         count_label.name = "QuickCount"
         count_label.position = Vector2(18,24)
-        count_label.size = Vector2(18,9)
         count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-        count_label.add_theme_font_size_override("font_size",5)
         count_label.add_theme_color_override("font_color",Color(0.96,0.89,0.66))
         count_label.add_theme_color_override("font_outline_color",Color(0.02,0.02,0.02,1.0))
         count_label.add_theme_constant_override("outline_size",2)
         count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         count_label.z_index = 4
         slot_button.add_child(count_label)
+        count_label.size = Vector2(18,9)
         hud_quick_slots.append({"id":item_id,"button":slot_button,"icon":icon,"back":icon_back,"rail":active_rail,"label":slot_index_label,"count":count_label})
 
     # BOTTOM RIGHT — weapon card follows the reference: name, ammo, art/mode and durability.
@@ -14438,15 +14658,15 @@ func _create_hud():
     hud_feedback_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
     debug_label = Label.new()
-    debug_label.position = Vector2(160,18)
-    debug_label.size = Vector2(320,66)
     debug_label.add_theme_font_size_override("font_size",6)
+    debug_label.position = Vector2(160,18)
     debug_label.add_theme_color_override("font_color",Color(1.0,0.40,0.36))
     debug_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     debug_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
     debug_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     debug_label.visible = false
     canvas.add_child(debug_label)
+    debug_label.size = Vector2(320,66)
 
 
 const FEEDBACK_MAX_W = 280.0
@@ -14455,6 +14675,7 @@ const FEEDBACK_CENTER_X = 334.0
 const PROMPT_RECT = Rect2(250,287,140,13)
 
 func _update_hud():
+    _sync_hud_quick_bar_visibility()
     if hud == null or hud_world_root == null:
         return
 
@@ -14756,12 +14977,12 @@ func _create_hover_inspector():
     hover_panel.add_child(hover_icon)
 
     hover_title = Label.new()
-    hover_title.position = Vector2(60,9)
-    hover_title.size = Vector2(178,24)
     hover_title.add_theme_font_size_override("font_size",10)
+    hover_title.position = Vector2(60,9)
     hover_title.modulate = Color(0.96,0.92,0.78)
     hover_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
     hover_panel.add_child(hover_title)
+    hover_title.size = Vector2(178,24)
 
     var line = ColorRect.new()
     line.position = Vector2(60,34)
@@ -14771,20 +14992,20 @@ func _create_hover_inspector():
     hover_panel.add_child(line)
 
     hover_body = Label.new()
-    hover_body.position = Vector2(60,41)
-    hover_body.size = Vector2(176,116)
     hover_body.add_theme_font_size_override("font_size",8)
+    hover_body.position = Vector2(60,41)
     hover_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     hover_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
     hover_panel.add_child(hover_body)
+    hover_body.size = Vector2(176,116)
 
     hover_footer = Label.new()
-    hover_footer.position = Vector2(10,159)
-    hover_footer.size = Vector2(228,16)
     hover_footer.add_theme_font_size_override("font_size",7)
+    hover_footer.position = Vector2(10,159)
     hover_footer.modulate = Color(0.60,0.64,0.59)
     hover_footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
     hover_panel.add_child(hover_footer)
+    hover_footer.size = Vector2(228,16)
 
 func _hover_wrapped_line_count(text,width):
     if hover_body == null:
@@ -15018,26 +15239,26 @@ func _create_weapon_mod_ui():
     mod_panel.add_child(mod_weapon_icon)
 
     mod_title = Label.new()
-    mod_title.position = Vector2(72,14)
-    mod_title.size = Vector2(220,22)
     mod_title.add_theme_font_size_override("font_size",12)
+    mod_title.position = Vector2(72,14)
     mod_title.modulate = Color(0.96,0.91,0.76)
     mod_panel.add_child(mod_title)
+    mod_title.size = Vector2(220,22)
 
     mod_condition_label = Label.new()
-    mod_condition_label.position = Vector2(72,39)
-    mod_condition_label.size = Vector2(220,20)
     mod_condition_label.add_theme_font_size_override("font_size",8)
+    mod_condition_label.position = Vector2(72,39)
     mod_condition_label.modulate = Color(0.68,0.72,0.67)
     mod_panel.add_child(mod_condition_label)
+    mod_condition_label.size = Vector2(220,20)
 
     var close_button = Button.new()
-    close_button.position = Vector2(334,12)
-    close_button.size = Vector2(28,26)
-    close_button.text = "×"
     close_button.add_theme_font_size_override("font_size",12)
+    close_button.position = Vector2(334,12)
+    close_button.text = "×"
     close_button.pressed.connect(_close_weapon_mod_panel)
     mod_panel.add_child(close_button)
+    close_button.size = Vector2(28,26)
 
     var installed_title = Label.new()
     installed_title.position = Vector2(14,72)
@@ -15066,11 +15287,11 @@ func _create_weapon_mod_ui():
     mod_panel.add_child(mod_available_box)
 
     mod_status = Label.new()
-    mod_status.position = Vector2(14,244)
-    mod_status.size = Vector2(348,16)
     mod_status.add_theme_font_size_override("font_size",7)
+    mod_status.position = Vector2(14,244)
     mod_status.modulate = Color(0.70,0.74,0.66)
     mod_panel.add_child(mod_status)
+    mod_status.size = Vector2(348,16)
 
 func _make_mod_slot_row(slot):
     var row = Panel.new()
@@ -15090,12 +15311,12 @@ func _make_mod_slot_row(slot):
     row.add_theme_stylebox_override("panel",style)
 
     var slot_label = Label.new()
-    slot_label.position = Vector2(8,5)
-    slot_label.size = Vector2(55,14)
     slot_label.add_theme_font_size_override("font_size",7)
+    slot_label.position = Vector2(8,5)
     slot_label.text = "МАГАЗИН" if slot == "magazine" else "СТВОЛ"
     slot_label.modulate = Color(0.56,0.60,0.56)
     row.add_child(slot_label)
+    slot_label.size = Vector2(55,14)
 
     var installed_id = str(_weapon_mod_state(mod_weapon_id,mod_weapon_instance_id).get(slot,""))
 
@@ -15109,35 +15330,35 @@ func _make_mod_slot_row(slot):
         row.add_child(icon)
 
         var name_label = Label.new()
-        name_label.position = Vector2(104,4)
-        name_label.size = Vector2(150,15)
-        name_label.text = str(item_defs[installed_id].get("name",installed_id))
         name_label.add_theme_font_size_override("font_size",8)
+        name_label.position = Vector2(104,4)
+        name_label.text = str(item_defs[installed_id].get("name",installed_id))
         row.add_child(name_label)
+        name_label.size = Vector2(150,15)
 
         var effect = Label.new()
-        effect.position = Vector2(104,19)
-        effect.size = Vector2(150,14)
-        effect.text = _weapon_mod_effect_text(installed_id)
         effect.add_theme_font_size_override("font_size",7)
+        effect.position = Vector2(104,19)
+        effect.text = _weapon_mod_effect_text(installed_id)
         effect.modulate = Color(0.61,0.69,0.62)
         row.add_child(effect)
+        effect.size = Vector2(150,14)
 
         var remove_button = Button.new()
-        remove_button.position = Vector2(272,6)
-        remove_button.size = Vector2(68,27)
-        remove_button.text = "СНЯТЬ"
         remove_button.add_theme_font_size_override("font_size",7)
+        remove_button.position = Vector2(272,6)
+        remove_button.text = "СНЯТЬ"
         remove_button.pressed.connect(_remove_weapon_mod.bind(slot))
         row.add_child(remove_button)
+        remove_button.size = Vector2(68,27)
     else:
         var empty_label = Label.new()
-        empty_label.position = Vector2(68,11)
-        empty_label.size = Vector2(185,17)
-        empty_label.text = "[ слот свободен ]"
         empty_label.add_theme_font_size_override("font_size",8)
+        empty_label.position = Vector2(68,11)
+        empty_label.text = "[ слот свободен ]"
         empty_label.modulate = Color(0.46,0.49,0.46)
         row.add_child(empty_label)
+        empty_label.size = Vector2(185,17)
 
     return row
 
@@ -15781,32 +16002,32 @@ func _refresh_inventory_quick_row():
                 var stock = _quick_slot_stock(id)
                 if stock > 1:
                     var q = Label.new()
+                    q.add_theme_font_size_override("font_size",6)
                     q.text = str(stock)
                     q.position = Vector2(b.size.x - 15,b.size.y - 12)
-                    q.size = Vector2(13,10)
                     q.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-                    q.add_theme_font_size_override("font_size",6)
                     q.add_theme_color_override("font_color",Color(0.96,0.89,0.66))
                     q.add_theme_color_override("font_outline_color",Color(0.02,0.02,0.02,1.0))
                     q.add_theme_constant_override("outline_size",2)
                     q.mouse_filter = Control.MOUSE_FILTER_IGNORE
                     b.add_child(q)
+                    q.size = Vector2(13,10)
         var digit = Label.new()
+        digit.add_theme_font_size_override("font_size",6)
         digit.text = InputBindings.short_key("quick_slot_%d" % (i + 1))
         digit.position = Vector2(2,0)
-        digit.size = Vector2(12,9)
-        digit.add_theme_font_size_override("font_size",6)
         digit.add_theme_color_override("font_color",Color(0.84,0.80,0.66) if owned or id == "" else Color(0.58,0.60,0.57))
         digit.add_theme_color_override("font_outline_color",Color(0.02,0.02,0.02,1.0))
         digit.add_theme_constant_override("outline_size",2)
         digit.mouse_filter = Control.MOUSE_FILTER_IGNORE
         b.add_child(digit)
+        digit.size = Vector2(12,9)
 
 func _sync_hud_quick_bar_visibility():
     # the bag's own quick row stands in for the HUD bar, which this window covers
     if hud_world_root == null or not is_instance_valid(hud_world_root):
         return
-    var bag = inventory_open and inventory_panel != null and inventory_panel.visible
+    var bag = inventory_open and ((inventory_panel != null and inventory_panel.visible) or crafting_open or base_build_open)
     for panel_name in ["QuickShell","RigQuickPockets"]:
         var panel = hud_world_root.get_node_or_null(panel_name)
         if panel != null:
@@ -15904,37 +16125,37 @@ func _create_inventory_ui():
     # dev87: the quick bar inside the bag (the HUD bar sits under this window):
     # drag a thing onto a slot, right click to empty it
     var quick_title = Label.new()
-    quick_title.position = Vector2(250,52)
-    quick_title.size = Vector2(106,12)
-    quick_title.text = "БЫСТРЫЕ СЛОТЫ"
     quick_title.add_theme_font_size_override("font_size",7)
+    quick_title.position = Vector2(250,52)
+    quick_title.text = "БЫСТРЫЕ СЛОТЫ"
     quick_title.modulate = Color(0.78,0.74,0.60)
     inventory_panel.add_child(quick_title)
+    quick_title.size = Vector2(106,12)
     inv_quick_buttons.clear()
     for qi in range(6):
         var qb = Button.new()
         qb.name = "InvQuick%d" % (qi + 1)
         qb.position = Vector2(250 + (qi % 3) * 36,67 + int(qi / 3) * 36)
-        qb.size = Vector2(33,33)
         qb.focus_mode = Control.FOCUS_NONE
         qb.clip_contents = true
         qb.gui_input.connect(_inventory_quick_gui_input.bind(qi + 1))
         inventory_panel.add_child(qb)
+        qb.size = Vector2(33,33)
         inv_quick_buttons.append(qb)
     var quick_hint = Label.new()
+    quick_hint.add_theme_font_size_override("font_size",6)
     quick_hint.position = Vector2(250,141)
-    quick_hint.size = Vector2(106,52)
     quick_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     quick_hint.text = "Перетащи сюда любой предмет. Клавиши 1–6. ПКМ — убрать."
-    quick_hint.add_theme_font_size_override("font_size",6)
     quick_hint.modulate = Color(0.56,0.59,0.56)
     inventory_panel.add_child(quick_hint)
+    quick_hint.size = Vector2(106,52)
 
     inv_details = Label.new()
-    inv_details.position = Vector2(16,200)
-    inv_details.size = Vector2(338,87)
     inv_details.add_theme_font_size_override("font_size",8)
+    inv_details.position = Vector2(16,200)
     inventory_panel.add_child(inv_details)
+    inv_details.size = Vector2(338,87)
 
     var weight_label = Label.new()
     weight_label.position = Vector2(246,10)
@@ -15977,10 +16198,10 @@ func _create_inventory_ui():
     equipment_buttons["utility"] = _make_button(equipment_panel,Vector2(14,233),Vector2(210,34),"",_unequip_slot.bind("utility"))
 
     equipment_info = Label.new()
-    equipment_info.position = Vector2(14,270)
-    equipment_info.size = Vector2(210,50)
     equipment_info.add_theme_font_size_override("font_size",8)
+    equipment_info.position = Vector2(14,270)
     equipment_panel.add_child(equipment_info)
+    equipment_info.size = Vector2(210,50)
 
     # Container replaces equipment side panel during looting.
     container_panel = Panel.new()
@@ -15992,10 +16213,10 @@ func _create_inventory_ui():
     _hud_add_panel_detail(container_panel,container_panel.size,Color(0.43,0.49,0.45))
 
     cont_title = Label.new()
-    cont_title.position = Vector2(12,10)
-    cont_title.size = Vector2(214,20)
     cont_title.add_theme_font_size_override("font_size",11)
+    cont_title.position = Vector2(12,10)
     container_panel.add_child(cont_title)
+    cont_title.size = Vector2(214,20)
 
     var cont_hint = Label.new()
     cont_hint.position = Vector2(12,32)
@@ -16010,10 +16231,10 @@ func _create_inventory_ui():
     container_panel.add_child(cont_grid_control)
 
     cont_details = Label.new()
-    cont_details.position = Vector2(12,274)
-    cont_details.size = Vector2(214,44)
     cont_details.add_theme_font_size_override("font_size",7)
+    cont_details.position = Vector2(12,274)
     container_panel.add_child(cont_details)
+    cont_details.size = Vector2(214,44)
 
     cont_take_button = _make_button(container_panel,Vector2(12,309),Vector2(96,28),"ЗАБРАТЬ",_take_selected_container)
     cont_take_all_button = _make_button(container_panel,Vector2(114,309),Vector2(112,28),"ЗАБРАТЬ ВСЕ",_take_all_container)
@@ -16126,7 +16347,8 @@ func _visual_panel_style():
     var style = StyleBoxFlat.new()
     # Slight transparency keeps the world legible behind the interface while the
     # heavy frame still reads as an old field terminal / equipment board.
-    style.bg_color = Color(0.012,0.016,0.017,0.945)
+    # 1.42: opaque enough that the HUD under a window no longer reads through it
+    style.bg_color = Color(0.012,0.016,0.017,0.985)
     style.border_color = Color(0.34,0.36,0.34,1.0)
     style.border_width_left = 2
     style.border_width_top = 2
@@ -18284,13 +18506,13 @@ func _add_ground_decals(chunk,coord):
 
 func _make_button(parent, pos, size, text, callback):
     var button = Button.new()
-    button.position = pos
-    button.size = size
-    button.text = text
     button.add_theme_font_size_override("font_size",8)
+    button.position = pos
+    button.text = text
     _visual_button_style(button)
     button.pressed.connect(callback)
     parent.add_child(button)
+    button.size = size
     return button
 
 func _toggle_inventory():
@@ -18493,26 +18715,27 @@ func _decorate_item_button(button,id,qty,instance_id = ""):
 
     if qty > 1:
         var shadow = Label.new()
+        shadow.add_theme_font_size_override("font_size",6)
         shadow.text = str(qty)
-        shadow.position = Vector2(button.size.x - 12.0,button.size.y - 15.0)
-        shadow.size = Vector2(10,9)
+        # right-aligned to the cell's inner edge, wide enough for "120"
+        shadow.position = Vector2(button.size.x - 18.0,button.size.y - 13.0)
         shadow.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         shadow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-        shadow.add_theme_font_size_override("font_size",6)
         shadow.modulate = Color(0.02,0.02,0.02,0.95)
         shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
         button.add_child(shadow)
+        shadow.size = Vector2(16,10)
 
         var qty_label = Label.new()
+        qty_label.add_theme_font_size_override("font_size",6)
         qty_label.text = str(qty)
-        qty_label.position = Vector2(button.size.x - 13.0,button.size.y - 16.0)
-        qty_label.size = Vector2(10,9)
+        qty_label.position = Vector2(button.size.x - 19.0,button.size.y - 14.0)
         qty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         qty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-        qty_label.add_theme_font_size_override("font_size",6)
         qty_label.modulate = Color(0.96,0.89,0.66)
         qty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         button.add_child(qty_label)
+        qty_label.size = Vector2(16,10)
 
 func _decorate_equipment_button(button,slot,id):
     for connection in button.mouse_entered.get_connections():
@@ -18535,20 +18758,19 @@ func _decorate_equipment_button(button,slot,id):
     button.add_child(icon_frame)
 
     var slot_label = Label.new()
+    slot_label.add_theme_font_size_override("font_size",7)
     # dev84: the panel is drawn at 0.68 - the space in "ВЕРХНЯЯ ОДЕЖДА" shrank
     # to a pixel and the two words ran together on the slot
     slot_label.text = "ОДЕЖДА" if slot == "outerwear" else _slot_name(slot)
     slot_label.position = Vector2(44,3)
-    slot_label.size = Vector2(button.size.x - 50,12)
-    slot_label.add_theme_font_size_override("font_size",7)
     slot_label.modulate = Color(0.62,0.66,0.63)
     slot_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     button.add_child(slot_label)
+    slot_label.size = Vector2(button.size.x - 50,12)
 
     var item_label = Label.new()
-    item_label.position = Vector2(44,16)
-    item_label.size = Vector2(button.size.x - 50,18)
     item_label.add_theme_font_size_override("font_size",8)
+    item_label.position = Vector2(44,16)
     item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
     if id != "" and item_defs.has(id):
@@ -18567,6 +18789,7 @@ func _decorate_equipment_button(button,slot,id):
         item_label.modulate = Color(0.46,0.49,0.47)
 
     button.add_child(item_label)
+    item_label.size = Vector2(button.size.x - 50,18)
 
 func _can_place_grid(entries,x,y,iw,ih,excluded_indices,gw,gh):
     if x < 0 or y < 0 or x + iw > gw or y + ih > gh:
@@ -18887,13 +19110,13 @@ func _rebuild_grid(control, entries, gw, gh, is_inventory):
             if is_inventory:
                 var cell_button = Button.new()
                 cell_button.position = Vector2(x * CELL,y * CELL)
-                cell_button.size = Vector2(CELL - 2,CELL - 2)
                 cell_button.focus_mode = Control.FOCUS_NONE
                 cell_button.text = ""
                 _style_item_button(cell_button,false)
                 cell_button.modulate = Color(0.76,0.79,0.76)
                 cell_button.pressed.connect(_inventory_cell_clicked.bind(x,y))
                 control.add_child(cell_button)
+                cell_button.size = Vector2(CELL - 2,CELL - 2)
             else:
                 var cell = _make_cell_panel(
                     Vector2(x * CELL,y * CELL),
@@ -18965,9 +19188,8 @@ func _rebuild_equipment_grid(control):
     for s in slots:
         var slot_name = str(s["slot"])
         var button = Button.new()
-        button.position = Vector2(int(s["x"]) * CELL + 1, int(s["y"]) * CELL + 1)
-        button.size = Vector2(int(s["w"]) * CELL - 3, int(s["h"]) * CELL - 3)
         button.add_theme_font_size_override("font_size", 7)
+        button.position = Vector2(int(s["x"]) * CELL + 1, int(s["y"]) * CELL + 1)
         button.text = str(s["label"])
 
         var equipped_id = str(equipment.get(slot_name,""))
@@ -18982,6 +19204,7 @@ func _rebuild_equipment_grid(control):
 
         button.pressed.connect(_unequip_slot.bind(slot_name))
         control.add_child(button)
+        button.size = Vector2(int(s["w"]) * CELL - 3, int(s["h"]) * CELL - 3)
 
 func _unequip_slot(slot):
     _ensure_equipment_slots()
@@ -24147,31 +24370,31 @@ func _create_faction_npc(chunk,record:Dictionary):
         _rect(Vector2(0,-20),Vector2(15,3),faction_color.lightened(0.12),node)
 
     var name_label = Label.new()
+    name_label.add_theme_font_size_override("font_size",6)
     name_label.position = Vector2(-48,-39)
-    name_label.size = Vector2(96,13)
     name_label.text = str(record.get("name",npc_id)).to_upper()
     name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    name_label.add_theme_font_size_override("font_size",6)
     name_label.modulate = Color(0.86,0.85,0.76,0.92)
     name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     node.add_child(name_label)
+    name_label.size = Vector2(96,13)
 
     var state_label = Label.new()
+    state_label.add_theme_font_size_override("font_size",5)
     state_label.name = "NpcStatusLabel"
     state_label.position = Vector2(-34,-48)
-    state_label.size = Vector2(68,10)
     state_label.text = "РАНЕН" if npc_status == "wounded" else ""
     state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    state_label.add_theme_font_size_override("font_size",5)
     state_label.modulate = Color("d38b78")
     state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     state_label.visible = is_named_npc and npc_status == "wounded"
     node.add_child(state_label)
+    state_label.size = Vector2(68,10)
 
     if trader_id != "" or not contract_board.is_empty():
         var role_label = Label.new()
+        role_label.add_theme_font_size_override("font_size",5)
         role_label.position = Vector2(-30,-30)
-        role_label.size = Vector2(60,11)
         if trader_id != "":
             role_label.text = "ТОРГОВЕЦ"
         elif bool(contract_board.get("personal",false)):
@@ -24179,10 +24402,10 @@ func _create_faction_npc(chunk,record:Dictionary):
         else:
             role_label.text = "КОНТРАКТЫ"
         role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        role_label.add_theme_font_size_override("font_size",5)
         role_label.modulate = Color("c6aa62")
         role_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         node.add_child(role_label)
+        role_label.size = Vector2(60,11)
     return node
 
 # dev78: the settlement people are drawn on the survivor's rig in their own
@@ -28972,16 +29195,16 @@ func _build_settlement_model_facade(facade,model:Dictionary,size:Vector2,door_x:
     var sign_rect = model.get("sign",Rect2())
     if typeof(sign_rect) == TYPE_RECT2 and sign_rect.size != Vector2.ZERO and sign_text != "":
         var label = Label.new()
+        label.add_theme_font_size_override("font_size",5 if sign_text.length() > 10 else 6)
         label.text = sign_text
         label.position = Vector2(sign_rect.position.x - sign_rect.size.x * 0.5,-(sign_rect.position.y + sign_rect.size.y) - 2.0)
-        label.size = Vector2(sign_rect.size.x,sign_rect.size.y + 4.0)
         label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
         label.clip_text = true
-        label.add_theme_font_size_override("font_size",5 if sign_text.length() > 10 else 6)
         label.modulate = Color(0.93,0.90,0.78,0.95)
         label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         facade.add_child(label)
+        label.size = Vector2(sign_rect.size.x,sign_rect.size.y + 4.0)
 
 func _build_settlement_model_roof(roof,model:Dictionary,facade_height:float):
     # Roof node origin = footprint centre lifted by the facade height (+8).
@@ -35458,22 +35681,22 @@ func _create_rest_ui():
     rest_panel.add_child(title)
 
     var text = Label.new()
-    text.position = Vector2(14,38)
-    text.size = Vector2(232,50)
-    text.text = "Во сне меняется погода и горит топливо.\nХолод, жажда и опасность прерывают сон."
     text.add_theme_font_size_override("font_size",7)
+    text.position = Vector2(14,38)
+    text.text = "Во сне меняется погода и горит топливо.\nХолод, жажда и опасность прерывают сон."
     text.modulate = Color(0.68,0.71,0.66)
     rest_panel.add_child(text)
+    text.size = Vector2(232,50)
 
     _make_button(rest_panel,Vector2(14,88),Vector2(72,30),"1 Ч",_perform_rest.bind(1))
     _make_button(rest_panel,Vector2(94,88),Vector2(72,30),"4 Ч",_perform_rest.bind(4))
     _make_button(rest_panel,Vector2(174,88),Vector2(72,30),"8 Ч",_perform_rest.bind(8))
 
     rest_status = Label.new()
-    rest_status.position = Vector2(14,128)
-    rest_status.size = Vector2(232,48)
     rest_status.add_theme_font_size_override("font_size",7)
+    rest_status.position = Vector2(14,128)
     rest_panel.add_child(rest_status)
+    rest_status.size = Vector2(232,48)
 
     rest_pack_button = _make_button(rest_panel,Vector2(14,184),Vector2(104,26),"СВЕРНУТЬ",_pack_current_bedroll)
     rest_pack_button.visible = false
@@ -35623,10 +35846,10 @@ func _create_base_build_ui():
     _make_button(base_build_panel,Vector2(132,183),Vector2(108,30),"ВЕРСТАК",_build_base_object.bind("workbench"))
 
     base_build_status = Label.new()
-    base_build_status.position = Vector2(12,220)
-    base_build_status.size = Vector2(230,62)
     base_build_status.add_theme_font_size_override("font_size",7)
+    base_build_status.position = Vector2(12,220)
     base_build_panel.add_child(base_build_status)
+    base_build_status.size = Vector2(230,62)
 
     _make_button(base_build_panel,Vector2(136,288),Vector2(104,26),"ЗАКРЫТЬ",_close_base_build)
 
@@ -36214,18 +36437,18 @@ func _create_trader_ui():
     _hud_add_panel_detail(trader_panel,trader_panel.size,Color(0.52,0.46,0.30))
 
     trader_title = Label.new()
-    trader_title.position = Vector2(18,10)
-    trader_title.size = Vector2(528,20)
     trader_title.add_theme_font_size_override("font_size",13)
+    trader_title.position = Vector2(18,10)
     trader_panel.add_child(trader_title)
+    trader_title.size = Vector2(528,20)
 
     trader_subtitle = Label.new()
-    trader_subtitle.position = Vector2(18,31)
-    trader_subtitle.size = Vector2(528,34)
     trader_subtitle.add_theme_font_size_override("font_size",7)
+    trader_subtitle.position = Vector2(18,31)
     trader_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     trader_subtitle.modulate = Color(0.72,0.74,0.68)
     trader_panel.add_child(trader_subtitle)
+    trader_subtitle.size = Vector2(528,34)
 
     var sell_header = Label.new()
     sell_header.position = Vector2(18,70)
@@ -36258,12 +36481,12 @@ func _create_trader_ui():
     trader_panel.add_child(trader_inventory_list)
 
     trader_status = Label.new()
-    trader_status.position = Vector2(18,250)
-    trader_status.size = Vector2(528,42)
     trader_status.add_theme_font_size_override("font_size",7)
+    trader_status.position = Vector2(18,250)
     trader_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     trader_status.modulate = Color(0.82,0.82,0.75)
     trader_panel.add_child(trader_status)
+    trader_status.size = Vector2(528,42)
 
     _make_button(trader_panel,Vector2(18,298),Vector2(112,28),"КУПИТЬ 1",_trade_buy_selected)
     _make_button(trader_panel,Vector2(138,298),Vector2(112,28),"ПРОДАТЬ 1",_trade_sell_selected)
@@ -36625,18 +36848,18 @@ func _create_contract_ui():
     _hud_add_panel_detail(contract_panel,contract_panel.size,Color(0.45,0.48,0.34))
 
     contract_title = Label.new()
-    contract_title.position = Vector2(18,10)
-    contract_title.size = Vector2(528,20)
     contract_title.add_theme_font_size_override("font_size",13)
+    contract_title.position = Vector2(18,10)
     contract_panel.add_child(contract_title)
+    contract_title.size = Vector2(528,20)
 
     contract_subtitle = Label.new()
-    contract_subtitle.position = Vector2(18,32)
-    contract_subtitle.size = Vector2(410,34)
     contract_subtitle.add_theme_font_size_override("font_size",7)
+    contract_subtitle.position = Vector2(18,32)
     contract_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     contract_subtitle.modulate = Color(0.72,0.74,0.68)
     contract_panel.add_child(contract_subtitle)
+    contract_subtitle.size = Vector2(410,34)
 
     contract_list = ItemList.new()
     contract_list.position = Vector2(18,72)
@@ -36647,12 +36870,12 @@ func _create_contract_ui():
     contract_panel.add_child(contract_list)
 
     contract_status = Label.new()
-    contract_status.position = Vector2(18,202)
-    contract_status.size = Vector2(528,90)
     contract_status.add_theme_font_size_override("font_size",7)
+    contract_status.position = Vector2(18,202)
     contract_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     contract_status.modulate = Color(0.82,0.82,0.75)
     contract_panel.add_child(contract_status)
+    contract_status.size = Vector2(528,90)
 
     contract_project_button = _make_button(contract_panel,Vector2(430,34),Vector2(116,26),"ПРОЕКТ",_contract_toggle_project_mode)
 

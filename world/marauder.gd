@@ -177,11 +177,11 @@ func _ready() -> void:
     bark_label.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.05))
     bark_label.add_theme_constant_override("outline_size", 2)
     bark_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    bark_label.size = Vector2(150, 12)
     bark_label.position = Vector2(-75, -52)
     bark_label.z_index = 40
     bark_label.visible = false
     add_child(bark_label)
+    bark_label.size = Vector2(150, 12)
     voice = AudioStreamPlayer2D.new()
     voice.bus = "SFX"
     voice.max_distance = 1100.0

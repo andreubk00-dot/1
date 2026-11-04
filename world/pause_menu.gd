@@ -188,6 +188,8 @@ func open(menu_mode: String) -> void:
     _root.get_child(0).color = Color(0.0, 0.0, 0.0, 0.86 if mode == "title" else 0.62)
     _show(_main_box)
     visible = true
+    if game != null and game.get("field_hints") != null:
+        game.field_hints.hide_under_menu()
     get_tree().paused = true
 
 
