@@ -741,6 +741,10 @@ var base_object_nodes = {}
 var base_build_open = false
 var base_build_panel = null
 var base_build_status = null
+var base_build_shelter = null
+var base_build_detail = null
+var base_build_tiles = {}
+var base_build_focus = "stash"
 var current_zone_id = "central"
 var current_district_id = "old_center"
 var current_poi_id = ""
@@ -981,6 +985,7 @@ var trader_selected_stock_item = ""
 var trader_selected_inventory_index = -1
 var trader_canvas = null
 var trader_panel = null
+var trader_stat_strip = null
 var trader_title = null
 var trader_subtitle = null
 var trader_status = null
@@ -1001,6 +1006,7 @@ var contract_canvas = null
 var contract_panel = null
 var contract_title = null
 var contract_subtitle = null
+var contract_stat_strip = null
 var contract_list = null
 var contract_status = null
 var contract_project_mode = false
@@ -11183,6 +11189,20 @@ const UI_ICON_REGIONS = {
     "user":Rect2i(112,14,12,12),
     "map":Rect2i(126,14,12,12),
     "route":Rect2i(140,14,12,12),
+    "hud_health":Rect2i(0,56,10,10),
+    "hud_stamina":Rect2i(11,56,10,10),
+    "hud_hunger":Rect2i(22,56,10,10),
+    "hud_thirst":Rect2i(33,56,10,10),
+    "hud_temperature":Rect2i(44,56,10,10),
+    "hud_infection":Rect2i(55,56,10,10),
+    "hud_fatigue":Rect2i(66,56,10,10),
+    "hud_blood":Rect2i(77,56,10,10),
+    "hud_pain":Rect2i(88,56,10,10),
+    "hud_wet":Rect2i(99,56,10,10),
+    "hud_eye":Rect2i(110,56,10,10),
+    "hud_noise":Rect2i(121,56,10,10),
+    "hud_weight":Rect2i(132,56,10,10),
+    "hud_contam":Rect2i(143,56,10,10),
     "base_stash":Rect2i(0,30,24,24),
     "base_heater":Rect2i(26,30,24,24),
     "base_lamp":Rect2i(52,30,24,24),
@@ -12146,10 +12166,18 @@ func _hud_make_condition_icon(parent,key,pos,color):
 
 func _hud_make_vital_row(parent,key,y,label_text,color):
     var row_center = y + 3.5
-    _hud_make_vital_icon(parent,key,Vector2(6,y - 1),Color(color.r,color.g,color.b,0.98))
-    _hud_make_row_label(parent,19,row_center,42,10,label_text,6,Color(0.80,0.83,0.80))
+    # 1.42: a clear picture stands for the word; the bar takes its room
+    if _ui_icon("hud_" + key) != null:
+        var icon = TextureRect.new()
+        icon.name = "VitalIcon_" + key
+        _fit_icon_rect(icon,_ui_icon("hud_" + key),Vector2(6,y - 2),Vector2(10,10))
+        parent.add_child(icon)
+    else:
+        _hud_make_vital_icon(parent,key,Vector2(6,y - 1),Color(color.r,color.g,color.b,0.98))
+    var name_label = _hud_make_row_label(parent,19,row_center,42,10,label_text,6,Color(0.80,0.83,0.80))
+    name_label.visible = false
 
-    var bar = _hud_make_bar(parent,Vector2(62,y),Vector2(62,7),color,10)
+    var bar = _hud_make_bar(parent,Vector2(20,y),Vector2(104,7),color,16)
     hud_vital_bars[key] = bar
 
     var value_label = _hud_make_row_label(parent,127,row_center,40,10,"",6,Color(0.92,0.92,0.86),HORIZONTAL_ALIGNMENT_RIGHT)
@@ -13121,7 +13149,7 @@ func _refresh_region_map_ui():
         var visible_district_name = str(survey_context.get("name",_district_display_name(str(profile.get("district_id","old_center")))))
         detail_lines.append("Район: %s" % visible_district_name)
         var map_risk = int(poi.get("risk",profile.get("risk",2))) if poi_known else int(profile.get("risk",2))
-        detail_lines.append("Опасность: %d/5" % map_risk)
+        detail_lines.append("Опасность: %d/5  %s" % [map_risk,"■".repeat(clamp(map_risk,0,5)) + "□".repeat(5 - clamp(map_risk,0,5))])
         if poi_known:
             detail_lines.append(str(poi.get("description","Обнаруженный ориентир.")))
         for route_label in SandboxRouteMap.labels_at_coord(route_links,selected):
@@ -14411,9 +14439,14 @@ func _create_hud():
         var x = 7 + i * 42
         if i > 0:
             _hud_add_accent_strip(vitals_panel,Vector2(x - 2,107),Vector2(1,16),Color(0.18,0.22,0.22,0.85))
-        _hud_make_condition_icon(vitals_panel,mini[i][0],Vector2(x,110),mini[i][2])
-        _hud_make_row_label(vitals_panel,x + 11,110.0,30,8,mini[i][1],4,text_muted)
-        hud_condition_values[mini[i][0]] = _hud_make_row_label(vitals_panel,x + 11,118.0,30,9,"",5,text_main)
+        if _ui_icon("hud_" + str(mini[i][0])) != null:
+            var mini_icon = TextureRect.new()
+            mini_icon.name = "ConditionIcon_" + str(mini[i][0])
+            _fit_icon_rect(mini_icon,_ui_icon("hud_" + str(mini[i][0])),Vector2(x + 1,109),Vector2(10,10))
+            vitals_panel.add_child(mini_icon)
+        else:
+            _hud_make_condition_icon(vitals_panel,mini[i][0],Vector2(x,110),mini[i][2])
+        hud_condition_values[mini[i][0]] = _hud_make_row_label(vitals_panel,x + 14,114.0,26,9,"",6,text_main)
 
     hud_status_label = _hud_make_label(vitals_panel,Vector2(6,1),Vector2(1,1),"",4,text_main)
     hud_status_label.visible = false
@@ -14470,18 +14503,17 @@ func _create_hud():
     hud_stealth_noise_label = _hud_make_row_label(stealth_panel,96,9.0,40,10,"",5,text_muted,HORIZONTAL_ALIGNMENT_RIGHT)
     _hud_add_accent_strip(stealth_panel,Vector2(6,17),Vector2(132,1),Color(0.18,0.22,0.22,0.90))
 
-    _hud_make_eye_icon(stealth_panel,Vector2(8,22),Color(0.71,0.77,0.72))
-    _hud_make_row_label(stealth_panel,24,25.0,36,8,"ВИДИМ.",5,text_muted)
-    hud_visibility_bar = _hud_make_bar(stealth_panel,Vector2(64,22),Vector2(72,7),Color(0.57,0.72,0.54),6)
-
-    _hud_make_noise_icon(stealth_panel,Vector2(8,33),Color(0.80,0.76,0.56))
-    _hud_make_row_label(stealth_panel,24,37.0,36,8,"ШУМ",5,text_muted)
-    hud_noise_bar = _hud_make_bar(stealth_panel,Vector2(64,34),Vector2(72,7),Color(0.74,0.70,0.46),6)
+    # 1.42: an eye, a sound, a weight - and the bars take the words' room
+    for spec in [["hud_eye",Vector2(7,21)],["hud_noise",Vector2(7,33)],["hud_weight",Vector2(7,46)]]:
+        var si = TextureRect.new()
+        si.name = "StealthIcon_" + str(spec[0])
+        _fit_icon_rect(si,_ui_icon(str(spec[0])),spec[1],Vector2(10,10))
+        stealth_panel.add_child(si)
+    hud_visibility_bar = _hud_make_bar(stealth_panel,Vector2(22,22),Vector2(114,7),Color(0.57,0.72,0.54),10)
+    hud_noise_bar = _hud_make_bar(stealth_panel,Vector2(22,34),Vector2(114,7),Color(0.74,0.70,0.46),10)
 
     _hud_add_accent_strip(stealth_panel,Vector2(6,42),Vector2(132,1),Color(0.15,0.19,0.19,0.72))
-    _hud_make_weight_icon(stealth_panel,Vector2(8,46),Color(0.69,0.72,0.72))
-    _hud_make_row_label(stealth_panel,24,50.5,36,8,"ГРУЗ",5,text_muted)
-    hud_weight_label = _hud_make_row_label(stealth_panel,64,50.5,72,10,"",5,text_muted,HORIZONTAL_ALIGNMENT_RIGHT)
+    hud_weight_label = _hud_make_row_label(stealth_panel,22,50.5,114,10,"",6,text_muted,HORIZONTAL_ALIGNMENT_RIGHT)
 
     # 1.19-dev4: load-bearing rig pocket strip. Hidden when no rig is equipped.
     hud_rig_quick_panel = Panel.new()
@@ -16112,7 +16144,7 @@ func _create_inventory_ui():
 
     var inv_hint = Label.new()
     inv_hint.position = Vector2(16,31)
-    inv_hint.text = "ЛКМ — выбрать, перетащить  •  ПКМ — использовать"
+    inv_hint.text = "ПКМ — использовать"
     inv_hint.add_theme_font_size_override("font_size",7)
     inv_hint.modulate = Color(0.62,0.65,0.61)
     inventory_panel.add_child(inv_hint)
@@ -16146,7 +16178,7 @@ func _create_inventory_ui():
     quick_hint.add_theme_font_size_override("font_size",6)
     quick_hint.position = Vector2(250,141)
     quick_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    quick_hint.text = "Перетащи сюда любой предмет. Клавиши 1–6. ПКМ — убрать."
+    quick_hint.text = "Перетащи сюда.\nПКМ — убрать."
     quick_hint.modulate = Color(0.56,0.59,0.56)
     inventory_panel.add_child(quick_hint)
     quick_hint.size = Vector2(106,52)
@@ -19256,7 +19288,7 @@ func _entry_description(entry):
         return id
 
     var item = item_defs[id]
-    var text = "%s  [%s]\nКоличество: %d   Вес: %.2f кг" % [
+    var text = "%s  [%s]\n%d шт  •  %.2f кг" % [
         str(item.get("name",id)),
         _item_rarity_label(id),
         int(entry.get("qty",1)),
@@ -19278,7 +19310,7 @@ func _entry_description(entry):
                 _hud_ammo_display_name(str(firearm.get("ammo","")))
             ]
             text += "\nМоды: %s" % _weapon_mod_summary(id,iid)
-        text += "\nБыстрый слот: в открытом инвентаре нажмите %s." % _quick_slot_keys_text()
+        text += "\nБыстрый слот: перетащи в ряд справа или нажми %s." % _quick_slot_keys_text()
     elif str(item.get("category","")) == "melee" and melee_defs.has(id):
         var melee = melee_defs[id]
         text += "\nУрон: %d   Выносливость: %d   Дистанция: %d" % [
@@ -19286,12 +19318,12 @@ func _entry_description(entry):
             int(melee.get("stamina",0)),
             int(melee.get("range",0))
         ]
-        text += "\nБыстрый слот: в открытом инвентаре нажмите %s." % _quick_slot_keys_text()
+        text += "\nБыстрый слот: перетащи в ряд справа или нажми %s." % _quick_slot_keys_text()
 
     if _is_water_container_item(id):
         var iid = str(entry.get("instance_id",""))
         text += "\nВода: %.2f / %.2f л" % [_water_container_fill_l(id,iid),_water_container_capacity_l(id)]
-        text += "\nИСП.: пить небольшими порциями. %s: перелить 0.5 л из запаса." % InputBindings.key("reload")
+        text += "\nПКМ — глоток • %s — долить 0.5 л" % InputBindings.key("reload")
     elif id == "repair_kit":
         text += "\nИспользуется у верстака для обслуживания и капремонта оружия."
     elif id == ContractSystem.PARCEL_ITEM:
@@ -35821,40 +35853,85 @@ func _create_base_build_ui():
     base_build_panel.add_theme_stylebox_override("panel",style)
 
     var title = Label.new()
-    title.position = Vector2(12,10)
-    title.text = "БАЗА И СИСТЕМЫ ВЫЖИВАНИЯ"
+    title.position = Vector2(12,9)
+    title.text = "СТРОИТЕЛЬСТВО"
     title.add_theme_font_size_override("font_size",9)
     title.modulate = Color(0.94,0.90,0.75)
     base_build_panel.add_child(title)
 
-    var hint = Label.new()
-    hint.position = Vector2(12,31)
-    hint.size = Vector2(230,38)
-    hint.text = "B: открыть/закрыть • X: разобрать ближайшее
-База — под крышей. Костёр/дождесборник — снаружи."
-    hint.add_theme_font_size_override("font_size",7)
-    hint.modulate = Color(0.65,0.68,0.62)
-    base_build_panel.add_child(hint)
+    # 1.42: under a roof or not - a house, ticked or crossed
+    base_build_shelter = Control.new()
+    base_build_shelter.position = Vector2(206,6)
+    base_build_shelter.size = Vector2(38,18)
+    base_build_panel.add_child(base_build_shelter)
 
-    _make_button(base_build_panel,Vector2(12,75),Vector2(108,30),"ЯЩИК",_build_base_object.bind("stash"))
-    _make_button(base_build_panel,Vector2(132,75),Vector2(108,30),"ОБОГРЕВ",_build_base_object.bind("heater"))
-    _make_button(base_build_panel,Vector2(12,111),Vector2(108,30),"ЛАМПА",_build_base_object.bind("lamp"))
-    _make_button(base_build_panel,Vector2(132,111),Vector2(108,30),"РАСКЛАДУШКА",_build_base_object.bind("cot"))
-    _make_button(base_build_panel,Vector2(12,147),Vector2(108,30),"БАРРИКАДА",_build_base_object.bind("barricade"))
-    _make_button(base_build_panel,Vector2(132,147),Vector2(108,30),"КОСТЁР",_build_base_object.bind("campfire"))
-    _make_button(base_build_panel,Vector2(12,183),Vector2(108,30),"ДОЖДЕСБОР",_build_base_object.bind("rain_collector"))
-    _make_button(base_build_panel,Vector2(132,183),Vector2(108,30),"ВЕРСТАК",_build_base_object.bind("workbench"))
+    # a picture per object; hover shows its cost, a click builds it
+    base_build_tiles.clear()
+    var kinds = BASE_BUILD_KINDS
+    for i in range(kinds.size()):
+        var kind = str(kinds[i])
+        var tile = Button.new()
+        tile.name = "BuildTile_" + kind
+        tile.position = Vector2(9 + (i % 4) * 60,32 + int(i / 4) * 62)
+        tile.focus_mode = Control.FOCUS_NONE
+        tile.clip_contents = true
+        tile.tooltip_text = _base_object_name(kind)
+        tile.pressed.connect(_build_base_object.bind(kind))
+        tile.mouse_entered.connect(_focus_base_build_kind.bind(kind))
+        base_build_panel.add_child(tile)
+        tile.size = Vector2(56,58)
+        _ui_icon_rect(tile,"base_" + kind,Vector2(4,2),Vector2(48,40))
+        var name_label = Label.new()
+        name_label.add_theme_font_size_override("font_size",6)
+        name_label.text = BASE_BUILD_SHORT.get(kind,_base_object_name(kind))
+        name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        tile.add_child(name_label)
+        name_label.position = Vector2(1,44)
+        name_label.size = Vector2(54,10)
+        base_build_tiles[kind] = tile
+
+    base_build_detail = Control.new()
+    base_build_detail.name = "BuildDetail"
+    base_build_detail.position = Vector2(12,160)
+    base_build_detail.size = Vector2(230,82)
+    base_build_panel.add_child(base_build_detail)
 
     base_build_status = Label.new()
     base_build_status.add_theme_font_size_override("font_size",7)
-    base_build_status.position = Vector2(12,220)
+    base_build_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    base_build_status.modulate = Color(0.86,0.80,0.62)
     base_build_panel.add_child(base_build_status)
-    base_build_status.size = Vector2(230,62)
+    base_build_status.position = Vector2(12,246)
+    base_build_status.size = Vector2(230,36)
+
+    var keys = Label.new()
+    keys.add_theme_font_size_override("font_size",6)
+    keys.text = "%s — разобрать рядом" % InputBindings.short_key("dismantle") if InputMap.has_action("dismantle") else "X — разобрать рядом"
+    keys.modulate = Color(0.56,0.59,0.56)
+    base_build_panel.add_child(keys)
+    keys.position = Vector2(12,296)
+    keys.size = Vector2(118,12)
 
     _make_button(base_build_panel,Vector2(136,288),Vector2(104,26),"ЗАКРЫТЬ",_close_base_build)
 
     base_build_panel.visible = false
 
+
+const BASE_BUILD_KINDS = ["stash","heater","lamp","cot","barricade","campfire","rain_collector","workbench"]
+const BASE_BUILD_SHORT = {"stash":"ЯЩИК","heater":"ОБОГРЕВ","lamp":"ЛАМПА","cot":"КРОВАТЬ","barricade":"БАРРИКАДА","campfire":"КОСТЁР","rain_collector":"ДОЖДЕСБОР","workbench":"ВЕРСТАК"}
+
+func _focus_base_build_kind(kind:String) -> void:
+    base_build_focus = kind
+    _refresh_base_build_detail()
+
+func _base_build_place_ok(kind:String) -> bool:
+    var sheltered = _player_is_sheltered()
+    if kind == "rain_collector":
+        return not sheltered
+    if kind == "campfire":
+        return true
+    return sheltered
 
 func _refresh_base_build_ui():
     if base_build_panel == null:
@@ -35863,21 +35940,78 @@ func _refresh_base_build_ui():
     base_build_panel.visible = base_build_open
     if not base_build_open or base_build_status == null:
         return
+    if base_build_shelter != null:
+        for c in base_build_shelter.get_children():
+            base_build_shelter.remove_child(c)
+            c.queue_free()
+        var under = _player_is_sheltered()
+        _ui_icon_rect(base_build_shelter,"house",Vector2(0,0),Vector2(18,18))
+        _ui_icon_rect(base_build_shelter,"check" if under else "cross",Vector2(20,4),Vector2(12,12))
+        base_build_shelter.tooltip_text = "Вы под крышей" if under else "Вы снаружи: дом строят под крышей"
+    for kind in base_build_tiles:
+        var tile = base_build_tiles[kind]
+        var ready = _base_has_costs(kind) and _base_build_place_ok(kind)
+        var focus = kind == base_build_focus
+        var st = _icon_tile_style(Color(0.10,0.09,0.06) if focus else Color(0.035,0.042,0.042),Color(0.86,0.70,0.34) if focus else (Color(0.30,0.52,0.30) if ready else Color(0.18,0.20,0.19)))
+        tile.add_theme_stylebox_override("normal",st)
+        tile.add_theme_stylebox_override("hover",_icon_tile_style(Color(0.07,0.08,0.075),Color(0.60,0.58,0.44)))
+        tile.add_theme_stylebox_override("pressed",st)
+        tile.add_theme_stylebox_override("focus",st)
+        tile.modulate = Color.WHITE if ready or focus else Color(0.70,0.70,0.68)
+    _refresh_base_build_detail()
 
-    var shelter_text = "УКРЫТИЕ: ДА" if _player_is_sheltered() else "УКРЫТИЕ: НЕТ"
-    base_build_status.text = "%s
-Ящик: %s
-Обогрев: %s
-Костёр: %s
-Дождесбор: %s
-Верстак: %s" % [
-        shelter_text,
-        _base_cost_text("stash"),
-        _base_cost_text("heater"),
-        _base_cost_text("campfire"),
-        _base_cost_text("rain_collector"),
-        _base_cost_text("workbench")
-    ]
+func _refresh_base_build_detail():
+    if base_build_detail == null:
+        return
+    for c in base_build_detail.get_children():
+        base_build_detail.remove_child(c)
+        c.queue_free()
+    var kind = base_build_focus
+    var name_label = Label.new()
+    name_label.add_theme_font_size_override("font_size",8)
+    name_label.text = _base_object_name(kind)
+    name_label.modulate = Color(0.94,0.90,0.75)
+    base_build_detail.add_child(name_label)
+    name_label.position = Vector2(0,0)
+    name_label.size = Vector2(170,12)
+    # where it stands: under a roof, in the open, anywhere
+    var where = Control.new()
+    where.position = Vector2(196,0)
+    where.size = Vector2(34,16)
+    where.tooltip_text = "Только снаружи" if kind == "rain_collector" else ("Где угодно" if kind == "campfire" else "Только под крышей")
+    base_build_detail.add_child(where)
+    if kind == "campfire":
+        _ui_icon_rect(where,"flame",Vector2(0,0),Vector2(16,16))
+    else:
+        _ui_icon_rect(where,"wind" if kind == "rain_collector" else "house",Vector2(0,0),Vector2(16,16))
+        _ui_icon_rect(where,"check" if _base_build_place_ok(kind) else "cross",Vector2(18,4),Vector2(12,12))
+    # what it costs: a picture of each with have / need
+    var costs = _base_build_costs(kind)
+    var ids = costs.keys()
+    ids.sort()
+    var i = 0
+    for id in ids:
+        var need = int(costs[id])
+        var have = _inventory_count(str(id))
+        var enough = have >= need
+        var cell = Panel.new()
+        cell.tooltip_text = str(item_defs.get(str(id),{}).get("name",id))
+        cell.mouse_filter = Control.MOUSE_FILTER_PASS
+        cell.add_theme_stylebox_override("panel",_icon_tile_style(Color(0.03,0.036,0.036),Color(0.28,0.46,0.28) if enough else Color(0.52,0.22,0.18)))
+        base_build_detail.add_child(cell)
+        cell.position = Vector2(i * 46,18)
+        cell.size = Vector2(42,60)
+        _item_icon_rect(cell,str(id),Vector2(4,4),Vector2(34,36),1.5)
+        var n = Label.new()
+        n.add_theme_font_size_override("font_size",7)
+        n.text = "%d/%d" % [have,need]
+        n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        n.add_theme_color_override("font_color",Color(0.66,0.90,0.62) if enough else Color(0.95,0.52,0.44))
+        n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        cell.add_child(n)
+        n.position = Vector2(1,44)
+        n.size = Vector2(40,12)
+        i += 1
 
 func _open_base_build():
     if base_build_open:
@@ -36442,24 +36576,33 @@ func _create_trader_ui():
     trader_panel.add_child(trader_title)
     trader_title.size = Vector2(528,20)
 
+    # 1.42: standing, talons, the trader's purse, supply - pictures with numbers
+    trader_stat_strip = Control.new()
+    trader_stat_strip.name = "TraderStats"
+    trader_stat_strip.position = Vector2(18,33)
+    trader_panel.add_child(trader_stat_strip)
+    trader_stat_strip.size = Vector2(528,16)
+
     trader_subtitle = Label.new()
     trader_subtitle.add_theme_font_size_override("font_size",7)
-    trader_subtitle.position = Vector2(18,31)
-    trader_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    trader_subtitle.modulate = Color(0.72,0.74,0.68)
+    trader_subtitle.position = Vector2(18,52)
+    trader_subtitle.clip_text = false
+    trader_subtitle.modulate = Color(0.86,0.66,0.44)
     trader_panel.add_child(trader_subtitle)
-    trader_subtitle.size = Vector2(528,34)
+    trader_subtitle.size = Vector2(528,12)
 
+    _ui_icon_rect(trader_panel,"buy",Vector2(18,68),Vector2(12,12))
     var sell_header = Label.new()
-    sell_header.position = Vector2(18,70)
-    sell_header.text = "ТОВАР ТОРГОВЦА"
+    sell_header.position = Vector2(34,68)
+    sell_header.text = "ТОВАР"
     sell_header.add_theme_font_size_override("font_size",8)
     sell_header.modulate = Color("c6aa62")
     trader_panel.add_child(sell_header)
 
+    _ui_icon_rect(trader_panel,"sell",Vector2(296,68),Vector2(12,12))
     var buy_header = Label.new()
-    buy_header.position = Vector2(296,70)
-    buy_header.text = "ВАШ ТОВАР / БАРТЕР"
+    buy_header.position = Vector2(312,68)
+    buy_header.text = "ВАШЕ"
     buy_header.add_theme_font_size_override("font_size",8)
     buy_header.modulate = Color("c6aa62")
     trader_panel.add_child(buy_header)
@@ -36468,6 +36611,8 @@ func _create_trader_ui():
     trader_stock_list.position = Vector2(18,84)
     trader_stock_list.size = Vector2(250,160)
     trader_stock_list.add_theme_font_size_override("font_size",7)
+    trader_stock_list.fixed_icon_size = Vector2i(18,14)
+    trader_stock_list.add_theme_constant_override("h_separation",4)
     trader_stock_list.select_mode = ItemList.SELECT_SINGLE
     trader_stock_list.item_selected.connect(_trader_stock_selected)
     trader_panel.add_child(trader_stock_list)
@@ -36476,6 +36621,8 @@ func _create_trader_ui():
     trader_inventory_list.position = Vector2(296,84)
     trader_inventory_list.size = Vector2(250,160)
     trader_inventory_list.add_theme_font_size_override("font_size",7)
+    trader_inventory_list.fixed_icon_size = Vector2i(18,14)
+    trader_inventory_list.add_theme_constant_override("h_separation",4)
     trader_inventory_list.select_mode = ItemList.SELECT_SINGLE
     trader_inventory_list.item_selected.connect(_trader_inventory_selected)
     trader_panel.add_child(trader_inventory_list)
@@ -36492,6 +36639,35 @@ func _create_trader_ui():
     _make_button(trader_panel,Vector2(138,298),Vector2(112,28),"ПРОДАТЬ 1",_trade_sell_selected)
     _make_button(trader_panel,Vector2(258,298),Vector2(132,28),"ОБМЕН",_trade_barter_selected)
     _make_button(trader_panel,Vector2(434,298),Vector2(112,28),"ЗАКРЫТЬ",_close_trader)
+
+func _trader_stats(chips:Array) -> void:
+    _stat_strip(trader_stat_strip,chips)
+
+func _stat_strip(strip,chips:Array) -> void:
+    # 1.42: a row of [picture number] pairs, the meaning on hover
+    if strip == null:
+        return
+    var trader_stat_strip = strip
+    for c in trader_stat_strip.get_children():
+        trader_stat_strip.remove_child(c)
+        c.queue_free()
+    var x = 0.0
+    for chip in chips:
+        var holder = Control.new()
+        holder.tooltip_text = str(chip[2])
+        holder.mouse_filter = Control.MOUSE_FILTER_PASS
+        trader_stat_strip.add_child(holder)
+        _ui_icon_rect(holder,str(chip[0]),Vector2(0,1),Vector2(12,12))
+        var l = Label.new()
+        l.add_theme_font_size_override("font_size",8)
+        l.text = str(chip[1])
+        l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        holder.add_child(l)
+        l.position = Vector2(15,0)
+        var w = l.get_minimum_size().x
+        holder.position = Vector2(x,0)
+        holder.size = Vector2(15 + w,14)
+        x += 15 + w + 14
 
 func _trade_item_name(item_id:String) -> String:
     if item_defs.has(item_id):
@@ -36577,15 +36753,23 @@ func _refresh_trader_ui():
     var condition = FactionEconomy.settlement_condition(faction_state,faction_id)
     var reserve = TradingMarket.reserve(faction_state,active_trader_id)
     trader_title.text = "%s  •  %s" % [str(data.get("name","ТОРГОВЕЦ")).to_upper(),str(data.get("role","рынок")).to_upper()]
+    var tickets = int(faction_state.get("currency_tickets",0))
     if bool(data.get("wanderer",false)):
-        trader_subtitle.text = "На дороге  |  Талоны: %d  |  Резерв торговца: %d  |  Цены дорожные — за доставку до тебя" % [int(faction_state.get("currency_tickets",0)),reserve]
+        trader_subtitle.text = "На дороге — цены дорожные, за доставку до тебя"
+        _trader_stats([["coin",str(tickets),"Ваши талоны"],["sell",str(reserve),"Талоны у торговца"]])
     else:
-        trader_subtitle.text = "%s  |  Репутация: %s (%d)  |  Талоны: %d  |  Резерв торговца: %d  |  Снабжение: %d%%  |  %s  |  %s" % [
-        str(faction_data.get("name",faction_id)),str(tier.get("name","ЧУЖОЙ")),rep,
-        int(faction_state.get("currency_tickets",0)),reserve,int(round(condition)),
-        SettlementCrisis.summary(faction_state,faction_id,world_day),
-        FactionEndgame.summary(faction_state,faction_id)
-    ]
+        var notes = []
+        for note in [SettlementCrisis.summary(faction_state,faction_id,world_day),FactionEndgame.summary(faction_state,faction_id)]:
+            if str(note).strip_edges() != "":
+                notes.append(str(note))
+        trader_subtitle.text = "  •  ".join(notes)
+        _trader_stats([
+            ["user",str(faction_data.get("name",faction_id)),"Поселение"],
+            ["star","%s %d" % [str(tier.get("name","ЧУЖОЙ")),rep],"Репутация"],
+            ["coin",str(tickets),"Ваши талоны"],
+            ["sell",str(reserve),"Талоны у торговца"],
+            ["box","%d%%" % int(round(condition)),"Снабжение поселения"]
+        ])
 
     trader_stock_list.clear()
     trader_stock_meta.clear()
@@ -36609,11 +36793,11 @@ func _refresh_trader_ui():
         var price = TradingMarket.buy_price(faction_state,active_trader_id,item_id)
         var unlocked = TradingMarket.item_unlocked(faction_state,active_trader_id,item_id)
         var spec = TraderCatalog.stock_spec(active_trader_id,item_id)
-        var suffix = "НЕТ" if qty <= 0 else ("%d тал." % price)
+        var suffix = "нет" if qty <= 0 else ("%d тал." % price)
         if not unlocked:
-            suffix = "Нужен: %s" % _trade_tier_name_for_min(TraderCatalog.required_rep(active_trader_id,item_id))
-        var line = "%s  ×%d  —  %s" % [_trade_item_name(item_id),qty,suffix]
-        trader_stock_list.add_item(line)
+            suffix = "★ %s" % _trade_tier_name_for_min(TraderCatalog.required_rep(active_trader_id,item_id))
+        var line = "%s ×%d  —  %s" % [_trade_item_name(item_id),qty,suffix]
+        trader_stock_list.add_item(line,_make_item_icon(item_id))
         var list_index = trader_stock_list.item_count - 1
         trader_stock_list.set_item_metadata(list_index,item_id)
         trader_stock_list.set_item_disabled(list_index,qty <= 0 or not unlocked)
@@ -36631,11 +36815,11 @@ func _refresh_trader_ui():
         var qty = max(1,int(entry.get("qty",1)))
         var accepts = TraderCatalog.accepts_item(active_trader_id,item_id)
         var unit = TradingMarket.sell_price(faction_state,active_trader_id,item_id) if accepts else 0
-        var line = "%s  ×%d  —  %s" % [
+        var line = "%s ×%d  —  %s" % [
             _trade_item_name(item_id),qty,
-            ("%d тал./шт." % unit) if accepts else "НЕ ПРИНИМАЕТ"
+            ("%d тал." % unit) if accepts else "не берёт"
         ]
-        trader_inventory_list.add_item(line)
+        trader_inventory_list.add_item(line,_make_item_icon(item_id))
         var list_index = trader_inventory_list.item_count - 1
         trader_inventory_list.set_item_metadata(list_index,inv_index)
         trader_inventory_list.set_item_disabled(list_index,not accepts)
@@ -36644,7 +36828,7 @@ func _refresh_trader_ui():
             trader_inventory_list.select(list_index)
 
     if trader_selected_stock_item == "" and trader_selected_inventory_index < 0:
-        trader_status.text = "Выберите товар слева для покупки или предмет справа для продажи. Для бартера выберите оба."
+        trader_status.text = "Слева — купить, справа — продать, оба — обмен."
     else:
         _refresh_trader_selection_status()
 
@@ -36859,7 +37043,12 @@ func _create_contract_ui():
     contract_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     contract_subtitle.modulate = Color(0.72,0.74,0.68)
     contract_panel.add_child(contract_subtitle)
-    contract_subtitle.size = Vector2(410,34)
+    contract_subtitle.size = Vector2(410,12)
+    contract_stat_strip = Control.new()
+    contract_stat_strip.name = "ContractStats"
+    contract_stat_strip.position = Vector2(18,48)
+    contract_panel.add_child(contract_stat_strip)
+    contract_stat_strip.size = Vector2(410,16)
 
     contract_list = ItemList.new()
     contract_list.position = Vector2(18,72)
@@ -37151,13 +37340,19 @@ func _refresh_contract_ui():
     contract_project_button.visible = not personal_board and not SettlementProjects.project(active_contract_faction).is_empty()
     var board_label = str(board.get("label","КОНТРАКТЫ"))
     contract_title.text = "%s  •  %s" % [str(faction_data.get("short_name",active_contract_faction)).to_upper(),board_label.to_upper()]
-    contract_subtitle.text = "%s%s  |  %s (%d)  |  еда %d  медицина %d  техника %d  безопасность %d  |  %s  |  %s" % [
-        active_contract_npc_name,npc_relation,str(tier.get("name","ЧУЖОЙ")),rep,
-        int(round(float(resources.get("food",0.0)))),int(round(float(resources.get("medicine",0.0)))),
-        int(round(float(resources.get("technical",0.0)))),int(round(float(resources.get("security",0.0)))),
-        SettlementCrisis.summary(faction_state,active_contract_faction,world_day),
-        FactionEndgame.summary(faction_state,active_contract_faction)
-    ]
+    var board_notes = [active_contract_npc_name + npc_relation]
+    for note in [SettlementCrisis.summary(faction_state,active_contract_faction,world_day),FactionEndgame.summary(faction_state,active_contract_faction)]:
+        if str(note).strip_edges() != "":
+            board_notes.append(str(note))
+    contract_subtitle.text = "  •  ".join(board_notes)
+    _stat_strip(contract_stat_strip,[
+        ["star","%s %d" % [str(tier.get("name","ЧУЖОЙ")),rep],"Репутация"],
+        ["food",str(int(round(float(resources.get("food",0.0))))),"Склад: еда"],
+        ["med",str(int(round(float(resources.get("medicine",0.0))))),"Склад: медицина"],
+        ["gear",str(int(round(float(resources.get("technical",0.0))))),"Склад: техника"],
+        ["shield",str(int(round(float(resources.get("security",0.0))))),"Склад: безопасность"],
+        ["coin",str(int(faction_state.get("currency_tickets",0))),"Ваши талоны"]
+    ])
     contract_list.clear()
     var selected_index = -1
     var active_contracts = ContractSystem.active_for_board(faction_state,active_contract_faction,active_contract_npc_id)
@@ -37206,9 +37401,9 @@ func _refresh_contract_ui():
         contract_list.select(selected_index)
     if selected_contract_id == "":
         if ContractCatalog.is_personal_board(active_contract_npc_id):
-            contract_status.text = "Это личные поручения конкретного человека. Предложения недолговечны, а после принятия у части задач идёт срок. Отказ и просрочка могут повлиять на отношение и ресурсы поселения."
+            contract_status.text = "Это личные поручения: после принятия идёт срок, отказ и просрочка портят отношения."
         else:
-            contract_status.text = RegionalEndgame.board_text(faction_state,world_day) + "\n\nВыберите предложение. Выполненный контракт сдаётся тому же человеку, который его дал. Точных маркеров разведки нет — работают названия и ориентиры."
+            contract_status.text = RegionalEndgame.board_text(faction_state,world_day) + "\n\nВыбери предложение. Сдают тому, кто его дал."
     else:
         _refresh_contract_selection_status()
 

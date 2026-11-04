@@ -409,6 +409,178 @@ ICONS12 = {
     ],
 }
 
+# 10 x 10 HUD vitals: bright, readable on the dark panel at 1:1
+HUD10 = {
+    "hud_health": [
+        "..........",
+        ".kk...kk..",
+        "krrk.krRk.",
+        "krwrkrrRk.",
+        "krrrrrrRk.",
+        ".krrrrRk..",
+        "..krrRk...",
+        "...kRk....",
+        "....k.....",
+        "..........",
+    ],
+    "hud_stamina": [
+        ".....kkk..",
+        "....kffk..",
+        "...kffk...",
+        "..kffkkk..",
+        ".kfffffk..",
+        ".kkkkffk..",
+        "....kfk...",
+        "...kFk....",
+        "...kk.....",
+        "..........",
+    ],
+    "hud_hunger": [
+        "......kk..",
+        ".....kbbk.",
+        "....kbbbk.",
+        "...kbbbBk.",
+        "..kbbbBk..",
+        ".kwkBBk...",
+        "kwwkkk....",
+        ".kwk......",
+        "..k.......",
+        "..........",
+    ],
+    "hud_thirst": [
+        "....k.....",
+        "...kck....",
+        "...kck....",
+        "..kccCk...",
+        ".kwcCCCk..",
+        ".kccCCCk..",
+        ".kcCCCCk..",
+        "..kCCCk...",
+        "...kkk....",
+        "..........",
+    ],
+    "hud_temperature": [
+        "...kk.....",
+        "..kwwk....",
+        "..kwkk....",
+        "..kwwk....",
+        "..krkk....",
+        "..krrk....",
+        ".krrrrk...",
+        ".krrrRk...",
+        "..kRRk....",
+        "...kk.....",
+    ],
+    "hud_infection": [
+        "...kkk....",
+        "..keeek...",
+        ".kkeEkkk..",
+        "keekkkeek.",
+        "keEk.kEek.",
+        ".kkkekkk..",
+        "..kEEEk...",
+        "..kkEkk...",
+        "...kkk....",
+        "..........",
+    ],
+    "hud_fatigue": [
+        "...kkk....",
+        "..kWWk....",
+        ".kWWk.....",
+        ".kWk......",
+        ".kWk......",
+        ".kWWk...k.",
+        "..kWWkkkWk",
+        "...kWWWWk.",
+        "....kkkk..",
+        "..........",
+    ],
+    "hud_blood": [
+        "....k.....",
+        "...krk....",
+        "...krk....",
+        "..krRRk...",
+        ".kwrRRRk..",
+        ".krRRRRk..",
+        ".kRRRRRk..",
+        "..kRRRk...",
+        "...kkk....",
+        "..........",
+    ],
+    "hud_pain": [
+        "....k.....",
+        "...krk.k..",
+        ".k.krkkrk.",
+        "krkkrrrk..",
+        ".krrfrrkk.",
+        "..krrrrrrk",
+        ".kkrrrkkk.",
+        "krkkrk....",
+        ".k..kk....",
+        "..........",
+    ],
+    "hud_wet": [
+        "..k.......",
+        ".kck...k..",
+        ".kck..kck.",
+        "kcCCk.kck.",
+        "kcCCkkcCCk",
+        ".kkk.kcCCk",
+        "..k...kkk.",
+        ".kck......",
+        ".kCk......",
+        "..k.......",
+    ],
+    "hud_eye": [
+        "..........",
+        "..........",
+        "...kkkk...",
+        ".kkwwwwkk.",
+        "kwwkcCkwwk",
+        "kwwkCkkwwk",
+        ".kkwkkwkk.",
+        "...kkkk...",
+        "..........",
+        "..........",
+    ],
+    "hud_noise": [
+        "......y...",
+        "...k...y..",
+        "..kk.y..y.",
+        "kkwk..y.y.",
+        "kwWk..y.y.",
+        "kwWk..y.y.",
+        "kkWk..y.y.",
+        "..kk.y..y.",
+        "...k...y..",
+        "......y...",
+    ],
+    "hud_weight": [
+        "...kkkk...",
+        "...k..k...",
+        "..kkkkkk..",
+        ".kgggGGdk.",
+        ".kgGGGGdk.",
+        "kggGGGGddk",
+        "kgGGGGGddk",
+        "kgGGGGddddk"[:10],
+        "kddddddddk",
+        "kkkkkkkkkk",
+    ],
+    "hud_contam": [
+        "..........",
+        "...kkkk...",
+        "..kbbbbk..",
+        ".kbBbbBBk.",
+        "kbbBBbBBnk",
+        "kBbBBBBnnk",
+        ".kBnBBnnk.",
+        "..knnnnk..",
+        "...kkkk...",
+        "..........",
+    ],
+}
+
 # 24 x 24 base objects
 BASE24 = {
     "base_stash": [
@@ -638,12 +810,17 @@ def draw(rows):
 def main(project):
     order = list(ICONS12.items()) + list(BASE24.items())
     cols_small = 16
-    atlas = Image.new("RGBA", (16 * 14, 14 * 2 + 2 + 26), (0, 0, 0, 0))
+    atlas = Image.new("RGBA", (16 * 14, 14 * 2 + 2 + 26 + 11), (0, 0, 0, 0))
     regions = {}
     x = y = 0
     for i, (name, rows) in enumerate(ICONS12.items()):
         im = draw(rows)
         cx, cy = (i % cols_small) * 14, (i // cols_small) * 14
+        atlas.paste(im, (cx, cy), im)
+        regions[name] = (cx, cy, im.width, im.height)
+    for i, (name, rows) in enumerate(HUD10.items()):
+        im = draw(rows)
+        cx, cy = 208 + (i % 2) * 11 if False else (i * 11), 14 * 2 + 2 + 26
         atlas.paste(im, (cx, cy), im)
         regions[name] = (cx, cy, im.width, im.height)
     base_y = 14 * 2 + 2
