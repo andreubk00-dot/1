@@ -225,7 +225,9 @@ const ITEM_RARITY = {
     "muzzle_brake":"rare","suppressor":"rare",
     "sterile_bandage":"scarce","antiseptic":"scarce","painkillers":"scarce","antibiotics":"rare",
     "old_checkpoint_documents":"unique","military_radio_station":"unique",
-    "generator_control_unit":"unique","laboratory_analyzer":"unique"
+    "generator_control_unit":"unique","laboratory_analyzer":"unique",
+    "alcohol":"scarce","gunpowder":"rare","tool_kit":"scarce",
+    "sch_gunsmith":"rare","sch_tailor":"scarce","sch_medic":"scarce","sch_tech":"scarce","sch_reload":"rare"
 }
 
 # Minimum world-risk tier for loot acquisition. Crafting remains an intentional
@@ -239,7 +241,8 @@ const ITEM_MIN_LOOT_RISK = {
     "shotgun_exttube":3,"akm_extmag":4,"muzzle_brake":3,"suppressor":3,
     "antibiotics":3,
     "old_checkpoint_documents":5,"military_radio_station":5,
-    "generator_control_unit":5,"laboratory_analyzer":5
+    "generator_control_unit":5,"laboratory_analyzer":5,
+    "gunpowder":2,"sch_gunsmith":3,"sch_reload":3
 }
 
 # Source locations are intentionally not exposed to the player.
@@ -493,6 +496,8 @@ var rig_quick_ids = ["bandage","emergency_ration"]
 
 # 0.4 combat/crafting
 var recipe_defs = {}
+var known_schematics = {}
+var crafting_station = "bench"
 var item_icon_cache = {}
 var item_atlas_texture = null
 var inventory_weapon_atlas_texture = null
@@ -593,7 +598,19 @@ var inventory_icon_regions = {
     "trauma_kit":Rect2i(0,272,30,20),
     "splint":Rect2i(100,483,46,14),
     "contract_parcel":Rect2i(152,483,36,20),
-    "emergency_ration":Rect2i(35,272,22,18)
+    "emergency_ration":Rect2i(35,272,22,18),
+
+    # 1.40 crafting II (tools/craft_icons_v1.py, inventory_icons_v33)
+    "nails":Rect2i(0,528,18,18),
+    "wire":Rect2i(22,528,18,18),
+    "gunpowder":Rect2i(44,528,18,18),
+    "sch_gunsmith":Rect2i(66,528,18,18),
+    "sch_tailor":Rect2i(88,528,18,18),
+    "sch_medic":Rect2i(110,528,18,18),
+    "sch_tech":Rect2i(132,528,18,18),
+    "sch_reload":Rect2i(154,528,18,18),
+    "alcohol":Rect2i(176,528,14,44),
+    "tool_kit":Rect2i(194,528,40,20)
 }
 
 var melee_icon_regions = {
@@ -672,10 +689,22 @@ var loot_icon_cells = {
     "canteen":Vector2i(1,12),
     "water_canister":Vector2i(2,12),
     "field_rig":Vector2i(0,13),
-    "assault_rig":Vector2i(1,13)
+    "assault_rig":Vector2i(1,13),
+    # 1.40 crafting II (loot_sprites_v31)
+    "nails":Vector2i(0,14),
+    "wire":Vector2i(1,14),
+    "gunpowder":Vector2i(2,14),
+    "sch_gunsmith":Vector2i(3,14),
+    "sch_tailor":Vector2i(4,14),
+    "sch_medic":Vector2i(5,14),
+    "sch_tech":Vector2i(0,15),
+    "sch_reload":Vector2i(1,15),
+    "alcohol":Vector2i(2,15),
+    "tool_kit":Vector2i(3,15)
 }
 
 var crafting_open = false
+var craft_title = null
 var selected_recipe_id = ""
 var craft_panel = null
 var craft_list = null
@@ -1184,7 +1213,7 @@ func _run_static_self_tests():
     _record_test(not _melee_point_in_arc(Vector2.ZERO,Vector2.RIGHT,Vector2(50,0),35.0,0.8),"Дальняя цель попала в melee range")
     _record_test(_make_item_icon("combat_knife") != null,"Не создаётся иконка ножа")
 
-    _record_test(inventory_icon_regions.size() == 61,"Должно быть 61 non-melee inventory icons (dev70: + груз по заданию)")
+    _record_test(inventory_icon_regions.size() == 71,"Должно быть 71 non-melee inventory icons (1.40: + материалы, набор инструментов, схемы)")
     _record_test(melee_icon_regions.size() == 4,"Должно быть 4 melee inventory icons (dev72: + монтировка)")
     _record_test(item_defs.has("sterile_bandage"),"Нет стерильной повязки")
     _record_test(item_defs.has("antiseptic"),"Нет антисептика")
@@ -2827,8 +2856,8 @@ func _runtime_import_cache_ready() -> bool:
     # Sentinels cover inventory, world, infected animation and audio import paths.
     # Do this before _load_data(): the point is to avoid trying to load missing imports.
     for source_path in [
-        "res://inventory_icons_v32.png",
-        "res://loot_sprites_v30.png",
+        "res://inventory_icons_v33.png",
+        "res://loot_sprites_v31.png",
         "res://infected_walk_v12.png",
         "res://world_tiles_v10.png",
         "res://audio/weapons/makarov_shot.wav"
@@ -4813,6 +4842,15 @@ func _unhandled_input(event):
         elif not inventory_open:
             _open_base_build()
         return
+    if InputBindings.pressed(event,"craft"):
+        if crafting_open:
+            _close_crafting()
+            _close_inventory()
+        elif not trader_open and not contract_open and not base_build_open and not rest_open:
+            if inventory_open:
+                _close_inventory()
+            _open_hand_crafting()
+        return
     if InputBindings.pressed(event,"dismantle"):
         if base_build_open:
             _dismantle_nearest_base_object()
@@ -4858,6 +4896,7 @@ func _load_data():
     weapon_defs = _fallback_weapons()
     melee_defs = _fallback_melee()
     loot_tables = _fallback_loot()
+    _add_crafting_loot(loot_tables)
     recipe_defs = _fallback_recipes()
     _apply_item_access_metadata()
 
@@ -4965,7 +5004,18 @@ func _fallback_items():
         "generator_control_unit":{"name":"Блок управления генератором","short":"БЛОК","w":2,"h":2,"stack":1,"weight":2.6,"category":"strategic","use":"","color":"#667369"},
         "laboratory_analyzer":{"name":"Лабораторный анализатор","short":"АНАЛИЗ","w":2,"h":2,"stack":1,"weight":3.2,"category":"strategic","use":"","color":"#70877f"},
         # dev70: the sealed parcel of a retrieve contract
-        "contract_parcel":{"name":"Груз по заданию","short":"ГРУЗ","w":2,"h":1,"stack":1,"weight":2.4,"category":"strategic","use":"","color":"#96764c"}
+        "contract_parcel":{"name":"Груз по заданию","short":"ГРУЗ","w":2,"h":1,"stack":1,"weight":2.4,"category":"strategic","use":"","color":"#96764c"},
+        # 1.40 crafting II: materials, a tool, schematics
+        "nails":{"name":"Крепёж","short":"КРЕП","w":1,"h":1,"stack":30,"weight":0.15,"category":"material","use":"","color":"#8a8578","hint":"Гвозди, болты, скобы. Для снаряжения, инструментов и верстака."},
+        "wire":{"name":"Провод","short":"ПРОВ","w":1,"h":1,"stack":20,"weight":0.12,"category":"material","use":"","color":"#b06a3a","hint":"Медный провод. Для электрики: фонарь, обогрев."},
+        "alcohol":{"name":"Спирт","short":"СПИРТ","w":1,"h":2,"stack":5,"weight":0.40,"category":"material","use":"","color":"#c9d6d0","hint":"Медицинский спирт: антисептик и стерильные повязки."},
+        "gunpowder":{"name":"Порох","short":"ПОРОХ","w":1,"h":1,"stack":10,"weight":0.20,"category":"material","use":"","color":"#4a4a40","hint":"Охотничий порох. Со схемой и инструментами — патроны."},
+        "tool_kit":{"name":"Набор инструментов","short":"ИНСТР","w":2,"h":1,"stack":1,"weight":1.60,"category":"tool","use":"","color":"#9b3b2e","hint":"Не расходуется. Нужен для сложной работы на верстаке."},
+        "sch_gunsmith":{"name":"Записи оружейника","short":"СХЕМА","w":1,"h":1,"stack":1,"weight":0.10,"category":"schematic","use":"learn_schematic","teaches":"gunsmith","color":"#6f6a52"},
+        "sch_tailor":{"name":"Выкройки снаряжения","short":"СХЕМА","w":1,"h":1,"stack":1,"weight":0.10,"category":"schematic","use":"learn_schematic","teaches":"tailor","color":"#6f6a52"},
+        "sch_medic":{"name":"Справочник фельдшера","short":"СХЕМА","w":1,"h":1,"stack":1,"weight":0.10,"category":"schematic","use":"learn_schematic","teaches":"medic","color":"#6f6a52"},
+        "sch_tech":{"name":"Схемы техника","short":"СХЕМА","w":1,"h":1,"stack":1,"weight":0.10,"category":"schematic","use":"learn_schematic","teaches":"tech","color":"#6f6a52"},
+        "sch_reload":{"name":"Справочник снаряжения патронов","short":"СХЕМА","w":1,"h":1,"stack":1,"weight":0.10,"category":"schematic","use":"learn_schematic","teaches":"reload","color":"#6f6a52"}
     }
 
 func _fallback_melee():
@@ -5503,87 +5553,92 @@ func _fallback_loot():
         ]
     }
 
+# 1.40 crafting II. Where (station: "hand" anywhere with K, "bench" at a
+# workbench - the start yard's, an industrial yard's, a site's or one built at
+# home), with what (tools: not used up), from what knowledge (schematic: found
+# in the world and read; basic recipes need none), and under which heading.
+const CRAFT_GROUPS = ["МЕДИЦИНА","СНАРЯЖЕНИЕ","ИНСТРУМЕНТЫ","ОРУЖИЕ","ПАТРОНЫ"]
+const SCHEMATIC_NAMES = {"gunsmith":"Записи оружейника","tailor":"Выкройки снаряжения","medic":"Справочник фельдшера","tech":"Схемы техника","reload":"Справочник снаряжения патронов"}
+const SCHEMATIC_ITEMS = {"gunsmith":"sch_gunsmith","tailor":"sch_tailor","medic":"sch_medic","tech":"sch_tech","reload":"sch_reload"}
+
+func _recipe(r:Dictionary,id:String,name:String,group:String,station:String,ingredients:Dictionary,output:String,qty:int = 1,tools:Array = [],schematic:String = "") -> void:
+    r[id] = {"name":name,"group":group,"station":station,"ingredients":ingredients,"output":output,"output_qty":qty,"tools":tools,"schematic":schematic}
+
+# 1.40: where the new materials, the tool and the schematics turn up - by what
+# a place would hold. Appended after each table's own rules, so the rolls of
+# loot already generated stay the same.
+const CRAFTING_LOOT = {
+    "garage":[["nails",1,4,0.45],["wire",1,2,0.30],["tool_kit",1,1,0.06],["gunpowder",1,1,0.04],["sch_tech",1,1,0.03]],
+    "industrial":[["nails",2,5,0.55],["wire",1,3,0.40],["tool_kit",1,1,0.10],["sch_tech",1,1,0.05]],
+    "industrial_secure":[["nails",2,6,0.60],["wire",2,4,0.50],["tool_kit",1,1,0.25],["sch_tech",1,1,0.12]],
+    "residential":[["nails",1,3,0.15],["wire",1,2,0.12],["alcohol",1,1,0.08],["sch_tailor",1,1,0.03]],
+    "pharmacy":[["alcohol",1,2,0.30],["sch_medic",1,1,0.05]],
+    "medical_secure":[["alcohol",1,2,0.45],["sch_medic",1,1,0.15]],
+    "clinical_core":[["alcohol",1,3,0.40],["sch_medic",1,1,0.25]],
+    "quarantine_core":[["alcohol",1,2,0.40],["sch_medic",1,1,0.10]],
+    "police":[["gunpowder",1,1,0.08],["sch_gunsmith",1,1,0.04]],
+    "police_secure":[["gunpowder",1,2,0.25],["tool_kit",1,1,0.10],["sch_gunsmith",1,1,0.12]],
+    "hunting_secure":[["gunpowder",1,3,0.45],["sch_reload",1,1,0.20],["sch_gunsmith",1,1,0.06]],
+    "military":[["gunpowder",1,1,0.12],["wire",1,2,0.20],["sch_reload",1,1,0.03]],
+    "military_secure":[["gunpowder",1,3,0.35],["tool_kit",1,1,0.12],["sch_gunsmith",1,1,0.10],["sch_reload",1,1,0.10]],
+    "arsenal_core":[["gunpowder",2,4,0.50],["sch_gunsmith",1,1,0.30],["sch_reload",1,1,0.30]],
+    "vector_core":[["wire",2,5,0.60],["tool_kit",1,1,0.20],["sch_tech",1,1,0.25]],
+    "marauder_supply":[["gunpowder",1,2,0.20],["nails",1,3,0.30],["alcohol",1,1,0.20]],
+    "marauder_stash":[["gunpowder",1,3,0.30],["sch_gunsmith",1,1,0.08],["sch_reload",1,1,0.08]],
+    "rural":[["nails",1,3,0.20],["alcohol",1,1,0.10],["gunpowder",1,1,0.06],["sch_tailor",1,1,0.04]],
+    "rural_secure":[["gunpowder",1,2,0.30],["sch_tailor",1,1,0.08]],
+    "forest_cache":[["gunpowder",1,1,0.15],["sch_tailor",1,1,0.05],["sch_reload",1,1,0.10]]
+}
+
+func _add_crafting_loot(tables:Dictionary) -> void:
+    for table_id in CRAFTING_LOOT:
+        if not tables.has(table_id):
+            continue
+        for rule in CRAFTING_LOOT[table_id]:
+            tables[table_id].append({"id":rule[0],"min":rule[1],"max":rule[2],"chance":rule[3]})
+
 func _fallback_recipes():
-    return {
-        "field_bandage":{
-            "name":"Полевой бинт",
-            "ingredients":{"cloth":2},
-            "output":"bandage",
-            "output_qty":1
-        },
-        "splint":{
-            "name":"Шина",
-            "ingredients":{"firewood":1,"cloth":2},
-            "output":"splint",
-            "output_qty":1
-        },
-        "sterile_bandage":{
-            "name":"Стерильная повязка",
-            "ingredients":{"bandage":1,"antiseptic":1},
-            "output":"sterile_bandage",
-            "output_qty":1
-        },
-        "repair_kit":{
-            "name":"Ремкомплект",
-            "ingredients":{"scrap":2,"tape":1},
-            "output":"repair_kit",
-            "output_qty":1
-        },
-        "water_filter":{
-            "name":"Походный фильтр",
-            "ingredients":{"cloth":1,"scrap":1,"tape":1},
-            "output":"water_filter",
-            "output_qty":1
-        },
-        "combat_knife":{
-            "name":"Самодельный нож",
-            "ingredients":{"scrap":2,"tape":1},
-            "output":"combat_knife",
-            "output_qty":1
-        },
-        "steel_pipe":{
-            "name":"Усиленная труба",
-            "ingredients":{"scrap":3,"tape":1},
-            "output":"steel_pipe",
-            "output_qty":1
-        },
-        "muzzle_brake":{
-            "name":"Дульный тормоз АКМ",
-            "ingredients":{"scrap":2,"tape":1},
-            "output":"muzzle_brake",
-            "output_qty":1
-        },
-        "makarov_extmag":{
-            "name":"Увеличенный магазин ПМ",
-            "ingredients":{"scrap":2,"tape":1},
-            "output":"makarov_extmag",
-            "output_qty":1
-        },
-        "shotgun_exttube":{
-            "name":"Удлинитель магазина дробовика",
-            "ingredients":{"scrap":3,"tape":1},
-            "output":"shotgun_exttube",
-            "output_qty":1
-        },
-        "suppressor":{
-            "name":"Самодельный глушитель ПМ",
-            "ingredients":{"scrap":3,"cloth":1,"tape":2},
-            "output":"suppressor",
-            "output_qty":1
-        },
-        "akm_extmag":{
-            "name":"Увеличенный магазин АКМ",
-            "ingredients":{"scrap":4,"tape":1},
-            "output":"akm_extmag",
-            "output_qty":1
-        },
-        "field_backpack":{
-            "name":"Полевой рюкзак",
-            "ingredients":{"cloth":4,"tape":2,"scrap":1},
-            "output":"field_backpack",
-            "output_qty":1
-        }
-    }
+    var r = {}
+    # medicine
+    _recipe(r,"field_bandage","Полевой бинт","МЕДИЦИНА","hand",{"cloth":2},"bandage")
+    _recipe(r,"splint","Шина","МЕДИЦИНА","hand",{"firewood":1,"cloth":2},"splint")
+    _recipe(r,"sterile_bandage","Стерильная повязка","МЕДИЦИНА","hand",{"bandage":1,"antiseptic":1},"sterile_bandage")
+    _recipe(r,"antiseptic","Антисептик из спирта","МЕДИЦИНА","hand",{"alcohol":1},"antiseptic")
+    _recipe(r,"sterile_from_alcohol","Стерильная повязка (спирт)","МЕДИЦИНА","hand",{"bandage":1,"alcohol":1},"sterile_bandage",1,[],"medic")
+    _recipe(r,"trauma_kit","Травматологический набор","МЕДИЦИНА","bench",{"sterile_bandage":2,"splint":1,"antiseptic":1,"tape":1},"trauma_kit",1,[],"medic")
+    # gear and clothing
+    _recipe(r,"field_backpack","Полевой рюкзак","СНАРЯЖЕНИЕ","bench",{"cloth":4,"tape":2,"scrap":1},"field_backpack")
+    _recipe(r,"wool_hat","Шерстяная шапка","СНАРЯЖЕНИЕ","hand",{"cloth":2},"wool_hat",1,[],"tailor")
+    _recipe(r,"field_rig","Полевая разгрузка","СНАРЯЖЕНИЕ","bench",{"cloth":3,"tape":2,"nails":1},"field_rig",1,[],"tailor")
+    _recipe(r,"storm_poncho","Штормовое пончо","СНАРЯЖЕНИЕ","bench",{"cloth":4,"tape":3},"storm_poncho",1,[],"tailor")
+    _recipe(r,"insulated_parka","Утеплённая парка (из куртки)","СНАРЯЖЕНИЕ","bench",{"light_jacket":1,"cloth":4,"tape":2},"insulated_parka",1,[],"tailor")
+    _recipe(r,"hiking_backpack","Туристический рюкзак (из полевого)","СНАРЯЖЕНИЕ","bench",{"field_backpack":1,"cloth":4,"tape":2,"nails":2},"hiking_backpack",1,[],"tailor")
+    _recipe(r,"bedroll","Походный спальник","СНАРЯЖЕНИЕ","bench",{"cloth":5,"tape":2},"bedroll",1,[],"tailor")
+    # tools and utility
+    _recipe(r,"repair_kit","Ремкомплект","ИНСТРУМЕНТЫ","bench",{"scrap":2,"tape":1},"repair_kit")
+    _recipe(r,"water_filter","Походный фильтр","ИНСТРУМЕНТЫ","bench",{"cloth":1,"scrap":1,"tape":1},"water_filter")
+    _recipe(r,"canteen","Полевая фляга","ИНСТРУМЕНТЫ","bench",{"scrap":2,"cloth":1},"canteen",1,["tool_kit"])
+    _recipe(r,"tool_kit","Набор инструментов","ИНСТРУМЕНТЫ","bench",{"scrap":4,"nails":2,"tape":1},"tool_kit",1,[],"tech")
+    _recipe(r,"flashlight","Самодельный фонарь","ИНСТРУМЕНТЫ","bench",{"wire":2,"scrap":1,"tape":1},"flashlight",1,["tool_kit"],"tech")
+    _recipe(r,"water_canister","Канистра для воды","ИНСТРУМЕНТЫ","bench",{"scrap":3,"nails":1,"tape":1},"water_canister",1,["tool_kit"],"tech")
+    # weapons and modules
+    _recipe(r,"combat_knife","Самодельный нож","ОРУЖИЕ","bench",{"scrap":2,"tape":1},"combat_knife")
+    _recipe(r,"steel_pipe","Усиленная труба","ОРУЖИЕ","bench",{"scrap":3,"tape":1},"steel_pipe")
+    _recipe(r,"crowbar","Монтировка","ОРУЖИЕ","bench",{"scrap":3,"nails":1,"tape":1},"crowbar",1,["tool_kit"])
+    _recipe(r,"fire_axe","Топор","ОРУЖИЕ","bench",{"scrap":3,"firewood":1,"nails":2},"fire_axe",1,["tool_kit"])
+    _recipe(r,"muzzle_brake","Дульный тормоз АКМ","ОРУЖИЕ","bench",{"scrap":2,"tape":1},"muzzle_brake",1,["tool_kit"])
+    _recipe(r,"makarov_extmag","Увеличенный магазин ПМ","ОРУЖИЕ","bench",{"scrap":2,"tape":1},"makarov_extmag",1,["tool_kit"])
+    _recipe(r,"shotgun_exttube","Удлинитель магазина дробовика","ОРУЖИЕ","bench",{"scrap":3,"tape":1},"shotgun_exttube",1,["tool_kit"])
+    _recipe(r,"suppressor","Самодельный глушитель ПМ","ОРУЖИЕ","bench",{"scrap":3,"cloth":1,"tape":2},"suppressor",1,["tool_kit"],"gunsmith")
+    _recipe(r,"akm_extmag","Увеличенный магазин АКМ","ОРУЖИЕ","bench",{"scrap":4,"tape":1,"nails":1},"akm_extmag",1,["tool_kit"],"gunsmith")
+    # ammunition: powder is the rare part
+    _recipe(r,"ammo_9x18","Патроны 9×18 (8 шт.)","ПАТРОНЫ","bench",{"gunpowder":1,"scrap":1},"ammo_9x18",8,["tool_kit"],"reload")
+    _recipe(r,"ammo_762x25","Патроны 7.62×25 (8 шт.)","ПАТРОНЫ","bench",{"gunpowder":1,"scrap":1},"ammo_762x25",8,["tool_kit"],"reload")
+    _recipe(r,"ammo_12g","Патроны 12 калибра (4 шт.)","ПАТРОНЫ","bench",{"gunpowder":1,"scrap":1,"cloth":1},"ammo_12g",4,["tool_kit"],"reload")
+    _recipe(r,"ammo_762","Патроны 7.62×39 (6 шт.)","ПАТРОНЫ","bench",{"gunpowder":2,"scrap":1},"ammo_762",6,["tool_kit"],"reload")
+    _recipe(r,"ammo_545","Патроны 5.45×39 (6 шт.)","ПАТРОНЫ","bench",{"gunpowder":2,"scrap":1},"ammo_545",6,["tool_kit"],"reload")
+    _recipe(r,"ammo_762x54r","Патроны 7.62×54R (4 шт.)","ПАТРОНЫ","bench",{"gunpowder":2,"scrap":2},"ammo_762x54r",4,["tool_kit"],"reload")
+    return r
 
 func _make_melee_arm_line(width_value,color_value):
     var line = Line2D.new()
@@ -10505,10 +10560,14 @@ func _refresh_workbench_mode():
 
     if workbench_craft_tab != null:
         workbench_craft_tab.disabled = workbench_mode == "craft"
+    # weapon service and salvage are bench work
+    var at_bench = crafting_station == "bench"
     if workbench_service_tab != null:
-        workbench_service_tab.disabled = workbench_mode == "service"
+        workbench_service_tab.disabled = workbench_mode == "service" or not at_bench
+        workbench_service_tab.visible = at_bench
     if workbench_salvage_tab != null:
-        workbench_salvage_tab.disabled = workbench_mode == "salvage"
+        workbench_salvage_tab.disabled = workbench_mode == "salvage" or not at_bench
+        workbench_salvage_tab.visible = at_bench
 
     if workbench_mode == "craft":
         _refresh_crafting_details()
@@ -10621,7 +10680,13 @@ func _salvage_outputs(item_id):
         "military_vest":{"scrap":3,"cloth":2},
         "hiking_backpack":{"cloth":3,"tape":1},
         "expedition_pack":{"cloth":4,"tape":2},
-        "flashlight":{"scrap":1},
+        "flashlight":{"scrap":1,"wire":1},
+        "tool_kit":{"scrap":2,"nails":1},
+        "canteen":{"scrap":1},
+        "water_canister":{"scrap":2},
+        "bedroll":{"cloth":3},
+        "field_rig":{"cloth":2,"tape":1},
+        "assault_rig":{"cloth":2,"nails":1,"tape":1},
         "makarov_extmag":{"scrap":1},
         "shotgun_exttube":{"scrap":1},
         "akm_extmag":{"scrap":2},
@@ -10800,6 +10865,7 @@ func _create_crafting_ui():
     title.add_theme_font_size_override("font_size",12)
     title.modulate = Color(0.94,0.90,0.75)
     craft_panel.add_child(title)
+    craft_title = title
 
     workbench_craft_tab = Button.new()
     workbench_craft_tab.position = Vector2(102,7)
@@ -10859,14 +10925,18 @@ func _create_crafting_ui():
 
     craft_details = Label.new()
     craft_details.position = Vector2(215,10)
-    craft_details.size = Vector2(242,130)
+    craft_details.size = Vector2(242,148)
     craft_details.add_theme_font_size_override("font_size",8)
+    craft_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    craft_details.clip_text = true
     workbench_craft_content.add_child(craft_details)
 
     craft_status = Label.new()
-    craft_status.position = Vector2(215,146)
+    craft_status.position = Vector2(215,160)
     craft_status.size = Vector2(242,40)
     craft_status.add_theme_font_size_override("font_size",8)
+    craft_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    craft_status.modulate = Color(0.86,0.80,0.62)
     workbench_craft_content.add_child(craft_status)
 
     _make_button(workbench_craft_content,Vector2(215,205),Vector2(120,32),"СОЗДАТЬ",_craft_selected_recipe)
@@ -11015,22 +11085,51 @@ func _rebuild_crafting_ui():
         craft_list.remove_child(child)
         child.queue_free()
 
-    var ids = recipe_defs.keys()
-    ids.sort()
-
-    for recipe_id in ids:
-        var recipe = recipe_defs[recipe_id]
-        var button = Button.new()
-        button.text = str(recipe.get("name",recipe_id))
-        button.custom_minimum_size = Vector2(170,30)
-        button.add_theme_font_size_override("font_size",7)
-        button.set_meta("recipe_id",str(recipe_id))
-        _visual_button_style(button)
-        button.pressed.connect(_select_recipe.bind(str(recipe_id)))
-        craft_list.add_child(button)
+    # 1.40: under headings, what can be made first; a recipe from an unread
+    # schematic or one that wants a workbench says so on its button
+    for group in CRAFT_GROUPS:
+        var ids = []
+        for recipe_id in recipe_defs:
+            if str(recipe_defs[recipe_id].get("group","")) == group:
+                ids.append(str(recipe_id))
+        if ids.is_empty():
+            continue
+        ids.sort_custom(func(a,b):
+            var ka = _recipe_sort_key(a)
+            var kb = _recipe_sort_key(b)
+            return ka < kb
+        )
+        var heading = Label.new()
+        heading.text = group
+        heading.add_theme_font_size_override("font_size",7)
+        heading.modulate = Color(0.86,0.66,0.34)
+        craft_list.add_child(heading)
+        for recipe_id in ids:
+            var recipe = recipe_defs[recipe_id]
+            var button = Button.new()
+            button.text = _recipe_button_text(recipe)
+            button.custom_minimum_size = Vector2(170,26)
+            button.add_theme_font_size_override("font_size",7)
+            button.set_meta("recipe_id",str(recipe_id))
+            _visual_button_style(button)
+            button.pressed.connect(_select_recipe.bind(str(recipe_id)))
+            craft_list.add_child(button)
 
     _refresh_crafting_details()
     _refresh_recipe_button_states()
+
+func _recipe_sort_key(recipe_id:String) -> String:
+    var recipe = recipe_defs[recipe_id]
+    var rank = 0 if _can_craft(recipe_id) else (1 if _recipe_known(recipe) and _recipe_station_ok(recipe) else (2 if _recipe_known(recipe) else 3))
+    return "%d%s" % [rank,str(recipe.get("name",recipe_id))]
+
+func _recipe_button_text(recipe) -> String:
+    var name = str(recipe.get("name",""))
+    if not _recipe_known(recipe):
+        return "[СХЕМА] " + name
+    if not _recipe_station_ok(recipe):
+        return "[ВЕРСТАК] " + name
+    return name
 
 func _select_recipe(recipe_id):
     selected_recipe_id = recipe_id
@@ -11043,24 +11142,31 @@ func _refresh_recipe_button_states():
     for child in craft_list.get_children():
         if not (child is Button):
             continue
-        var is_selected = str(child.get_meta("recipe_id","")) == selected_recipe_id and selected_recipe_id != ""
-        child.modulate = Color(1.0,0.92,0.66) if is_selected else Color.WHITE
+        var rid = str(child.get_meta("recipe_id",""))
+        var is_selected = rid == selected_recipe_id and selected_recipe_id != ""
+        # ready ones bright, the rest dimmed
+        var ready = recipe_defs.has(rid) and _can_craft(rid)
+        child.modulate = Color(1.0,0.92,0.66) if is_selected else (Color.WHITE if ready else Color(0.62,0.62,0.60))
 
 func _refresh_crafting_details():
     if craft_details == null:
         return
 
     if selected_recipe_id == "" or not recipe_defs.has(selected_recipe_id):
-        craft_details.text = "Выбери рецепт."
+        craft_details.text = "Выбери рецепт." if crafting_station == "bench" else "Руками: бинты, шины, простое снаряжение. Остальное — на верстаке (его можно построить дома: %s)." % InputBindings.key("base_build")
         if craft_status != null:
             craft_status.text = ""
         return
 
     var recipe = recipe_defs[selected_recipe_id]
-    var lines = [
-        str(recipe.get("name",selected_recipe_id)),
-        ""
-    ]
+    var lines = [str(recipe.get("name",selected_recipe_id))]
+    var where = "Руками, в любом месте" if str(recipe.get("station","bench")) == "hand" else "На верстаке"
+    for tool_id in recipe.get("tools",[]):
+        where += " • %s: %s" % [str(item_defs.get(str(tool_id),{}).get("name",tool_id)).to_lower(),"есть" if _inventory_count(str(tool_id)) > 0 else "нет"]
+    lines.append(where)
+    var sch = str(recipe.get("schematic",""))
+    if sch != "":
+        lines.append("Схема: %s%s" % [str(SCHEMATIC_NAMES.get(sch,sch)),"" if known_schematics.has(sch) else " — не изучена"])
 
     var ingredients = recipe.get("ingredients",{})
     for id in ingredients.keys():
@@ -11077,18 +11183,35 @@ func _refresh_crafting_details():
     if item_defs.has(out_id):
         out_name = str(item_defs[out_id].get("name",out_id))
 
-    lines.append("")
     lines.append("Результат: %s x%d" % [out_name,out_qty])
     craft_details.text = "\n".join(lines)
 
     if craft_status != null:
-        if _can_craft(selected_recipe_id):
-            craft_status.text = "Готово к работе."
-        else:
-            craft_status.text = "Не хватает ресурсов или места."
+        craft_status.text = _recipe_status_text(selected_recipe_id)
+
+func _recipe_status_text(recipe_id:String) -> String:
+    var recipe = recipe_defs[recipe_id]
+    if not _recipe_known(recipe):
+        return "Нужна схема «%s». Схемы находят в мире и покупают у торговцев." % str(SCHEMATIC_NAMES.get(str(recipe.get("schematic","")),""))
+    if not _recipe_station_ok(recipe):
+        return "Это делают на верстаке."
+    var tools = _recipe_missing_tools(recipe)
+    if not tools.is_empty():
+        return "Нужен инструмент: %s." % str(item_defs.get(tools[0],{}).get("name",tools[0]))
+    if _can_craft(recipe_id):
+        return "Готово к работе."
+    return "Не хватает материалов или места в рюкзаке."
+
+func _open_hand_crafting():
+    # 1.40: the simple things anywhere, from the backpack
+    crafting_station = "hand"
+    workbench_mode = "craft"
+    _open_crafting()
 
 func _open_crafting():
     crafting_open = true
+    if craft_title != null:
+        craft_title.text = "РУКАМИ" if crafting_station == "hand" else "ВЕРСТАК"
     _play_ui_sfx("open")
     inventory_open = true
     active_container_key = ""
@@ -11133,10 +11256,27 @@ func _close_crafting():
     if container_panel != null:
         container_panel.visible = false
 
+func _recipe_known(recipe) -> bool:
+    var sch = str(recipe.get("schematic",""))
+    return sch == "" or known_schematics.has(sch)
+
+func _recipe_station_ok(recipe) -> bool:
+    return str(recipe.get("station","bench")) == "hand" or crafting_station == "bench"
+
+func _recipe_missing_tools(recipe) -> Array:
+    var missing = []
+    for tool_id in recipe.get("tools",[]):
+        if _inventory_count(str(tool_id)) <= 0:
+            missing.append(str(tool_id))
+    return missing
+
 func _can_craft(recipe_id):
     if not recipe_defs.has(recipe_id):
         return false
     var recipe = recipe_defs[recipe_id]
+    # 1.40: what you know, where you are, what you work with
+    if not _recipe_known(recipe) or not _recipe_station_ok(recipe) or not _recipe_missing_tools(recipe).is_empty():
+        return false
     var test = inventory_entries.duplicate(true)
 
     for id in recipe.get("ingredients",{}).keys():
@@ -11172,13 +11312,18 @@ func _craft_selected_recipe():
     inventory_entries = test
     _play_ui_sfx("confirm")
 
-    _emit_ai_sound(player.global_position,74.0,"workbench",0.80)
-    _play_world_sfx("workbench",-11.0,0.022)
-
-    if craft_status != null:
-        craft_status.text = "Создано: %s" % str(recipe.get("name",selected_recipe_id))
+    # by hand it is a rustle, at the bench it is hammering
+    if crafting_station == "hand":
+        _emit_ai_sound(player.global_position,30.0,"workbench",0.30)
+        _play_world_sfx("bag_rummage",-12.0,0.03)
+    else:
+        _emit_ai_sound(player.global_position,74.0,"workbench",0.80)
+        _play_world_sfx("workbench",-11.0,0.022)
 
     _refresh_crafting_details()
+    _refresh_recipe_button_states()
+    if craft_status != null:
+        craft_status.text = "Создано: %s" % str(recipe.get("name",selected_recipe_id))
     _refresh_weapon_service_ui()
     _rebuild_salvage_ui()
 
@@ -14627,7 +14772,8 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
         "gear":"ЭКИПИРОВКА",
         "material":"МАТЕРИАЛ",
         "tool":"ИНСТРУМЕНТ",
-        "mod":"МОДИФИКАЦИЯ"
+        "mod":"МОДИФИКАЦИЯ",
+        "schematic":"СХЕМА"
     }
 
     lines.append(str(category_names.get(category,category.to_upper())))
@@ -14635,6 +14781,16 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
     if _is_water_container_item(id):
         hover_weight += _water_container_fill_l(id,instance_id)
     lines.append("Вес: %.2f кг" % hover_weight)
+    # 1.40: what a material or a tool is for, what a schematic teaches
+    if str(item.get("hint","")) != "":
+        lines.append(str(item["hint"]))
+    if category == "schematic":
+        var topic = str(item.get("teaches",""))
+        var taught = []
+        for rid in recipe_defs:
+            if str(recipe_defs[rid].get("schematic","")) == topic:
+                taught.append(str(recipe_defs[rid].get("name",rid)))
+        lines.append(("Изучено." if known_schematics.has(topic) else "ИСП.: прочитать и запомнить") + " • рецептов: %d" % taught.size())
 
     if qty > 1:
         lines.append("Количество: %d / %d" % [qty,int(item.get("stack",1))])
@@ -15709,7 +15865,7 @@ func _make_item_icon(id):
             return melee_atlas
 
     if inventory_exact_atlas_texture == null:
-        inventory_exact_atlas_texture = load("res://inventory_icons_v32.png")
+        inventory_exact_atlas_texture = load("res://inventory_icons_v33.png")
 
     if inventory_exact_atlas_texture != null and inventory_icon_regions.has(id):
         var atlas = AtlasTexture.new()
@@ -18848,7 +19004,22 @@ func _use_selected_inventory():
 
     var use_type = str(item_defs[id].get("use",""))
 
-    if use_type == "bandage":
+    if use_type == "learn_schematic":
+        var topic = str(item_defs[id].get("teaches",""))
+        if known_schematics.has(topic):
+            inv_details.text = "Это уже изучено. Схему можно продать или оставить."
+            return
+        known_schematics[topic] = true
+        _consume_entry_at(selected_inventory_index,1)
+        var opened = []
+        for rid in recipe_defs:
+            if str(recipe_defs[rid].get("schematic","")) == topic:
+                opened.append(str(recipe_defs[rid].get("name",rid)))
+        _set_survival_feedback("ИЗУЧЕНО: %s • новых рецептов: %d" % [str(item_defs[id].get("name",id)).to_upper(),opened.size()],3.6)
+        if field_hints != null:
+            field_hints.hint("schematic","Схема изучена навсегда: её рецепты теперь в окне крафта (верстак или %s — крафт руками)." % InputBindings.key("craft"))
+
+    elif use_type == "bandage":
         _stop_bleeding()
         health = min(100.0,health + 6.0)
         pain = max(0.0,pain - 8.0)
@@ -19491,6 +19662,7 @@ func _interact():
     elif type == "shelter_window":
         _repair_shelter_window(target)
     elif type == "workbench":
+        crafting_station = "bench"
         _open_crafting()
     elif type == "trader":
         _open_trader(str(target.get_meta("trader_id","")))
@@ -20896,7 +21068,7 @@ func _apply_door_state(node, open, snap=false):
 
 func _make_world_loot_texture(id):
     if loot_atlas_texture == null:
-        loot_atlas_texture = load("res://loot_sprites_v30.png")
+        loot_atlas_texture = load("res://loot_sprites_v31.png")
 
     if loot_atlas_texture != null and loot_icon_cells.has(id):
         var cell = loot_icon_cells[id]
@@ -33812,6 +33984,8 @@ func _update_exterior_atmosphere(delta):
         light.energy = base_energy * (0.12 + night * 0.88)
 
 func _base_build_costs(kind):
+    if kind == "workbench":
+        return {"scrap":4,"nails":2,"firewood":2}
     if kind == "stash":
         return {"scrap":2,"tape":1}
     if kind == "heater":
@@ -33829,6 +34003,8 @@ func _base_build_costs(kind):
     return {}
 
 func _base_object_name(kind):
+    if kind == "workbench":
+        return "ВЕРСТАК"
     if kind == "stash":
         return "БАЗОВЫЙ ЯЩИК"
     if kind == "heater":
@@ -33886,6 +34062,7 @@ func _sanitize_base_objects():
             and kind != "cot"
             and kind != "bedroll"
             and kind != "barricade"
+            and kind != "workbench"
         ):
             continue
 
@@ -34140,6 +34317,14 @@ func _spawn_base_object(rec):
         fire_light.energy = 0.86
         fire_light.color = Color(1.0,0.48,0.20)
         node.add_child(fire_light)
+
+    elif kind == "workbench":
+        # 1.40: a workbench of one's own - the whole bench recipe list at home
+        node.add_to_group("interactable")
+        node.set_meta("interaction_type","workbench")
+        node.set_meta("display_name","Верстак")
+        node.set_meta("interaction_radius",70.0)
+        _world_prop_sprite("workbench",node,Vector2(0,-3),0,0.90)
 
     elif kind == "rain_collector":
         node.add_to_group("interactable")
@@ -34398,6 +34583,8 @@ func _deploy_bedroll():
 
 
 func _base_refund_for(kind):
+    if kind == "workbench":
+        return {"scrap":2,"nails":1}
     if kind == "stash":
         return {"scrap":1}
     if kind == "heater":
@@ -35235,6 +35422,7 @@ func _create_base_build_ui():
     _make_button(base_build_panel,Vector2(12,147),Vector2(108,30),"БАРРИКАДА",_build_base_object.bind("barricade"))
     _make_button(base_build_panel,Vector2(132,147),Vector2(108,30),"КОСТЁР",_build_base_object.bind("campfire"))
     _make_button(base_build_panel,Vector2(12,183),Vector2(108,30),"ДОЖДЕСБОР",_build_base_object.bind("rain_collector"))
+    _make_button(base_build_panel,Vector2(132,183),Vector2(108,30),"ВЕРСТАК",_build_base_object.bind("workbench"))
 
     base_build_status = Label.new()
     base_build_status.position = Vector2(12,220)
@@ -35260,12 +35448,14 @@ func _refresh_base_build_ui():
 Ящик: %s
 Обогрев: %s
 Костёр: %s
-Дождесбор: %s" % [
+Дождесбор: %s
+Верстак: %s" % [
         shelter_text,
         _base_cost_text("stash"),
         _base_cost_text("heater"),
         _base_cost_text("campfire"),
-        _base_cost_text("rain_collector")
+        _base_cost_text("rain_collector"),
+        _base_cost_text("workbench")
     ]
 
 func _open_base_build():
@@ -36907,6 +37097,7 @@ func _save_state():
         "scene_era":true,
         "map_footprints":_sanitize_map_footprints(map_footprints),
         "field_hints":field_hints.state() if field_hints != null else field_hints_saved,
+        "known_schematics":known_schematics.duplicate(),
         "discovered_pois":discovered_pois,
         "faction_state":faction_state,
         "expedition_journal":expedition_journal,
@@ -37174,6 +37365,12 @@ func _load_state():
         scene_legacy_chunks = _scene_legacy_snapshot(parsed)
     map_footprints = _sanitize_map_footprints(parsed.get("map_footprints",{}))
     field_hints_saved = parsed.get("field_hints",{}) if typeof(parsed.get("field_hints",{})) == TYPE_DICTIONARY else {}
+    known_schematics = {}
+    var raw_schematics = parsed.get("known_schematics",{})
+    if typeof(raw_schematics) == TYPE_DICTIONARY:
+        for k in raw_schematics:
+            if SCHEMATIC_NAMES.has(str(k)):
+                known_schematics[str(k)] = true
     if field_hints != null:
         field_hints.load_state(field_hints_saved)
     discovered_pois = parsed.get("discovered_pois",{})

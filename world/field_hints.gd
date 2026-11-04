@@ -326,6 +326,9 @@ func _check_hints() -> void:
     var items = game.inventory_entries.size()
     if _items_seen >= 0 and items > _items_seen:
         hint("inventory", "{inventory} — инвентарь. ПКМ по предмету — использовать: пить, есть, перевязать.")
+    # 1.40: the backpack's own workshop
+    if game.has_method("_inventory_count") and game._inventory_count("cloth") >= 2:
+        hint("craft", "{craft} — крафт руками: бинт из двух тканей, шина, простое снаряжение. Сложное — на верстаке; свой можно поставить дома ({base_build}).")
     _items_seen = items
     for e in get_tree().get_nodes_in_group("infected"):
         if is_instance_valid(e) and e.global_position.distance_to(game.player.global_position) < 260.0:

@@ -78,6 +78,8 @@ const ITEM_CATEGORIES = {
     "cap":"household","wool_hat":"household","light_jacket":"household","rain_jacket":"technical","insulated_parka":"technical","storm_poncho":"technical",
     "field_backpack":"technical","hiking_backpack":"technical","expedition_pack":"technical","bedroll":"technical",
     "makarov_extmag":"parts","shotgun_exttube":"parts","akm_extmag":"parts","muzzle_brake":"parts","suppressor":"parts",
+    "nails":"parts","wire":"electronics","alcohol":"medicine","gunpowder":"ammo","tool_kit":"tools",
+    "sch_gunsmith":"parts","sch_reload":"ammo","sch_tech":"technical","sch_tailor":"technical","sch_medic":"medicine",
     "old_checkpoint_documents":"strategic","military_radio_station":"strategic",
     "generator_control_unit":"strategic","laboratory_analyzer":"strategic"
 }

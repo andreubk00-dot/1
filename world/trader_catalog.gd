@@ -18,7 +18,9 @@ const BASE_VALUES = {
     "hiking_backpack":92,"expedition_pack":155,"trauma_kit":42,"emergency_ration":14,
     "makarov_extmag":36,"shotgun_exttube":42,"akm_extmag":60,"muzzle_brake":48,"suppressor":72,
     "sterile_bandage":10,"splint":9,"antiseptic":18,"painkillers":14,"antibiotics":26,
-    "firewood":3,"dirty_water":1,"grain":5,"herbs":4,"hot_meal":10,"herbal_tea":8
+    "firewood":3,"dirty_water":1,"grain":5,"herbs":4,"hot_meal":10,"herbal_tea":8,
+    "nails":3,"wire":4,"alcohol":9,"gunpowder":14,"tool_kit":46,
+    "sch_gunsmith":70,"sch_tailor":40,"sch_medic":45,"sch_tech":50,"sch_reload":75
 }
 
 const TRADERS = {
@@ -56,7 +58,9 @@ const TRADERS = {
             {"id":"makarov","qty":1,"tier":"known"},{"id":"tt33","qty":1,"tier":"known"},
             {"id":"shotgun","qty":1,"tier":"reliable"},{"id":"sks","qty":1,"tier":"reliable"},
             {"id":"akm","qty":1,"tier":"trusted"},{"id":"aks74u","qty":1,"tier":"trusted"},
-            {"id":"muzzle_brake","qty":1,"tier":"reliable"},{"id":"makarov_extmag","qty":2,"tier":"reliable"}
+            {"id":"muzzle_brake","qty":1,"tier":"reliable"},{"id":"makarov_extmag","qty":2,"tier":"reliable"},
+            {"id":"gunpowder","qty":4,"tier":"known"},{"id":"sch_reload","qty":1,"tier":"reliable"},
+            {"id":"sch_gunsmith","qty":1,"tier":"trusted"}
         ]
     },
     "rubezh_quartermaster":{
@@ -79,6 +83,8 @@ const TRADERS = {
             {"id":"repair_kit","qty":6,"tier":"known"},{"id":"water_filter","qty":6,"tier":"known"},
             {"id":"flashlight","qty":4,"tier":"outsider"},{"id":"water_canister","qty":3,"tier":"known"},
             {"id":"crowbar","qty":2,"tier":"outsider"},
+            {"id":"nails","qty":20,"tier":"outsider"},{"id":"wire","qty":10,"tier":"outsider"},
+            {"id":"tool_kit","qty":1,"tier":"known"},{"id":"sch_tech","qty":1,"tier":"reliable"},
             {"id":"makarov_extmag","qty":2,"tier":"reliable"},{"id":"shotgun_exttube","qty":2,"tier":"reliable"},
             {"id":"akm_extmag","qty":1,"tier":"trusted"},{"id":"muzzle_brake","qty":2,"tier":"reliable"}
         ]
@@ -92,6 +98,7 @@ const TRADERS = {
             {"id":"field_rig","qty":2,"tier":"known"},{"id":"bedroll","qty":2,"tier":"known"},
             {"id":"rain_jacket","qty":2,"tier":"known"},{"id":"storm_poncho","qty":1,"tier":"reliable"},
             {"id":"expedition_pack","qty":1,"tier":"reliable"},{"id":"assault_rig","qty":1,"tier":"trusted"},
+            {"id":"sch_tailor","qty":1,"tier":"known"},
             {"id":"suppressor","qty":1,"tier":"trusted"}
         ]
     },
@@ -103,7 +110,8 @@ const TRADERS = {
             {"id":"bandage","qty":16,"tier":"outsider"},{"id":"sterile_bandage","qty":10,"tier":"known"},
             {"id":"antiseptic","qty":8,"tier":"known"},{"id":"painkillers","qty":8,"tier":"known"},
             {"id":"antibiotics","qty":5,"tier":"reliable"},{"id":"trauma_kit","qty":2,"tier":"reliable"},
-            {"id":"water","qty":12,"tier":"outsider"},{"id":"splint","qty":3,"tier":"outsider"}
+            {"id":"water","qty":12,"tier":"outsider"},{"id":"splint","qty":3,"tier":"outsider"},
+            {"id":"alcohol","qty":4,"tier":"known"},{"id":"sch_medic","qty":1,"tier":"reliable"}
         ]
     },
     "lazaret_medic":{
