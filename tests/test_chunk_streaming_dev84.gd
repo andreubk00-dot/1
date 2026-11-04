@@ -34,8 +34,12 @@ func run():
     for leg in [Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT]:
         game.qa_forced_move_direction = leg
         game.qa_locked_aim = leg
-        for i in range(60 * 26):
-            await physics_frame
+        # the stream works in _process (one sector a rendered frame); headless,
+        # several rendered frames can fall between two physics steps, so the
+        # count is taken per rendered frame while the walk runs on physics time
+        var leg_start = Engine.get_physics_frames()
+        while Engine.get_physics_frames() - leg_start < 60 * 26:
+            await process_frame
             var keys = game.loaded_chunks.keys()
             var built = 0
             for k in keys:
@@ -61,8 +65,7 @@ func run():
     game.qa_forced_move_direction = Vector2.ZERO
     check(crossings >= 3, "the walk crossed only %d borders" % crossings)
     check(worst_built <= 1, "%d sectors built in one frame" % worst_built)
-    # (two physics steps can share a rendered frame after a long one)
-    check(worst_freed <= 2, "%d sectors freed in one frame" % worst_freed)
+    check(worst_freed <= 1, "%d sectors freed in one frame" % worst_freed)
     # 9 around him + 5 ahead at a corner + one waiting to be freed + slack
     check(max_loaded <= 16, "%d sectors loaded at once" % max_loaded)
     print("CHUNK STREAMING dev84: ", checks, " checks, ", failures, " failures (crossings=", crossings, " max_loaded=", max_loaded, ")")
