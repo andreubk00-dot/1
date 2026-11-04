@@ -103,6 +103,8 @@ const SURVIVOR_CELL = 128
 # 0.5 / 1.28 makes one texel exactly one screen pixel inside the 1.28x player
 # visual - the old 0.5 showed each texel 1.28 px wide, unevenly doubled
 const SURVIVOR_SPRITE_SCALE = 0.390625
+# where the figure's feet stand inside the visual node: sprite y -4 + (row 92 - 64) * scale
+const SURVIVOR_FEET_Y = 7.0
 # 0.77: original 3D-rig infected use the same high-density cell approach as the survivor.
 const INFECTED_CELL = 128
 # variants 0-3 share the base sheets; each body from 4 up has its own pair
@@ -6638,14 +6640,16 @@ func _create_player():
     player_visual.position = Vector2(0,2)
     player.add_child(player_visual)
 
+    # 1.42: under the feet (the sprite's row 92 lands at y 7), as wide as the
+    # stance - it lay a step below him and twice his width
     pv_shadow = _ellipse(
-        Vector2(-1,14),
-        12,
-        4,
-        Color(0.02,0.02,0.02,0.26),
+        Vector2(0,SURVIVOR_FEET_Y),
+        8,
+        2.6,
+        Color(0.02,0.02,0.02,0.34),
         player_visual
     )
-    pv_shadow.scale = Vector2(1.35,1.35)
+    pv_shadow.scale = Vector2(1.0,1.0)
     pv_shadow.z_index = -30
 
     pv_modern_survivor_sprite = Sprite2D.new()
@@ -7291,8 +7295,8 @@ func _update_player_visuals(delta):
     pose_offset = pose_offset.snapped(Vector2.ONE * (0.5 / PLAYER_VISUAL_SCALE))
 
     pv_shadow.position = Vector2(
-        -1 + side_shift * 0.04,
-        14 + body_bob * 0.03
+        side_shift * 0.04,
+        SURVIVOR_FEET_Y + body_bob * 0.03
     )
     pv_shadow.scale = Vector2(
         1.0 - abs(step) * 0.008 * blend,
@@ -11300,9 +11304,28 @@ func _icon_tile_style(fill:Color,edge:Color):
     st.set_corner_radius_all(1)
     return st
 
+var craft_list_key = ""
+
 func _rebuild_crafting_ui():
     if craft_list == null:
         return
+
+    # 1.42: the tiles are made once per set of known schematics and station;
+    # after that a refresh only re-sorts them (ready first) and restyles -
+    # rebuilding 34 tiles cost ~10 ms every time the window opened
+    var key = "%s|%s|%d" % [crafting_station,str(known_schematics.keys()),recipe_defs.size()]
+    if key == craft_list_key and craft_list.get_child_count() > 0:
+        for grid in craft_list.get_children():
+            if not (grid is GridContainer):
+                continue
+            var tiles = grid.get_children()
+            tiles.sort_custom(func(a,b): return _recipe_sort_key(str(a.get_meta("recipe_id",""))) < _recipe_sort_key(str(b.get_meta("recipe_id",""))))
+            for i in range(tiles.size()):
+                grid.move_child(tiles[i],i)
+        _refresh_crafting_details()
+        _refresh_recipe_button_states()
+        return
+    craft_list_key = key
 
     for child in craft_list.get_children():
         craft_list.remove_child(child)
@@ -19178,11 +19201,21 @@ func _take_all_container():
 
 
 func _rebuild_grid(control, entries, gw, gh, is_inventory):
+    # 1.42: the empty cells stay (they only change with the grid's size); the
+    # items are rebuilt. Remaking 40-64 cell buttons with their styles was half
+    # of every inventory refresh.
+    var dims = "%d:%d:%s" % [gw,gh,is_inventory]
+    var keep_bg = str(control.get_meta("grid_bg_dims","")) == dims
     for child in control.get_children():
+        if keep_bg and child.has_meta("grid_bg"):
+            continue
         control.remove_child(child)
         child.queue_free()
+    control.set_meta("grid_bg_dims",dims)
 
     for y in range(gh):
+        if keep_bg:
+            break
         for x in range(gw):
             if is_inventory:
                 var cell_button = Button.new()
@@ -19192,6 +19225,7 @@ func _rebuild_grid(control, entries, gw, gh, is_inventory):
                 _style_item_button(cell_button,false)
                 cell_button.modulate = Color(0.76,0.79,0.76)
                 cell_button.pressed.connect(_inventory_cell_clicked.bind(x,y))
+                cell_button.set_meta("grid_bg",true)
                 control.add_child(cell_button)
                 cell_button.size = Vector2(CELL - 2,CELL - 2)
             else:
@@ -19199,6 +19233,7 @@ func _rebuild_grid(control, entries, gw, gh, is_inventory):
                     Vector2(x * CELL,y * CELL),
                     Vector2(CELL - 2,CELL - 2)
                 )
+                cell.set_meta("grid_bg",true)
                 control.add_child(cell)
 
     for i in range(entries.size()):
@@ -23585,6 +23620,43 @@ bool shown(vec2 lp) {
     }
     return true;
 }
+// 1.42: weathering by world position - no lot repeats the one beside it
+float gw_h(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+float gw_n(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(gw_h(i), gw_h(i + vec2(1, 0)), f.x), mix(gw_h(i + vec2(0, 1)), gw_h(i + vec2(1, 1)), f.x), f.y);
+}
+vec3 ground_weather(vec3 c, vec2 wp) {
+    vec2 tp = floor(wp * 2.0) * 0.5;
+    float lum = dot(c, vec3(0.30, 0.59, 0.11));
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    bool hard = sat < 0.09 && lum < 0.62;
+    // whole lots a shade lighter or darker
+    float broad = gw_n(tp / 260.0) * 0.6 + gw_n(tp / 90.0 + 17.0) * 0.4;
+    float k = mix(0.84, 1.12, broad);
+    if (hard) {
+        // patched asphalt: a few crisp, darker rectangles per lot
+        vec2 cs = vec2(28.0, 18.0);
+        vec2 cell = floor(tp / cs);
+        if (gw_h(cell + 3.1) > 0.88) {
+            vec2 f = fract(tp / cs);
+            vec2 lo = vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.3;
+            vec2 hi = lo + 0.45 + gw_h(cell + 9.0) * 0.2;
+            if (f.x > lo.x && f.x < hi.x && f.y > lo.y && f.y < hi.y) k *= 0.82;
+        }
+        // damp and oil: irregular dark blotches with a soft rim
+        float blot = gw_n(tp / 38.0 + 7.0) * 0.7 + gw_n(tp / 11.0 + 3.0) * 0.3;
+        k *= 1.0 - smoothstep(0.70, 0.80, blot) * 0.14;
+        // sun-bleached rises, a hint warmer
+        c = mix(c, c * vec3(1.03, 1.01, 0.97), smoothstep(0.55, 0.85, broad));
+    } else {
+        // grass and earth: greener in the hollows, drier on the rises
+        float dry = gw_n(tp / 140.0 + 41.0);
+        c = mix(c * vec3(0.94, 1.04, 0.92), c * vec3(1.06, 1.0, 0.88), dry);
+    }
+    k *= 0.975 + gw_h(tp) * 0.05;
+    return c * k;
+}
 void vertex() { local = VERTEX; }
 void fragment() {
     vec2 t = floor(local);
@@ -23608,6 +23680,7 @@ void fragment() {
     if (fast == -1) discard;
     if (fast == 1) {
         COLOR = texture(TEXTURE, UV);
+        COLOR.rgb = ground_weather(COLOR.rgb, world_origin + lp);
     } else {
         bool on = shown(lp);
         if (!on) {
@@ -23629,6 +23702,7 @@ void fragment() {
                     c.rgb = min(c.rgb * 1.18 + 0.03, vec3(1.0));
                 }
             }
+            c.rgb = ground_weather(c.rgb, world_origin + lp);
             COLOR = c;
         }
     }
@@ -30838,7 +30912,8 @@ func _spawn_enemy(chunk,coord,spawn_id,local_pos,enemy_kind = "normal",encounter
     enemy.add_child(visual)
     enemy.set_meta("visual_node",visual)
 
-    var shadow = _ellipse(Vector2(0,12),10,4,Color(0.02,0.02,0.02,0.26),enemy)
+    # 1.42: under the feet (sprite y -7 + (row 92 - 64) * 0.5 = 7), not a step below
+    var shadow = _ellipse(Vector2(0,7),10,3.2,Color(0.02,0.02,0.02,0.32),enemy)
     shadow.z_index = -2
     enemy.set_meta("infected_shadow",shadow)
 
@@ -33191,9 +33266,47 @@ const WET_GROUND_SHADER = """shader_type canvas_item;
 uniform float wet = 0.0;
 varying vec2 wpos;
 float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// 1.42: weathering by world position - no lot repeats the one beside it
+float gw_h(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+float gw_n(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(gw_h(i), gw_h(i + vec2(1, 0)), f.x), mix(gw_h(i + vec2(0, 1)), gw_h(i + vec2(1, 1)), f.x), f.y);
+}
+vec3 ground_weather(vec3 c, vec2 wp) {
+    vec2 tp = floor(wp * 2.0) * 0.5;
+    float lum = dot(c, vec3(0.30, 0.59, 0.11));
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    bool hard = sat < 0.09 && lum < 0.62;
+    // whole lots a shade lighter or darker
+    float broad = gw_n(tp / 260.0) * 0.6 + gw_n(tp / 90.0 + 17.0) * 0.4;
+    float k = mix(0.84, 1.12, broad);
+    if (hard) {
+        // patched asphalt: a few crisp, darker rectangles per lot
+        vec2 cs = vec2(28.0, 18.0);
+        vec2 cell = floor(tp / cs);
+        if (gw_h(cell + 3.1) > 0.88) {
+            vec2 f = fract(tp / cs);
+            vec2 lo = vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.3;
+            vec2 hi = lo + 0.45 + gw_h(cell + 9.0) * 0.2;
+            if (f.x > lo.x && f.x < hi.x && f.y > lo.y && f.y < hi.y) k *= 0.82;
+        }
+        // damp and oil: irregular dark blotches with a soft rim
+        float blot = gw_n(tp / 38.0 + 7.0) * 0.7 + gw_n(tp / 11.0 + 3.0) * 0.3;
+        k *= 1.0 - smoothstep(0.70, 0.80, blot) * 0.14;
+        // sun-bleached rises, a hint warmer
+        c = mix(c, c * vec3(1.03, 1.01, 0.97), smoothstep(0.55, 0.85, broad));
+    } else {
+        // grass and earth: greener in the hollows, drier on the rises
+        float dry = gw_n(tp / 140.0 + 41.0);
+        c = mix(c * vec3(0.94, 1.04, 0.92), c * vec3(1.06, 1.0, 0.88), dry);
+    }
+    k *= 0.975 + gw_h(tp) * 0.05;
+    return c * k;
+}
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
 void fragment() {
     vec4 c = COLOR;
+    c.rgb = ground_weather(c.rgb, wpos);
     if (wet > 0.001) {
         float lum = dot(c.rgb, vec3(0.30, 0.59, 0.11));
         float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
@@ -37170,13 +37283,21 @@ func _open_contract_board(faction_id:String,npc_name:String,npc_id:String = ""):
     contract_project_mode = false
     contract_open = true
     _play_ui_sfx("open")
-    ContractSystem.ensure_state(faction_state,world_day)
+    # (the board refresh below brings the contract state up to date itself)
     if active_contract_npc_id == VerticalSlice.DOCTOR_NPC_ID and VerticalSlice.mark_doctor_met(faction_state,world_day):
         ContractSystem.refresh_offers(faction_state,world_day,true)
         _record_world_news("shortage","lazaret","Доктор Миронова подтверждает дефицит: Лазарету нужен медицинский груз и человек на аварийную связь.",world_day,int(world_minutes),false)
         _set_survival_feedback("МИРОНОВА • аварийный заказ добавлен на доску",2.8)
     _record_named_npc_interaction(active_contract_npc_id,"contract_board","Разговор о поручениях поселения.",0)
     _refresh_contract_ui()
+
+func _board_offers_cached() -> Array:
+    var contracts = faction_state.get("contracts",{})
+    if typeof(contracts) != TYPE_DICTIONARY:
+        return ContractSystem.offers_for_board(faction_state,active_contract_faction,active_contract_npc_id,world_day)
+    if ContractCatalog.is_personal_board(active_contract_npc_id):
+        return contracts.get("personal_offers",{}).get(active_contract_npc_id,[]).duplicate(true)
+    return contracts.get("offers",{}).get(active_contract_faction,[]).duplicate(true)
 
 func _close_contract_board():
     if contract_open:
@@ -37402,7 +37523,9 @@ func _refresh_contract_ui():
     var selected_index = -1
     var active_contracts = ContractSystem.active_for_board(faction_state,active_contract_faction,active_contract_npc_id)
     if active_contracts.is_empty():
-        var offers = ContractSystem.offers_for_board(faction_state,active_contract_faction,active_contract_npc_id,world_day)
+        # 1.42: the offers were just refreshed above - read them, don't rebuild all
+        # factions' candidate lists a second time (it doubled the open time)
+        var offers = _board_offers_cached()
         for contract in offers:
             var offer_prefix = "[ЛИЧНО]"
             if str(contract.get("owner_npc_id","")) == "":

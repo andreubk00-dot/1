@@ -33,7 +33,14 @@ func run() -> void:
     check(main.trader_panel.visible,"trader panel not visible")
     check(main.trader_stock_list.item_count > 0,"trader UI has no finite stock rows")
     check(main.trader_title.text.find("МИША") >= 0,"trader title does not show authored NPC")
-    check(main.trader_subtitle.text.find("Талоны:") >= 0,"trader subtitle does not expose currency")
+    # 1.42: the talons are a coin and a number in the stats strip, its meaning on hover
+    var coin_chip = false
+    for chip in main.trader_stat_strip.get_children():
+        if str(chip.tooltip_text) == "Ваши талоны":
+            for l in chip.get_children():
+                if l is Label and l.text == str(int(main.faction_state.get("currency_tickets",0))):
+                    coin_chip = true
+    check(coin_chip,"trader stats do not expose currency")
 
     # Exercise the real UI transaction handlers, not only pure economy functions.
     main.faction_state["currency_tickets"] = 1000

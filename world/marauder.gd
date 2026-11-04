@@ -159,9 +159,10 @@ func _ready() -> void:
     var pts = PackedVector2Array()
     for i in range(16):
         var a = TAU * i / 16.0
-        pts.append(Vector2(cos(a) * 9.0, 12.0 + sin(a) * 3.5))
+        # 1.42: under the feet (sprite y -7.5 + row 92 at 0.5 = 6.5)
+        pts.append(Vector2(cos(a) * 9.0, 6.5 + sin(a) * 3.0))
     shadow.polygon = pts
-    shadow.color = Color(0.02, 0.02, 0.02, 0.26)
+    shadow.color = Color(0.02, 0.02, 0.02, 0.32)
     shadow.z_index = -2
     add_child(shadow)
     sprite = Sprite2D.new()
