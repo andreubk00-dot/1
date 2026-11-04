@@ -426,7 +426,8 @@ var current_weapon_instance_id = ""
 var equipped_melee_id = ""
 # 1.18-dev3: quickbar is a real loadout instead of a hard-coded showcase of the old arsenal.
 # Any firearm or melee item can occupy any of the six slots; bindings persist in saves.
-var quick_slot_ids = ["makarov","shotgun","akm","combat_knife","steel_pipe","fire_axe"]
+var quick_slot_ids = ["makarov","","","combat_knife","bandage","water"]
+var inv_quick_buttons = []
 var melee_cooldown = 0.0
 var melee_swing_time = 0.0
 var melee_swing_duration = 0.22
@@ -4565,31 +4566,27 @@ func _update_hud_focus(delta):
         # quick to appear, slow to leave
         panel.modulate.a = move_toward(panel.modulate.a,target,delta * (5.0 if target > panel.modulate.a else 0.8))
 
+const QUICK_SLOT_DEFAULTS = ["makarov","","","combat_knife","bandage","water"]
+
+# dev87: the quick bar is free - any item but loose ammunition (a pistol, a
+# knife, a bandage, a bottle, a grenade) sits under a digit key
 func _quick_slot_valid_item(id):
     if not item_defs.has(id):
         return false
-    var category = str(item_defs[id].get("category",""))
-    return category == "weapon" or category == "melee"
+    return str(item_defs[id].get("category","")) != "ammo"
 
 func _sanitize_quick_slot_ids(raw):
-    var defaults = ["makarov","shotgun","akm","combat_knife","steel_pipe","fire_axe"]
     if typeof(raw) != TYPE_ARRAY:
-        return defaults.duplicate()
-
+        return QUICK_SLOT_DEFAULTS.duplicate()
     var result = []
     var used = {}
     for i in range(6):
         var id = str(raw[i]) if i < raw.size() else ""
         if not _quick_slot_valid_item(id) or used.has(id):
-            id = str(defaults[i])
-            if used.has(id):
-                id = ""
-                for fallback_id in defaults:
-                    if not used.has(fallback_id):
-                        id = str(fallback_id)
-                        break
+            id = ""
         result.append(id)
-        used[id] = true
+        if id != "":
+            used[id] = true
     return result
 
 func _quick_slot_item(slot):
@@ -4613,6 +4610,14 @@ func _refresh_hud_quick_slot_binding(index):
         button.tooltip_text = _quick_slot_tooltip(index,id)
     hud_quick_slots[index] = slot
 
+func _quick_slots_changed(indices):
+    for i in indices:
+        _refresh_hud_quick_slot_binding(int(i))
+    if hud_world_root != null:
+        _update_hud()
+    if inv_quick_buttons.size() > 0 and inventory_open:
+        call_deferred("_refresh_inventory_quick_row")
+
 func _assign_quick_slot(slot,item_id):
     var index = int(slot) - 1
     var id = str(item_id)
@@ -4626,15 +4631,31 @@ func _assign_quick_slot(slot,item_id):
 
     var displaced = str(quick_slot_ids[index])
     quick_slot_ids[index] = id
+    var changed = [index]
     if previous_index >= 0:
         quick_slot_ids[previous_index] = displaced
-
-    _refresh_hud_quick_slot_binding(index)
-    if previous_index >= 0:
-        _refresh_hud_quick_slot_binding(previous_index)
-    if hud_world_root != null:
-        _update_hud()
+        changed.append(previous_index)
+    _quick_slots_changed(changed)
     return true
+
+func _clear_quick_slot(slot):
+    var index = int(slot) - 1
+    if index < 0 or index >= 6:
+        return false
+    quick_slot_ids = _sanitize_quick_slot_ids(quick_slot_ids)
+    if str(quick_slot_ids[index]) == "":
+        return false
+    quick_slot_ids[index] = ""
+    _quick_slots_changed([index])
+    return true
+
+func _quick_slot_stock(id):
+    # how many of a stackable the bag holds (the badge on the slot)
+    var total = 0
+    for entry in inventory_entries:
+        if str(entry.get("id","")) == id:
+            total += int(entry.get("qty",1))
+    return total
 
 func _inventory_item_action_mode():
     if not inventory_open:
@@ -4665,6 +4686,8 @@ func _select_quick_slot(slot):
             return false
         var selected_id = str(inventory_entries[selected_inventory_index].get("id",""))
         if not _quick_slot_valid_item(selected_id):
+            if inv_details != null:
+                inv_details.text = "Патроны в быстрый слот не кладутся: они идут в магазин при перезарядке."
             return false
         if _assign_quick_slot(slot_index,selected_id):
             if inv_details != null:
@@ -4674,17 +4697,45 @@ func _select_quick_slot(slot):
         return false
 
     var id = _quick_slot_item(slot_index)
-    if id != "" and _inventory_has_item(id):
-        var category = str(item_defs[id].get("category",""))
-        if category == "weapon":
-            _switch_weapon(id)
-            return true
-        if category == "melee":
-            _switch_melee(id)
-            return true
+    if id == "":
+        _set_survival_feedback("Слот %d пуст: перетащи в него предмет из инвентаря" % slot_index,1.6)
+        return false
+    if not _inventory_has_item(id):
+        _set_survival_feedback("%s — нет в рюкзаке" % str(item_defs[id].get("name",id)),1.4)
+        return false
+    var category = str(item_defs[id].get("category",""))
+    if category == "weapon":
+        _switch_weapon(id)
+        return true
+    if category == "melee":
+        _switch_melee(id)
+        return true
+    return _use_quick_slot_item(id)
 
-    _set_survival_feedback("Предмет быстрого слота отсутствует в инвентаре",1.4)
-    return false
+func _use_quick_slot_item(id):
+    # a bandage, a bottle, a can: used straight from the bag, as by a right click
+    if str(item_defs[id].get("use","")) == "":
+        _set_survival_feedback("%s — это не используется с пояса" % str(item_defs[id].get("name",id)),1.5)
+        return false
+    var index = -1
+    for i in range(inventory_entries.size()):
+        if str(inventory_entries[i].get("id","")) == id:
+            index = i
+            break
+    if index < 0:
+        return false
+    var before_selected = selected_inventory_index
+    var before_text = inv_details.text if inv_details != null else ""
+    selected_inventory_index = index
+    _use_selected_inventory()
+    # "not needed now" lands in the bag's details line - with the bag shut
+    # the survivor reads it over the bar instead
+    if inv_details != null and inv_details.text != before_text and not inventory_open:
+        _set_survival_feedback(inv_details.text,1.8)
+    selected_inventory_index = before_selected if before_selected < inventory_entries.size() else -1
+    if hud_world_root != null:
+        _update_hud()
+    return true
 
 func _rig_quick_valid_item(id):
     return item_defs.has(id) and bool(item_defs[id].get("rig_quick",false))
@@ -11962,7 +12013,9 @@ func _hud_quick_icon_layout(item_id):
         return {"pos":Vector2(3,14),"size":Vector2(34,13)}
     if item_id == "fire_axe":
         return {"pos":Vector2(3,12),"size":Vector2(34,18)}
-    return {"pos":Vector2(7,12),"size":Vector2(24,19)}
+    # anything else - a bandage, a bottle, a can - sits whole inside the
+    # art frame (3,10 34x23) with a pixel of air round it
+    return {"pos":Vector2(5,11),"size":Vector2(30,21)}
 
 func _hud_apply_quick_slot_icon(icon,item_id):
     if icon == null:
@@ -14013,7 +14066,9 @@ func _quick_slot_keys_text() -> String:
 
 func _quick_slot_tooltip(index:int,id:String) -> String:
     var key = InputBindings.key("quick_slot_%d" % (index + 1))
-    return "%s — %s\nИнвентарь: выберите оружие и нажмите %s, чтобы заменить слот." % [key,str(item_defs.get(id,{}).get("name",id)),key]
+    if id == "":
+        return "%s — пусто\nПеретащи предмет из инвентаря в быстрый слот или выбери его и нажми %s." % [key,key]
+    return "%s — %s\nИнвентарь: перетащи другой предмет или выбери его и нажми %s." % [key,str(item_defs.get(id,{}).get("name",id)),key]
 
 func _on_bindings_changed() -> void:
     # the key badge on the interaction prompt shows the bound key
@@ -14287,7 +14342,20 @@ func _create_hud():
         active_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
         active_rail.z_index = 3
         slot_button.add_child(active_rail)
-        hud_quick_slots.append({"id":item_id,"button":slot_button,"icon":icon,"back":icon_back,"rail":active_rail,"label":slot_index_label})
+        var count_label = Label.new()
+        count_label.name = "QuickCount"
+        count_label.position = Vector2(18,24)
+        count_label.size = Vector2(18,9)
+        count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        count_label.add_theme_font_size_override("font_size",5)
+        count_label.add_theme_color_override("font_color",Color(0.96,0.89,0.66))
+        count_label.add_theme_color_override("font_outline_color",Color(0.02,0.02,0.02,1.0))
+        count_label.add_theme_constant_override("outline_size",2)
+        count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        count_label.z_index = 4
+        slot_button.add_child(count_label)
+        hud_quick_slots.append({"id":item_id,"button":slot_button,"icon":icon,"back":icon_back,"rail":active_rail,"label":slot_index_label,"count":count_label})
 
     # BOTTOM RIGHT — weapon card follows the reference: name, ammo, art/mode and durability.
     var weapon_panel = Panel.new()
@@ -14590,6 +14658,14 @@ func _update_hud():
             # a slot assigned to a gun the survivor does not have yet shows only a
             # faint ghost of it - a new player must not think the AK is theirs
             slot_icon.modulate = Color.WHITE if owned else Color(0.48,0.50,0.49,0.22)
+        var slot_count = slot.get("count",null)
+        if slot_count != null:
+            var stock = 0
+            if slot_id != "" and item_defs.has(slot_id) and not (str(item_defs[slot_id].get("category","")) in ["weapon","melee"]):
+                stock = _quick_slot_stock(slot_id)
+            var count_text = "" if stock <= 1 else str(stock)
+            if slot_count.text != count_text:
+                slot_count.text = count_text
 
     if equipped_melee_id != "" and melee_defs.has(equipped_melee_id):
         var melee = melee_defs[equipped_melee_id]
@@ -15621,8 +15697,20 @@ func _finish_inventory_drag(mouse_pos):
     var source = inventory_drag_candidate_source
     var source_index = inventory_drag_candidate_index
     var moved = false
+    var quick_target = _inventory_quick_slot_at(mouse_pos)
 
-    if inv_grid_control != null and inv_grid_control.get_global_rect().has_point(mouse_pos):
+    if quick_target > 0:
+        if source == "inventory" and source_index >= 0 and source_index < inventory_entries.size():
+            var qid = str(inventory_entries[source_index].get("id",""))
+            if _quick_slot_valid_item(qid) and _assign_quick_slot(quick_target,qid):
+                selected_inventory_index = source_index
+                moved = true
+            elif inv_details != null:
+                inv_details.text = "Патроны в быстрый слот не кладутся: они идут в магазин при перезарядке."
+        elif source == "container" and inv_details != null:
+            inv_details.text = "Сначала забери предмет в рюкзак, потом клади в быстрый слот."
+
+    elif inv_grid_control != null and inv_grid_control.get_global_rect().has_point(mouse_pos):
         var cell = _grid_cell_from_mouse(inv_grid_control,mouse_pos)
 
         if source == "inventory":
@@ -15646,6 +15734,102 @@ func _finish_inventory_drag(mouse_pos):
         call_deferred("_refresh_inventory_ui")
 
 
+
+func _inventory_quick_slot_at(mouse_pos):
+    if inventory_panel == null or not inventory_panel.visible:
+        return 0
+    for i in range(inv_quick_buttons.size()):
+        var b = inv_quick_buttons[i]
+        if is_instance_valid(b) and b.get_global_rect().has_point(mouse_pos):
+            return i + 1
+    return 0
+
+func _inventory_quick_gui_input(event,slot):
+    if not (event is InputEventMouseButton) or not event.pressed:
+        return
+    if event.button_index == MOUSE_BUTTON_RIGHT:
+        get_viewport().set_input_as_handled()
+        if _clear_quick_slot(slot) and inv_details != null:
+            inv_details.text = "Быстрый слот %d освобождён." % int(slot)
+        _refresh_inventory_quick_row()
+    elif event.button_index == MOUSE_BUTTON_LEFT:
+        # a click with a thing chosen in the bag puts it here, as its digit does
+        if selected_inventory_index >= 0 and selected_inventory_index < inventory_entries.size():
+            _select_quick_slot(slot)
+
+func _refresh_inventory_quick_row():
+    quick_slot_ids = _sanitize_quick_slot_ids(quick_slot_ids)
+    for i in range(inv_quick_buttons.size()):
+        var b = inv_quick_buttons[i]
+        if not is_instance_valid(b):
+            continue
+        for child in b.get_children():
+            b.remove_child(child)
+            child.queue_free()
+        var id = str(quick_slot_ids[i]) if i < quick_slot_ids.size() else ""
+        b.text = ""
+        b.tooltip_text = _quick_slot_tooltip(i,id)
+        var owned = id != "" and _inventory_has_item(id)
+        _style_item_button(b,false)
+        if id != "" and item_defs.has(id):
+            var icon = TextureRect.new()
+            icon.name = "Icon"
+            _fit_icon_rect(icon,_make_item_icon(id),Vector2(3,5),b.size - Vector2(6,8),1.5)
+            icon.modulate = Color.WHITE if owned else Color(0.55,0.57,0.55,0.35)
+            b.add_child(icon)
+            if not (str(item_defs[id].get("category","")) in ["weapon","melee"]):
+                var stock = _quick_slot_stock(id)
+                if stock > 1:
+                    var q = Label.new()
+                    q.text = str(stock)
+                    q.position = Vector2(b.size.x - 15,b.size.y - 12)
+                    q.size = Vector2(13,10)
+                    q.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+                    q.add_theme_font_size_override("font_size",6)
+                    q.add_theme_color_override("font_color",Color(0.96,0.89,0.66))
+                    q.add_theme_color_override("font_outline_color",Color(0.02,0.02,0.02,1.0))
+                    q.add_theme_constant_override("outline_size",2)
+                    q.mouse_filter = Control.MOUSE_FILTER_IGNORE
+                    b.add_child(q)
+        var digit = Label.new()
+        digit.text = InputBindings.short_key("quick_slot_%d" % (i + 1))
+        digit.position = Vector2(2,0)
+        digit.size = Vector2(12,9)
+        digit.add_theme_font_size_override("font_size",6)
+        digit.add_theme_color_override("font_color",Color(0.84,0.80,0.66) if owned or id == "" else Color(0.58,0.60,0.57))
+        digit.add_theme_color_override("font_outline_color",Color(0.02,0.02,0.02,1.0))
+        digit.add_theme_constant_override("outline_size",2)
+        digit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        b.add_child(digit)
+
+func _sync_hud_quick_bar_visibility():
+    # the bag's own quick row stands in for the HUD bar, which this window covers
+    if hud_world_root == null or not is_instance_valid(hud_world_root):
+        return
+    var bag = inventory_open and inventory_panel != null and inventory_panel.visible
+    for panel_name in ["QuickShell","RigQuickPockets"]:
+        var panel = hud_world_root.get_node_or_null(panel_name)
+        if panel != null:
+            panel.visible = not bag
+
+func _fit_icon_rect(rect_control,texture,box_pos,box_size,max_up = 1.0):
+    # every item picture is drawn whole inside its box: scaled down to fit,
+    # grown at most max_up times, kept in proportion and centred on whole pixels
+    rect_control.texture = texture
+    rect_control.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    rect_control.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    rect_control.stretch_mode = TextureRect.STRETCH_SCALE
+    rect_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    if texture == null:
+        rect_control.position = box_pos
+        rect_control.size = box_size
+        return
+    var native = texture.get_size()
+    var fit = min(box_size.x / max(1.0,native.x),box_size.y / max(1.0,native.y))
+    fit = min(max_up,fit)
+    var draw = Vector2(max(1.0,floor(native.x * fit)),max(1.0,floor(native.y * fit)))
+    rect_control.size = draw
+    rect_control.position = box_pos + Vector2(floor((box_size.x - draw.x) * 0.5),floor((box_size.y - draw.y) * 0.5))
 
 func _inventory_item_gui_input(event,index,id):
     if not (event is InputEventMouseButton):
@@ -15716,6 +15900,35 @@ func _create_inventory_ui():
     inv_grid_control.position = Vector2(16,55)
     inv_grid_control.size = Vector2(INV_W * CELL, INV_H * CELL)
     inventory_panel.add_child(inv_grid_control)
+
+    # dev87: the quick bar inside the bag (the HUD bar sits under this window):
+    # drag a thing onto a slot, right click to empty it
+    var quick_title = Label.new()
+    quick_title.position = Vector2(250,52)
+    quick_title.size = Vector2(106,12)
+    quick_title.text = "БЫСТРЫЕ СЛОТЫ"
+    quick_title.add_theme_font_size_override("font_size",7)
+    quick_title.modulate = Color(0.78,0.74,0.60)
+    inventory_panel.add_child(quick_title)
+    inv_quick_buttons.clear()
+    for qi in range(6):
+        var qb = Button.new()
+        qb.name = "InvQuick%d" % (qi + 1)
+        qb.position = Vector2(250 + (qi % 3) * 36,67 + int(qi / 3) * 36)
+        qb.size = Vector2(33,33)
+        qb.focus_mode = Control.FOCUS_NONE
+        qb.clip_contents = true
+        qb.gui_input.connect(_inventory_quick_gui_input.bind(qi + 1))
+        inventory_panel.add_child(qb)
+        inv_quick_buttons.append(qb)
+    var quick_hint = Label.new()
+    quick_hint.position = Vector2(250,141)
+    quick_hint.size = Vector2(106,52)
+    quick_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    quick_hint.text = "Перетащи сюда любой предмет. Клавиши 1–6. ПКМ — убрать."
+    quick_hint.add_theme_font_size_override("font_size",6)
+    quick_hint.modulate = Color(0.56,0.59,0.56)
+    inventory_panel.add_child(quick_hint)
 
     inv_details = Label.new()
     inv_details.position = Vector2(16,200)
@@ -18127,6 +18340,7 @@ func _close_inventory():
     inventory_panel.visible = false
     equipment_panel.visible = false
     container_panel.visible = false
+    _sync_hud_quick_bar_visibility()
     _hover_hide_item()
     _close_weapon_mod_panel(false)
 
@@ -18175,6 +18389,8 @@ func _refresh_inventory_ui():
         craft_panel.visible = crafting_open
 
     _rebuild_grid(inv_grid_control,inventory_entries,INV_W,INV_H,true)
+    _refresh_inventory_quick_row()
+    _sync_hud_quick_bar_visibility()
 
     if selected_inventory_index >= 0 and selected_inventory_index < inventory_entries.size():
         inv_details.text = _entry_description(inventory_entries[selected_inventory_index])
@@ -18249,23 +18465,8 @@ func _decorate_item_button(button,id,qty,instance_id = ""):
 
     var texture = _make_item_icon(id)
     var icon_box = TextureRect.new()
-    icon_box.texture = texture
-    icon_box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    icon_box.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-    icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-    var native_size = texture.get_size()
-    var draw_size = native_size
-    var max_size = button.size - Vector2(4,4)
-    if draw_size.x > max_size.x or draw_size.y > max_size.y:
-        var fit = min(max_size.x / draw_size.x,max_size.y / draw_size.y)
-        draw_size = Vector2(floor(draw_size.x * fit),floor(draw_size.y * fit))
-
-    icon_box.size = draw_size
-    icon_box.position = Vector2(
-        floor((button.size.x - draw_size.x) * 0.5),
-        floor((button.size.y - draw_size.y) * 0.5)
-    )
+    icon_box.name = "ItemIcon"
+    _fit_icon_rect(icon_box,texture,Vector2(2,2),button.size - Vector2(4,4))
 
     if qty > 1 and button.size.x < 30.0 and button.size.y < 30.0:
         icon_box.position += Vector2(-1,-1)
@@ -18355,14 +18556,11 @@ func _decorate_equipment_button(button,slot,id):
         button.mouse_entered.connect(_hover_show_item.bind(id,1,"equipment"))
 
         var icon_box = TextureRect.new()
-        icon_box.texture = _make_item_icon(id)
-        icon_box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-        icon_box.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
-        var native_size = icon_box.texture.get_size()
-        var fit_scale = min(1.0,min(32.0 / native_size.x,30.0 / native_size.y))
-        icon_box.size = Vector2(floor(native_size.x * fit_scale),floor(native_size.y * fit_scale))
-        icon_box.position = Vector2(6,6) + (Vector2(38,36) - icon_box.size) * 0.5
-        icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        icon_box.name = "EquipIcon"
+        # dev87: inside the dark frame with a pixel of air (it drew at native
+        # size before - a parka ran over the frame, a cap was a speck); small
+        # pictures are doubled to read at the window's 0.65
+        _fit_icon_rect(icon_box,_make_item_icon(id),icon_frame.position + Vector2(2,2),icon_frame.size - Vector2(4,4),2.0)
         button.add_child(icon_box)
     else:
         item_label.text = "[пусто]"

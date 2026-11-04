@@ -171,7 +171,8 @@ func run():
     check(military.has("tt33") and military.has("sks"), "military pool must carry legacy service arms")
     check(float(hunting_secure.get("toz34",0.0)) >= 0.10 and float(hunting_secure.get("sks",0.0)) >= 0.05, "targeted hunting pool odds are too low")
 
-    # Legacy quickbar stays deliberately stable.
+    # A legacy quickbar (from an old save) stays deliberately stable.
+    game.quick_slot_ids = ["makarov","shotgun","akm","combat_knife","steel_pipe","fire_axe"]
     game.inventory_entries = [
         {"id":"makarov","qty":1,"x":0,"y":0},
         {"id":"shotgun","qty":1,"x":2,"y":0},

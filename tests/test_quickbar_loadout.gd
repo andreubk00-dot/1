@@ -20,7 +20,7 @@ func run():
 
     check(game.quick_slot_ids.size() == 6,"quickbar must keep six bindings")
     for id in game.quick_slot_ids:
-        check(game._quick_slot_valid_item(id),"default quickbar contains invalid item: " + str(id))
+        check(id == "" or game._quick_slot_valid_item(id),"default quickbar contains invalid item: " + str(id))
 
     # New 1.18 firearms must be eligible for a real combat loadout.
     check(game._assign_quick_slot(1,"pps43"),"PPS-43 cannot be assigned to quickbar")
@@ -74,8 +74,26 @@ func run():
     var sanitized = game._sanitize_quick_slot_ids(["mosin","ammo_545","bad_id"])
     check(sanitized.size() == 6,"sanitized quickbar changed slot count")
     check(sanitized[0] == "mosin","valid saved binding was lost")
-    check(sanitized[1] == "shotgun","invalid saved binding did not fall back")
-    check(sanitized[2] == "akm","unknown saved binding did not fall back")
+    check(sanitized[1] == "","invalid saved binding was kept")
+    check(sanitized[2] == "","unknown saved binding was kept")
+    check(sanitized[3] == "" and sanitized[5] == "","a short saved bar was not padded with empty slots")
+
+    # dev87: the bar is free - any item but ammunition, used by its key
+    check(game._assign_quick_slot(3,"bandage"),"a bandage cannot sit in a quick slot")
+    check(game._assign_quick_slot(4,"water"),"water cannot sit in a quick slot")
+    game.inventory_entries = [{"id":"bandage","qty":3,"x":0,"y":0},{"id":"water","qty":1,"x":1,"y":0}]
+    game._ensure_runtime_item_instance_ids()
+    game.inventory_open = false
+    game.thirst = 30.0
+    check(game._select_quick_slot(4),"the water quick slot was not used")
+    check(game.thirst > 35.0,"the water quick slot did not drink (thirst %.0f)" % game.thirst)
+    game.bleeding = true
+    check(game._select_quick_slot(3),"the bandage quick slot was not used")
+    check(game._quick_slot_stock("bandage") == 2,"a bandage was not spent from the bag")
+    check(game._clear_quick_slot(3) and game._quick_slot_item(3) == "","a quick slot cannot be emptied")
+    check(not game._select_quick_slot(3),"an empty quick slot did something")
+    game.inventory_entries = []
+    check(not game._select_quick_slot(4),"a quick slot used a thing that is not in the bag")
 
     game.free()
     print("QUICKBAR LOADOUT: ",checks," checks, ",failures," failures")
