@@ -10837,9 +10837,13 @@ func _rebuild_salvage_ui():
         var count = _inventory_count(item_id)
         var item_name = str(item_defs.get(item_id,{}).get("name",item_id))
         var button = Button.new()
-        button.text = "%s x%d" % [item_name,count]
-        button.custom_minimum_size = Vector2(170,30)
         button.add_theme_font_size_override("font_size",7)
+        button.text = "%s ×%d" % [item_name,count]
+        button.icon = _make_item_icon(item_id)
+        button.expand_icon = true
+        button.add_theme_constant_override("icon_max_width",22)
+        button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+        button.custom_minimum_size = Vector2(170,26)
         _visual_button_style(button)
         button.pressed.connect(_select_salvage_item.bind(item_id))
         salvage_list.add_child(button)
@@ -10849,6 +10853,46 @@ func _rebuild_salvage_ui():
 
     _refresh_salvage_details()
 
+func _salvage_output_art(item_id):
+    # 1.42: what comes back, in pictures with counts
+    if salvage_details == null:
+        return
+    var art = salvage_details.get_node_or_null("SalvageArt")
+    if art == null:
+        art = Control.new()
+        art.name = "SalvageArt"
+        salvage_details.add_child(art)
+        art.position = Vector2(0,16)
+        art.size = Vector2(240,52)
+    for c in art.get_children():
+        art.remove_child(c)
+        c.queue_free()
+    var outputs = _salvage_outputs(item_id)
+    var ids = outputs.keys()
+    ids.sort()
+    var i = 0
+    for out_id in ids:
+        var cell = Panel.new()
+        cell.add_theme_stylebox_override("panel",_icon_tile_style(Color(0.03,0.036,0.036),Color(0.30,0.32,0.28)))
+        cell.tooltip_text = str(item_defs.get(str(out_id),{}).get("name",out_id))
+        cell.mouse_filter = Control.MOUSE_FILTER_PASS
+        art.add_child(cell)
+        cell.position = Vector2(i * 46,0)
+        cell.size = Vector2(42,48)
+        _item_icon_rect(cell,str(out_id),Vector2(4,3),Vector2(34,30),1.5)
+        var n = Label.new()
+        n.add_theme_font_size_override("font_size",7)
+        n.text = "×%d" % int(outputs[out_id])
+        n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        n.add_theme_color_override("font_color",Color(0.92,0.86,0.62))
+        n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        cell.add_child(n)
+        n.position = Vector2(1,33)
+        n.size = Vector2(40,12)
+        i += 1
+        if i >= 5:
+            break
+
 func _select_salvage_item(item_id):
     selected_salvage_id = str(item_id)
     _refresh_salvage_details()
@@ -10857,6 +10901,10 @@ func _refresh_salvage_details():
     if salvage_details == null:
         return
 
+    var old_art = salvage_details.get_node_or_null("SalvageArt")
+    if old_art != null:
+        for c in old_art.get_children():
+            c.queue_free()
     if selected_salvage_id == "":
         salvage_details.text = "Выбери предмет для разборки."
         if salvage_status != null:
@@ -10872,11 +10920,8 @@ func _refresh_salvage_details():
     var item_name = str(item_defs.get(selected_salvage_id,{}).get("name",selected_salvage_id))
     var count = _inventory_count(selected_salvage_id)
 
-    salvage_details.text = "%s\n\nВ наличии: %d\n\nВОЗВРАТ:\n%s" % [
-        item_name,
-        count,
-        _salvage_output_text(selected_salvage_id)
-    ]
+    salvage_details.text = "%s ×%d" % [item_name,count]
+    _salvage_output_art(selected_salvage_id)
 
     if salvage_status != null:
         if selected_salvage_id == equipped_melee_id:
@@ -11116,7 +11161,7 @@ func _create_crafting_ui():
 
     var salvage_title = Label.new()
     salvage_title.position = Vector2(14,8)
-    salvage_title.text = "РАЗБОР И ВОЗВРАТ МАТЕРИАЛОВ"
+    salvage_title.text = "РАЗБОР"
     salvage_title.add_theme_font_size_override("font_size",8)
     salvage_title.modulate = Color(0.62,0.66,0.61)
     workbench_salvage_content.add_child(salvage_title)

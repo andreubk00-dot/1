@@ -160,6 +160,14 @@ func run():
         game._refresh_crafting_details()
     await frames(3)
     await snap("craft_bench")
+    game._set_workbench_mode("salvage")
+    await frames(3)
+    for id in ["scrap", "cloth", "wire", "nails", "tool_kit"]:
+        if game._is_salvageable(id):
+            game._select_salvage_item(id)
+            break
+    await frames(3)
+    await snap("craft_salvage")
     game._close_crafting()
     game._close_inventory()
     await frames(3)
