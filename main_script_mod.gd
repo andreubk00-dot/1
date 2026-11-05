@@ -15273,7 +15273,6 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
     hover_title.modulate = _item_rarity_color(id)
 
     var lines = []
-    lines.append("Доступность: %s" % _item_rarity_label(id))
     var category = str(item.get("category",""))
     var category_names = {
         "weapon":"ОРУЖИЕ",
@@ -15288,11 +15287,11 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
         "schematic":"СХЕМА"
     }
 
-    lines.append(str(category_names.get(category,category.to_upper())))
     var hover_weight = float(item.get("weight",0.0)) * qty
     if _is_water_container_item(id):
         hover_weight += _water_container_fill_l(id,instance_id)
-    lines.append("Вес: %.2f кг" % hover_weight)
+    # 1.45: what it is, how rare, what it weighs - one line (it was three)
+    lines.append("%s • %s • %.2f кг" % [str(category_names.get(category,category.to_upper())),_item_rarity_label(id),hover_weight])
     # 1.40: what a material or a tool is for, what a schematic teaches
     if str(item.get("hint","")) != "":
         lines.append(str(item["hint"]))
@@ -15302,7 +15301,7 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
         for rid in recipe_defs:
             if str(recipe_defs[rid].get("schematic","")) == topic:
                 taught.append(str(recipe_defs[rid].get("name",rid)))
-        lines.append(("Изучено." if known_schematics.has(topic) else "ИСП.: прочитать и запомнить") + " • рецептов: %d" % taught.size())
+        lines.append(("Изучено" if known_schematics.has(topic) else "ПКМ — прочитать") + " • рецептов: %d" % taught.size())
 
     if qty > 1:
         lines.append("Количество: %d / %d" % [qty,int(item.get("stack",1))])
@@ -15311,7 +15310,7 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
         var vessel_capacity = _water_container_capacity_l(id)
         var vessel_fill = _water_container_fill_l(id,instance_id)
         lines.append("Вода: %.2f / %.2f л" % [vessel_fill,vessel_capacity])
-        lines.append("ИСП.: пить • %s в инвентаре: перелить 0.5 л" % InputBindings.key("reload"))
+        lines.append("ПКМ — глоток • %s — долить" % InputBindings.key("reload"))
     elif category == "weapon":
         var iid = _resolve_weapon_instance(id,instance_id)
         lines.append("Состояние: %d%% [%s]" % [int(_weapon_condition_value(id,iid)),_weapon_condition_state(id,iid)])
@@ -15320,13 +15319,13 @@ func _hover_show_item(id,qty=1,context="storage",instance_id=""):
             lines.append("Урон: %d   Магазин: %d/%d" % [int(w.get("damage",0)),_weapon_mag_value(id,iid),_weapon_mag_capacity(id,iid)])
             lines.append("Остановка: %s" % _weapon_stopping_label(w))
             lines.append("Моды: %s" % _weapon_mod_summary(id,iid))
-        lines.append("ПКМ: открыть управление этим экземпляром")
+        lines.append("ПКМ — модули")
     elif category == "melee":
         if melee_defs.has(id):
             var melee = melee_defs[id]
             lines.append("Урон: %d   Дистанция: %d" % [int(melee.get("damage",0)),int(melee.get("range",0))])
             lines.append("Выносливость за удар: %d   Целей: %d" % [int(melee.get("stamina",0)),int(melee.get("max_targets",1))])
-        lines.append("ИСП.: взять в руки | %s: толчок" % InputBindings.key("shove"))
+        lines.append("ПКМ — взять в руки")
     elif category == "gear":
         lines.append("Слой: %s" % _slot_name(str(item.get("slot",""))))
         var armor = int(float(item.get("armor",0.0)) * 100.0)
