@@ -3126,6 +3126,7 @@ func _ready():
     _create_hud()
     _create_developer_ui()
     _create_inventory_ui()
+    _ensure_atmosphere_layer()
     _create_trader_ui()
     _create_contract_ui()
     _create_hover_inspector()
@@ -7712,6 +7713,41 @@ func _update_pickup_fly(delta):
         f.modulate.a = 1.0 - max(0.0,t - 0.7) / 0.3
         keep.append(f)
     _pickup_fly = keep
+
+# 1.43: the whole picture is framed - the corners fall a little darker and
+# cooler, as a lens and the overcast do, and the eye settles on the middle
+# where the survivor is. Multiplied over the world, under the HUD.
+const ATMOSPHERE_VIGNETTE_SHADER = """
+shader_type canvas_item;
+render_mode blend_mul;
+uniform float strength = 0.16;
+void fragment() {
+    vec2 d = (UV - 0.5) * vec2(1.25, 1.0);
+    float r = length(d);
+    float edge = smoothstep(0.28, 0.78, r);
+    vec3 tint = mix(vec3(1.0), vec3(0.86, 0.89, 0.94), edge);
+    COLOR = vec4(tint * (1.0 - edge * strength), 1.0);
+}
+"""
+var atmosphere_rect = null
+
+func _ensure_atmosphere_layer():
+    if atmosphere_rect != null and is_instance_valid(atmosphere_rect):
+        return atmosphere_rect
+    var layer = CanvasLayer.new()
+    layer.name = "AtmosphereVignette"
+    layer.layer = 5
+    add_child(layer)
+    atmosphere_rect = ColorRect.new()
+    atmosphere_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    atmosphere_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+    var mat = ShaderMaterial.new()
+    var sh = Shader.new()
+    sh.code = ATMOSPHERE_VIGNETTE_SHADER
+    mat.shader = sh
+    atmosphere_rect.material = mat
+    layer.add_child(atmosphere_rect)
+    return atmosphere_rect
 
 func _hurt_rect_node():
     if _hurt_rect == null or not is_instance_valid(_hurt_rect):
@@ -17837,7 +17873,7 @@ func _decorate_building_art(building,sign_text,size,building_id):
                 # 1.43: a shelf, a desk, a locker the table does not list is solid too
                 var solid = _interior_prop_solid_rect(prop_sprite,kind)
                 if solid.size != Vector2.ZERO:
-                    _add_static_rect(building,solid.get_center(),solid.size)
+                    _add_prop_body(building,solid,prop_sprite)
     var s = str(sign_text).to_upper()
     if s.find("АПТЕК") >= 0:
         _add_detail_light(building,Vector2(size.x*0.22,-size.y*0.12),Color(1.0,0.68,0.36),0.72,1.10)
@@ -18652,6 +18688,51 @@ func _add_ground_decals(chunk,coord):
         spr.z_index = 1
         spr.set_meta("ground_decal",GROUND_DECAL_KINDS[idx])
         chunk.add_child(spr)
+    if atlas != null:
+        _add_gutter_decals(chunk,coord,atlas)
+
+# 1.43: what the rain washes to the kerb and leaves there - grit, scraps of
+# paper, an oil smear - in drifts along the gutters of the paved streets,
+# never out in the middle of the crossing
+func _add_gutter_decals(chunk,coord,atlas) -> void:
+    var fam = _ground_family(coord)
+    if fam == "rural" or fam == "woodland":
+        return
+    var rng = RandomNumberGenerator.new()
+    rng.seed = int(abs(coord.x * 40503 + coord.y * 81919 + 707)) + 1
+    var kerbs = [[Vector2(303,0),Vector2(0,1)],[Vector2(465,0),Vector2(0,1)],[Vector2(0,303),Vector2(1,0)],[Vector2(0,465),Vector2(1,0)]]
+    var count = 0
+    for kerb in kerbs:
+        var base:Vector2 = kerb[0]
+        var dir:Vector2 = kerb[1]
+        var drifts = rng.randi_range(1,3)
+        for d in range(drifts):
+            var t = rng.randf_range(24.0,270.0) if rng.randf() < 0.5 else rng.randf_range(500.0,744.0)
+            # a drift: two or three pieces close together along the kerb
+            for k in range(rng.randi_range(2,3)):
+                var roll = rng.randf()
+                var idx = rng.randi_range(0,2)
+                if roll < 0.45:
+                    idx = 6 + rng.randi_range(0,1)
+                elif roll < 0.58:
+                    idx = 9
+                var tex = AtlasTexture.new()
+                tex.atlas = atlas
+                tex.region = Rect2(idx * 96,0,96,64)
+                var spr = Sprite2D.new()
+                spr.texture = tex
+                spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+                var along = t + float(k) * rng.randf_range(10.0,18.0)
+                var off = rng.randf_range(-4.0,4.0)
+                spr.position = (base + dir * along + Vector2(dir.y,dir.x) * off).round()
+                var sc = rng.randf_range(0.34,0.46)
+                spr.scale = Vector2(sc,sc)
+                spr.flip_h = rng.randf() < 0.5
+                spr.z_index = 1
+                spr.set_meta("ground_decal","gutter")
+                chunk.add_child(spr)
+                count += 1
+    chunk.set_meta("gutter_decals",count)
 
 func _make_button(parent, pos, size, text, callback):
     var button = Button.new()
@@ -23071,6 +23152,7 @@ func _load_chunk(coord):
     _place_puddles(chunk,coord)
     _record_map_footprint(chunk,coord)
     _place_ether_note(chunk,coord)
+    _clear_prop_bodies_off_containers(chunk)
 
     _spawn_saved_drops_for_chunk(chunk,coord)
     _spawn_player_bodies_for_chunk(chunk,coord)
@@ -28474,16 +28556,65 @@ func _layout_stair_marks(root,origin,count = 5):
 # a mattress, debris, a can, a pile of boxes on the floor) stay walkable.
 const INTERIOR_WALKABLE_KINDS = ["floor_papers","old_mattress","wooden_debris","gas_can","medicine_boxes","med_tray","rug","blood_pool","papers_a","papers_b","glass"]
 
+func _add_prop_body(parent,rect:Rect2,sprite):
+    var body = _add_static_rect(parent,rect.get_center(),rect.size)
+    body.set_meta("prop_solid_body",true)
+    if is_instance_valid(sprite):
+        sprite.set_meta("prop_solid",true)
+        body.set_meta("prop_sprite",sprite)
+    return body
+
+# a container (a cache, a locker to search) must stand clear: a piece of
+# furniture whose new body covers one gives way - its body, and if it was
+# only filler, the piece itself
+func _clear_prop_bodies_off_containers(chunk) -> void:
+    # the raiders' base is laid out by hand (everything solid comes from its
+    # catalog): the generic bodies and filler pieces stand aside there
+    if chunk.has_meta("marauder_base"):
+        for b in chunk.find_children("*","StaticBody2D",true,false):
+            if b.has_meta("prop_solid_body"):
+                var spr = b.get_meta("prop_sprite",null)
+                if is_instance_valid(spr):
+                    spr.remove_meta("prop_solid")
+                b.queue_free()
+        for spr in chunk.find_children("*","Sprite2D",true,false):
+            if spr.has_meta("dress_fill"):
+                spr.queue_free()
+        return
+    var spots = []
+    for n in get_tree().get_nodes_in_group("interactable"):
+        if is_instance_valid(n) and str(n.get_meta("interaction_type","")) == "container" and chunk.is_ancestor_of(n):
+            spots.append(n.global_position)
+    if spots.is_empty():
+        return
+    var bodies = []
+    for b in chunk.find_children("*","StaticBody2D",true,false):
+        if b.has_meta("prop_solid_body"):
+            bodies.append(b)
+    for b in bodies:
+        var shape_node = b.get_child(0) if b.get_child_count() > 0 else null
+        if shape_node == null or not (shape_node.shape is RectangleShape2D):
+            continue
+        var sz = shape_node.shape.size
+        var r = Rect2(b.global_position - sz * 0.5,sz).grow(6.0)
+        for p in spots:
+            if r.has_point(p):
+                var spr = b.get_meta("prop_sprite",null)
+                if is_instance_valid(spr) and (spr.has_meta("dress_fill") or spr.has_meta("service_verge")):
+                    spr.queue_free()
+                b.queue_free()
+                break
+
 func _interior_kind_walkable(kind:String) -> bool:
     if kind in INTERIOR_WALKABLE_KINDS or LITTER_TO_DECAL.has(kind):
         return true
-    for flat in ["paper","litter","debris","glass","blood","rubble","stain","rug","mattress","trash","puddle","leaves","decal","mark"]:
+    for flat in ["paper","litter","debris","glass","blood","rubble","stain","rug","mattress","trash","puddle","leaves","decal","mark","wall","radiator","extinguisher","ceiling","hanging","poster"]:
         if kind.find(flat) >= 0:
             return true
     return false
 
-func _interior_prop_solid_rect(sprite,kind:String) -> Rect2:
-    if not is_instance_valid(sprite) or sprite.texture == null or _interior_kind_walkable(kind) or Engine.has_meta("qa_no_prop_solid"):
+func _interior_prop_solid_rect(sprite,kind:String,force:bool = false) -> Rect2:
+    if not is_instance_valid(sprite) or sprite.texture == null or (not force and _interior_kind_walkable(kind)) or Engine.has_meta("qa_no_prop_solid"):
         return Rect2()
     var vis = sprite.texture.get_size() * sprite.scale
     if vis.x < 6.0 or vis.y < 6.0:
@@ -28498,8 +28629,7 @@ func _archetype_prop(root,kind,pos,scale_value = 0.62,z_value = 3):
     var sprite = _world_prop_sprite(kind,root,pos,z_value,scale_value)
     var solid = _interior_prop_solid_rect(sprite,str(kind))
     if solid.size != Vector2.ZERO:
-        _add_static_rect(root,solid.get_center(),solid.size)
-        sprite.set_meta("prop_solid",true)
+        _add_prop_body(root,solid,sprite)
     # Archetype interiors use the same depth rules as the older authored interiors.
     # Without this group, large beds/cabinets could render flat over the player and
     # the 0.84 clinic pass also removed the last legacy props the QA relied on.
@@ -28722,8 +28852,60 @@ func _dress_sparse_interior(building,sign_text,archetype_id,archetype_data,size:
     if set_key == "":
         set_key = _sign_fill_set(str(sign_text))
     if pieces < want and not (archetype_id != "" and _interior_fill_set(layout) != "" and area < 52000.0):
+        var before = {}
+        for c in building.get_children():
+            before[c] = true
         _furnish_interior_set(building,set_key,size,str(building_id) + ":dress",want - pieces)
+        for c in building.get_children():
+            if not before.has(c) and c is Sprite2D:
+                c.set_meta("dress_fill",true)
+    _dress_interior_walls(building,set_key,size,str(building_id))
     _scatter_interior_litter(building,size,str(building_id))
+
+# 1.43: the back wall of a room carries what people hung on it - a clock, a
+# notice board, a poster, a radiator under the window line, an extinguisher
+# by the door, tools over a bench, cables and grime in the works
+const INTERIOR_WALL_SETS = {
+    "medical":[["wall_clock",0.70],["wall_notice_board",0.56],["extinguisher",0.62],["radiator",0.66],["wall_phone",0.62],["wall_grime",0.60]],
+    "home":[["wall_poster",0.54],["radiator",0.66],["wall_clock",0.68],["wall_crack",0.60],["wall_grime",0.62],["wall_poster",0.50]],
+    "work":[["tool_wall_detail",0.60],["wall_pipe",0.62],["wall_wires",0.60],["extinguisher",0.62],["wall_grime",0.64],["wall_notice_board",0.54]],
+    "retail":[["wall_sign",0.56],["wall_poster",0.54],["extinguisher",0.62],["wall_clock",0.66],["wall_grime",0.60]],
+    "storage":[["wall_pipe",0.62],["wall_wires",0.60],["wall_grime",0.66],["extinguisher",0.62],["wall_crack",0.60]],
+    "military":[["wall_notice_board",0.56],["wall_poster",0.52],["radiator",0.66],["wall_clock",0.66],["extinguisher",0.62],["wall_wires",0.58]]
+}
+
+func _dress_interior_walls(building,set_key:String,size:Vector2,building_id:String) -> void:
+    var already = 0
+    for c in building.get_children():
+        if c is Sprite2D and str(c.get_meta("world_prop_kind","")).begins_with("wall_"):
+            already += 1
+    var items = INTERIOR_WALL_SETS.get(set_key,INTERIOR_WALL_SETS["home"])
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(hash(building_id + ":walls")) + 7
+    var want = clamp(int(size.x / 70.0),2,6) - already
+    if want <= 0:
+        return
+    # evenly along the back wall, each slot nudged, none behind a tall piece
+    var y = -size.y * 0.5 + 12.0
+    var slots = []
+    var n = want + 1
+    for i in range(1,n):
+        slots.append(-size.x * 0.5 + size.x * float(i) / float(n) + rng.randf_range(-14.0,14.0))
+    for x in slots:
+        var blocked = false
+        for c in building.get_children():
+            # only a tall piece (a shelf, a locker) hides the wall behind it;
+            # a desk or a crate stands under the clock
+            if c is Sprite2D and c.has_meta("prop_solid") and abs(c.position.x - x) < 22.0 and c.position.y < -size.y * 0.5 + 60.0:
+                if c.texture != null and c.texture.get_size().y * c.scale.y > 34.0:
+                    blocked = true
+                    break
+        if blocked:
+            continue
+        var it = items[rng.randi_range(0,items.size() - 1)]
+        var spr = _world_prop_sprite(str(it[0]),building,Vector2(round(x),round(y)),2,float(it[1]) * 0.8)
+        if is_instance_valid(spr):
+            spr.set_meta("interior_wall_dressing",true)
 
 func _scatter_interior_litter(building,size:Vector2,building_id:String) -> void:
     var rng = RandomNumberGenerator.new()
@@ -30389,6 +30571,9 @@ func _create_fence(chunk,pos,length,rotation_value = 0.0):
 
 
 const STREET_FURNITURE_KINDS = ["bench","dumpster","el_cabinets","bus_stop","bollards","planter","tires","notice_board"]
+const STREET_SOLID_KINDS = ["bench","dumpster","el_cabinets","bus_stop","planter","tires"]
+# verge props a body cannot pass through (bags, cans, cones, bottles are kicked aside)
+const VERGE_SOLID_KINDS = ["road_barrier","sandbags","supply_crate","barrel","crate","woodpile","stump","wheelbarrow","milk_can","trash_bin","rubble_crate"]
 
 func _street_furniture_sprite(kind,parent,pos,z_value = 5):
     var atlas = load("res://street_furniture_v1.png")
@@ -30411,6 +30596,11 @@ func _street_furniture_sprite(kind,parent,pos,z_value = 5):
     sprite.set_meta("street_furniture_kind",kind)
     sprite.add_to_group("street_furniture")
     parent.add_child(sprite)
+    # 1.43: a bench, a dumpster, a bus shelter is in the way (was drawn only)
+    if kind in STREET_SOLID_KINDS:
+        var solid = _interior_prop_solid_rect(sprite,str(kind),true)
+        if solid.size != Vector2.ZERO:
+            _add_prop_body(parent,solid,sprite)
     return sprite
 
 func _decorate_street_furniture(chunk,coord):
@@ -30439,7 +30629,7 @@ func _decorate_street_furniture(chunk,coord):
         Vector2(264,72),Vector2(264,196),Vector2(264,588),Vector2(264,700),
         Vector2(504,88),Vector2(504,204),Vector2(504,576),Vector2(504,690)
     ]
-    var wanted = rng.randi_range(2,4)
+    var wanted = rng.randi_range(3,5)
     var placed = 0
     var used = {}
     for attempt in range(12):
@@ -30467,7 +30657,9 @@ const VERGE_SETS = {
     "military":[["road_barrier",0.5],["sandbags",0.45],["traffic_cone",0.4],["supply_crate",0.5],["road_sign",0.5]],
     "industrial":[["barrel",0.5],["crate",0.5],["cardboard_boxes",0.5],["gas_can",0.5],["trash_bag",0.45],["traffic_cone",0.4]],
     "rural":[["woodpile",0.5],["stump",0.5],["wheelbarrow",0.5],["milk_can",0.5],["signpost",0.5],["crate",0.5]],
-    "woodland":[["woodpile",0.5],["stump",0.5],["stump",0.5],["signpost",0.5]]
+    "woodland":[["woodpile",0.5],["stump",0.5],["stump",0.5],["signpost",0.5]],
+    # 1.43: the town's own leavings - bins nobody empties, bags, boxes, bottles
+    "city":[["trash_bin",0.5],["trash_bag",0.45],["trash_bag",0.45],["cardboard_boxes",0.48],["scattered_bottles",0.5],["street_debris",0.5],["traffic_cone",0.4],["newspapers",0.46]]
 }
 
 func _dress_service_verges(chunk,coord,district_id:String,rng):
@@ -30480,6 +30672,8 @@ func _dress_service_verges(chunk,coord,district_id:String,rng):
         set_key = "rural"
     elif district_id.find("woodland") >= 0:
         set_key = "woodland"
+    elif district_id != "":
+        set_key = "city"
     if set_key == "" or not RegionCatalog.poi_for_chunk(coord).is_empty():
         return
     var kinds = VERGE_SETS[set_key]
@@ -30502,6 +30696,10 @@ func _dress_service_verges(chunk,coord,district_id:String,rng):
                 if spr != null:
                     spr.set_meta("service_verge",set_key)
                     count += 1
+                    if str(item[0]) in VERGE_SOLID_KINDS:
+                        var solid = _interior_prop_solid_rect(spr,str(item[0]),true)
+                        if solid.size != Vector2.ZERO:
+                            _add_prop_body(chunk,solid,spr)
     chunk.set_meta("service_verge_props",count)
 
 # 1.38: streets keep their lamp posts on the verge between the furniture slots,
