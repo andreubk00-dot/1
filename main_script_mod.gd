@@ -17833,6 +17833,11 @@ func _decorate_building_art(building,sign_text,size,building_id):
             var collision_size = _interior_prop_collision_size(kind,scale_value)
             if collision_size != Vector2.ZERO:
                 _add_static_rect(building,pos + Vector2(0,collision_size.y*0.10),collision_size)
+            else:
+                # 1.43: a shelf, a desk, a locker the table does not list is solid too
+                var solid = _interior_prop_solid_rect(prop_sprite,kind)
+                if solid.size != Vector2.ZERO:
+                    _add_static_rect(building,solid.get_center(),solid.size)
     var s = str(sign_text).to_upper()
     if s.find("АПТЕК") >= 0:
         _add_detail_light(building,Vector2(size.x*0.22,-size.y*0.12),Color(1.0,0.68,0.36),0.72,1.10)
@@ -18131,9 +18136,53 @@ func _interior_floor_sprite(parent,sign_text,size):
             sprite.position = Vector2(-inner_w*0.5 + float(x)*tile_size,-inner_h*0.5 + float(y)*tile_size)
             if ((x+y) % 5) == 0:
                 sprite.modulate = Color(0.96,0.95,0.91,1.0)
+            sprite.material = _interior_floor_wear_material()
             root.add_child(sprite)
     _decorate_interior_trim(root,inner_w,inner_h)
     return root
+
+# 1.43: no floor is clean after a winter of looting - tracked-in grime in
+# blotches, dried water stains, scuffed lanes, dust gone grey; by world
+# position, so no two rooms wear alike. Pixel-crisp (whole texels).
+const INTERIOR_FLOOR_WEAR_SHADER = """shader_type canvas_item;
+varying vec2 wpos;
+float fh(vec2 p) { return fract(sin(dot(p, vec2(93.7, 217.3))) * 43758.5453); }
+float fn(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(fh(i), fh(i + vec2(1, 0)), f.x), mix(fh(i + vec2(0, 1)), fh(i + vec2(1, 1)), f.x), f.y);
+}
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
+void fragment() {
+    vec4 c = COLOR;
+    vec2 tp = floor(wpos * 2.0) * 0.5;
+    float lum = dot(c.rgb, vec3(0.30, 0.59, 0.11));
+    // broad: some rooms swept, some not
+    float broad = fn(tp / 120.0 + 11.0);
+    float k = mix(0.90, 1.04, broad);
+    // tracked-in grime: soft-edged dark blotches, browner than the floor
+    float grime = fn(tp / 26.0 + 5.0) * 0.65 + fn(tp / 7.0) * 0.35;
+    float g = smoothstep(0.62, 0.78, grime);
+    c.rgb = mix(c.rgb, c.rgb * vec3(0.74, 0.70, 0.64), g * 0.55);
+    // dried water stains: a pale ring round a slightly darker middle
+    float st = fn(tp / 18.0 + 31.0);
+    float ring = smoothstep(0.70, 0.73, st) - smoothstep(0.76, 0.80, st);
+    c.rgb = mix(c.rgb, c.rgb * 1.10 + 0.02, ring * 0.45);
+    c.rgb *= 1.0 - smoothstep(0.80, 0.86, st) * 0.08;
+    // dust: light floors greyed toward a warm dust colour
+    c.rgb = mix(c.rgb, vec3(0.52, 0.49, 0.44), 0.10 * smoothstep(0.45, 0.85, lum) * (1.0 - broad));
+    k *= 0.975 + fh(tp) * 0.05;
+    c.rgb *= k;
+    COLOR = c;
+}"""
+var _interior_floor_wear_mat = null
+
+func _interior_floor_wear_material():
+    if _interior_floor_wear_mat == null:
+        var sh = Shader.new()
+        sh.code = INTERIOR_FLOOR_WEAR_SHADER
+        _interior_floor_wear_mat = ShaderMaterial.new()
+        _interior_floor_wear_mat.shader = sh
+    return _interior_floor_wear_mat
 
 
 
@@ -21937,7 +21986,7 @@ func _stair_spot_in_building(chunk,pos:Vector2) -> Vector2:
 func _multifloor_prop(root,kind:String,pos:Vector2,scale_value = 0.55,z_value = 3):
     var sprite = _archetype_prop(root,kind,pos,scale_value,z_value)
     var collision_size = _interior_prop_collision_size(kind,scale_value)
-    if collision_size != Vector2.ZERO:
+    if collision_size != Vector2.ZERO and not (is_instance_valid(sprite) and sprite.has_meta("prop_solid")):
         _add_static_rect(root,pos + Vector2(0,collision_size.y*0.10),collision_size)
     return sprite
 
@@ -28419,8 +28468,38 @@ func _layout_stair_marks(root,origin,count = 5):
     for i in range(int(count)):
         _rect(origin + Vector2(i*5,-i*3),Vector2(22,3),Color(0.32,0.33,0.30,0.58),root)
 
+# 1.43: what stands on the floor of a room is in the way. Archetype interiors
+# and the room fill used to draw cabinets, desks, shelves and beds with no body
+# at all - the survivor walked straight through them. Only flat things (papers,
+# a mattress, debris, a can, a pile of boxes on the floor) stay walkable.
+const INTERIOR_WALKABLE_KINDS = ["floor_papers","old_mattress","wooden_debris","gas_can","medicine_boxes","med_tray","rug","blood_pool","papers_a","papers_b","glass"]
+
+func _interior_kind_walkable(kind:String) -> bool:
+    if kind in INTERIOR_WALKABLE_KINDS or LITTER_TO_DECAL.has(kind):
+        return true
+    for flat in ["paper","litter","debris","glass","blood","rubble","stain","rug","mattress","trash","puddle","leaves","decal","mark"]:
+        if kind.find(flat) >= 0:
+            return true
+    return false
+
+func _interior_prop_solid_rect(sprite,kind:String) -> Rect2:
+    if not is_instance_valid(sprite) or sprite.texture == null or _interior_kind_walkable(kind) or Engine.has_meta("qa_no_prop_solid"):
+        return Rect2()
+    var vis = sprite.texture.get_size() * sprite.scale
+    if vis.x < 6.0 or vis.y < 6.0:
+        return Rect2()
+    # the part that stands on the floor: most of the width, the lower third
+    var w = max(8.0,vis.x * 0.78)
+    var h = clamp(vis.y * 0.30,6.0,20.0)
+    var center = sprite.position + Vector2(0,vis.y * 0.5 - h * 0.5 - vis.y * 0.04)
+    return Rect2(center - Vector2(w,h) * 0.5,Vector2(w,h))
+
 func _archetype_prop(root,kind,pos,scale_value = 0.62,z_value = 3):
     var sprite = _world_prop_sprite(kind,root,pos,z_value,scale_value)
+    var solid = _interior_prop_solid_rect(sprite,str(kind))
+    if solid.size != Vector2.ZERO:
+        _add_static_rect(root,solid.get_center(),solid.size)
+        sprite.set_meta("prop_solid",true)
     # Archetype interiors use the same depth rules as the older authored interiors.
     # Without this group, large beds/cabinets could render flat over the player and
     # the 0.84 clinic pass also removed the last legacy props the QA relied on.
@@ -28612,10 +28691,62 @@ func _interior_fill_set(layout:String) -> String:
         return "medical"
     return ""
 
+# 1.43: a room that came out bare - most halls and every interior built from
+# a shop sign alone - gets the pieces of its kind along the walls (and out on
+# the floor of a hall), then the litter a looted room has. Furnishing keeps
+# its rules: the door's walk stays clear, nothing stands on another piece.
+func _sign_fill_set(sign_text:String) -> String:
+    var s = str(sign_text).to_upper()
+    if s.find("АПТЕК") >= 0 or s.find("ПОЛИКЛИН") >= 0 or s.find("БОЛЬН") >= 0 or s.find("МЕД") >= 0 or s.find("КЛИНИК") >= 0:
+        return "medical"
+    if s.find("ГАРАЖ") >= 0 or s.find("ЦЕХ") >= 0 or s.find("СЕРВИС") >= 0 or s.find("МАСТЕР") >= 0 or s.find("ДЕПО") >= 0:
+        return "work"
+    if s.find("СКЛАД") >= 0 or s.find("АНГАР") >= 0:
+        return "storage"
+    if s.find("МАГАЗ") >= 0 or s.find("ПРОДУКТ") >= 0 or s.find("РЫНОК") >= 0 or s.find("КАФЕ") >= 0 or s.find("УНИВЕР") >= 0:
+        return "retail"
+    if s.find("ВОЕН") >= 0 or s.find("АРСЕН") >= 0 or s.find("КПП") >= 0 or s.find("КАЗАРМ") >= 0 or s.find("БАСТИОН") >= 0:
+        return "military"
+    return "home"
+
+func _dress_sparse_interior(building,sign_text,archetype_id,archetype_data,size:Vector2,building_id) -> void:
+    var pieces = 0
+    for c in building.get_children():
+        if c is Sprite2D and c.has_meta("world_prop_kind") and not _interior_kind_walkable(str(c.get_meta("world_prop_kind",""))):
+            pieces += 1
+    var area = size.x * size.y
+    # about one piece per 4000 square units is a room someone lived or worked in
+    var want = int(area / 4000.0)
+    var layout = str(archetype_data.get("layout",archetype_id)) if archetype_id != "" else ""
+    var set_key = _interior_fill_set(layout) if layout != "" else _sign_fill_set(str(sign_text))
+    if set_key == "":
+        set_key = _sign_fill_set(str(sign_text))
+    if pieces < want and not (archetype_id != "" and _interior_fill_set(layout) != "" and area < 52000.0):
+        _furnish_interior_set(building,set_key,size,str(building_id) + ":dress",want - pieces)
+    _scatter_interior_litter(building,size,str(building_id))
+
+func _scatter_interior_litter(building,size:Vector2,building_id:String) -> void:
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(hash(building_id + ":litter")) + 3
+    var count = clamp(int(size.x * size.y / 9000.0),2,14)
+    var door_x = float(building.get_meta("door_local_x",0.0))
+    for i in range(count):
+        var p = Vector2(rng.randf_range(-size.x * 0.40,size.x * 0.40),rng.randf_range(-size.y * 0.36,size.y * 0.38))
+        if abs(p.x - door_x) < 26.0 and p.y > size.y * 0.5 - 60.0:
+            continue
+        var kind = INTERIOR_LITTER[rng.randi_range(0,INTERIOR_LITTER.size() - 1)]
+        var spr = _world_prop_sprite(kind,building,p.round(),1,rng.randf_range(0.40,0.52))
+        if is_instance_valid(spr):
+            spr.set_meta("interior_litter",true)
+            spr.flip_h = rng.randf() < 0.5
+
 func _furnish_interior(building,layout:String,size:Vector2,building_id):
     var set_key = _interior_fill_set(layout)
     if set_key == "":
         return
+    _furnish_interior_set(building,set_key,size,building_id)
+
+func _furnish_interior_set(building,set_key:String,size:Vector2,building_id,cap:int = -1):
     var rng = RandomNumberGenerator.new()
     rng.seed = abs(hash(str(building_id) + ":furnish")) + 1
     var walls = []
@@ -28648,7 +28779,9 @@ func _furnish_interior(building,layout:String,size:Vector2,building_id):
         slots[i] = slots[j]
         slots[j] = t
     # a hall of 500 x 350 used to get the seven pieces a flat gets
-    var wanted = clamp(int(size.x * size.y / 5200.0),2,16)
+    var wanted = clamp(int(size.x * size.y / 5200.0),2,24)
+    if cap >= 0:
+        wanted = min(wanted,cap)
     var kinds = INTERIOR_FILL[set_key]
     var placed = 0
     for sp in slots:
@@ -28679,7 +28812,7 @@ func _furnish_interior(building,layout:String,size:Vector2,building_id):
     var area = size.x * size.y
     if area >= 52000.0 and INTERIOR_ISLANDS.has(set_key):
         var isles = INTERIOR_ISLANDS[set_key]
-        var want_isles = clamp(int(area / 9000.0),3,18)
+        var want_isles = clamp(int(area / 9000.0),3,26)
         var isle_slots = []
         var iy = -hy + 84.0
         while iy < hy - 70.0:
@@ -29216,6 +29349,8 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
         else:
             _decorate_interior_architecture(building,sign_text,size)
             _decorate_building_art(building,sign_text,size,building_id)
+        if settlement_model.is_empty():
+            _dress_sparse_interior(building,sign_text,archetype_id,archetype_data,size,building_id)
 
     var facade = Node2D.new()
     facade.position = center + Vector2(0,size.y*0.5 + 8)

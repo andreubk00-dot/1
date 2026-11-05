@@ -61,6 +61,9 @@ COAT = None              # long coat / dress colour, or None
 APRON = None             # apron colour, or None
 KIT = True               # belt pouch and canteen
 ARMBAND = None           # armband colour on the left sleeve, or None
+# 1.43: how an armed body stands still - 'combat' (feet apart, one ahead, knees
+# soft) for the survivor and the raiders, 'relaxed' for the settlement people
+STANCE = 'combat'
 
 OUTFITS = {
     'survivor': {},
@@ -143,7 +146,7 @@ def apply_outfit(name):
     if not _OUTFIT_DEFAULTS:
         for k in ('JACKET', 'JACKET_D', 'JEANS', 'JEANS_D', 'BOOTS', 'SKIN', 'BEARD', 'HELMET', 'PACK', 'PACK_D',
                   'ROLL', 'GLOVE', 'POUCH', 'CANTEEN', 'HEADGEAR', 'PACK_ON', 'KNEEPADS', 'STRIPES', 'VEST',
-                  'BEARD_ON', 'CAPC', 'HAIR', 'COAT', 'APRON', 'KIT', 'ARMBAND', 'GAITER'):
+                  'BEARD_ON', 'CAPC', 'HAIR', 'COAT', 'APRON', 'KIT', 'ARMBAND', 'GAITER', 'STANCE'):
             _OUTFIT_DEFAULTS[k] = g[k]
     for k, v in _OUTFIT_DEFAULTS.items():
         g[k] = v
@@ -684,7 +687,9 @@ GAITS = {
     # longer steps on a softer knee - see WALK_DROP
     # dev83: a walker's leg is near straight under him (it walked on bent
     # knees: 0.85 of the leg's length at mid-stance, now 0.95) - a shorter step
-    'walk': dict(S=0.58, A=7.6,
+    # 1.43: a longer step on a softer knee so the walk, too, covers its own
+    # stride (the walk is the slow pace: overloaded, hurt, ~30-38 px/s)
+    'walk': dict(S=0.55, A=8.8,
                  swing=[(0.0, -1.0, 1.3, -0.6), (0.34, -0.4, 2.2, -0.3), (0.7, 0.55, 1.5, 0.1), (1.0, 1.0, 0.0, 0.4)],
                  stance=[(0.0, 0.4), (0.16, 0.0), (0.66, 0.0), (1.0, -0.65)],
                  heel=1.8, bob=0.75, hip=0.85, twist=0.08, shift=0.22, lean=0.04),
@@ -728,9 +733,13 @@ RUN_GAITS = {
     # dev83: the pelvis rides high - the leg under the body bends ~45 degrees,
     # a runner's, not ~70 (it ran squatting, worst seen side-on); the stride
     # is centred under the body - the foot lands ahead of the hip
-    'jog': dict(S=0.31, Lf=5.4, Lb=9.0, drop=0.5, B=0.5, kick=4.0, knee=5.6, reach=0.3,
+    # 1.43: the stance is a quarter of the cycle and the step a touch longer
+    # on a slightly lower pelvis - the drawn stride now IS the distance the
+    # body travels in a cycle (no 1.4 cadence ease: the planted foot used to
+    # skate ~40 % of a step), at the same 190 steps a minute
+    'jog': dict(S=0.25, Lf=6.0, Lb=9.6, drop=1.0, B=0.6, kick=4.0, knee=5.6, reach=0.3,
                 lean=0.09, hip=1.1, twist=0.15, shift=0.15, heel=2.6, arms=3.6, lift=2.6, land=3.5),
-    'sprint': dict(S=0.26, Lf=6.4, Lb=9.0, drop=0.8, B=0.4, kick=6.0, knee=7.4, reach=0.3,
+    'sprint': dict(S=0.21, Lf=6.8, Lb=9.6, drop=1.1, B=0.5, kick=6.0, knee=7.4, reach=0.3,
                    lean=0.27, hip=1.3, twist=0.17, shift=0.12, heel=3.0, arms=4.6, lift=3.2, land=3.6),
 }
 # running backwards or sideways the steps are shorter (the legs cannot
@@ -854,7 +863,7 @@ def check_reach(style, amp=1.0, margin=0.35):
     return worst
 
 
-WALK_DROP = -0.2             # the walking pelvis: the leg near straight at mid-stance (dev83)
+WALK_DROP = 0.5             # the walking pelvis: the leg near straight at mid-stance (dev83)
 
 
 def gait(P, t, move, style='walk', amp_scale=1.0, pitch_scale=1.0):
@@ -918,6 +927,28 @@ def gait(P, t, move, style='walk', amp_scale=1.0, pitch_scale=1.0):
     return P
 
 
+# 1.43: standing still he is ready, not at attention: the feet a shoulder and
+# a half apart, the support foot a short step ahead and the rear one turned
+# out, the knees soft (the pelvis a little lower), the trunk leaning into the
+# gun and the hips bladed a few degrees off the aim. The weight rocks gently
+# between the feet with the breath; Idle2 / Idle3 shift it more to one side.
+STANCE_FEET = {'L': (3.0, -4.9, 3.0), 'R': (-2.2, 5.1, 3.0)}
+STANCE_DIP = 0.9
+
+
+def idle_stance(P, t, cls, clip):
+    w = 2 * math.pi * t
+    P.feet = dict(STANCE_FEET)
+    P.foot_pitch = {'L': 0.05, 'R': -0.08}
+    P.pelvis_z = PELVIS_Z - STANCE_DIP * LEG_K
+    P.hip_f = {'L': 0.5, 'R': -0.5}
+    rock = {'Idle': 0.25, 'Idle2': 0.45, 'Idle3': 0.35}.get(clip, 0.25)
+    side = {'Idle': 0.0, 'Idle2': 0.35, 'Idle3': -0.3}.get(clip, 0.0)
+    P.shift_r = side + rock * math.sin(w)
+    P.lean = 0.07 if cls in ('rifle', 'pistol') else 0.05
+    P.twist += 0.06
+
+
 def unarmed_swing(P, t, amp, run=False):
     for side, sg, ph in (('L', -1, 0.5), ('R', 1, 0.0)):
         c = math.cos((t + ph) * 2 * math.pi)
@@ -944,6 +975,13 @@ def make_pose(clip, w, d, k):
     hold(P, w, t)
     cls = weapon_class(w)
     unarmed = cls == 'none'
+    if STANCE == 'combat' and clip in ('Attack1', 'Attack2', 'Attack3', 'Attack4', 'Taunt', 'Use'):
+        # 1.43: shooting, swinging, reloading, reaching out - from the same
+        # stance he stands in (the feet used to snap together for each shot)
+        P.feet = dict(STANCE_FEET)
+        P.foot_pitch = {'L': 0.05, 'R': -0.08}
+        P.pelvis_z = PELVIS_Z - STANCE_DIP * LEG_K
+        P.hip_f = {'L': 0.5, 'R': -0.5}
 
     if clip.startswith('Idle'):
         amp = {'Idle': 0.35, 'Idle2': 0.5, 'Idle3': 0.3}[clip]
@@ -953,8 +991,13 @@ def make_pose(clip, w, d, k):
         # breathing lifts the straps a beat after the chest; idle eyes wander
         P.pack = (0.0, 0.0, -0.15 * amp * math.sin(t * 2 * math.pi - 0.9))
         P.head_yaw = {'Idle': 0.0, 'Idle2': 0.32, 'Idle3': -0.18}[clip] * math.sin(t * 2 * math.pi)
+        if STANCE == 'combat':
+            idle_stance(P, t, cls, clip)
         if unarmed:
             P.hands = {'L': (0.6, -6.9, -0.4 + P.bob), 'R': (0.6, 6.9, -0.4 + P.bob)}
+            if STANCE == 'combat':
+                # fists loose at the hips, a little forward - ready, not at attention
+                P.hands = {'L': (2.2, -6.2, 1.2 + P.bob), 'R': (1.4, 6.4, 0.6 + P.bob)}
     elif clip == 'Walk':
         # dev82: a walk is a walk - at a slow pace (overloaded, hurt), the
         # raiders' patrol; the survivor's ordinary pace is the Jog
@@ -1294,14 +1337,12 @@ def write_gait_strides(project):
            '# leg speed there - the legs pattered; 0.8 keeps a runner\'s rhythm and\n'
            '# lets the foot drift a little along the line of sight, where it reads least.\n'
            'const VIEW_YK = 0.8\n'
-           '# dev82: the survivor\'s legs are short for his speed (a third of his\n'
-           '# height); matching the ground exactly made them patter at 2 to 3 cycles\n'
-           '# a second. The cycle runs this much longer than the drawn stride - a\n'
-           '# runner\'s 180-190 steps a minute - and the planted foot drifts about a\n'
-           '# quarter of a step, which at this size reads far better than the patter.\n'
-           'const CADENCE_EASE = 1.4\n'
-           '# a sprint turns the legs over faster than a jog (about 200 steps a minute)\n'
-           'const CADENCE = {"Run": 1.33}\n' % (fmt(survivor), fmt(raider), char3d.YK))
+           '# 1.43: the drawn stride is the distance a cycle covers - the planted\n'
+           '# foot stays where it was put. The steps were made long enough (a\n'
+           '# short stance, a lower pelvis) that the cadence stays a runner\'s\n'
+           '# 190-205 steps a minute without the old 1.4 ease that made it skate.\n'
+           'const CADENCE_EASE = 1.0\n'
+           'const CADENCE = {}\n' % (fmt(survivor), fmt(raider), char3d.YK))
     with open(os.path.join(project, 'world', 'gait_strides.gd'), 'w') as f:
         f.write(src)
 
@@ -1314,6 +1355,7 @@ def build_npcs(project, outfits=None, clips=NPC_CLIPS):
     os.makedirs(out, exist_ok=True)
     for o in (outfits or NPC_OUTFITS):
         apply_outfit(o)
+        globals()['STANCE'] = 'relaxed'
         for clip in clips:
             save_png(sheet(clip, None), os.path.join(out, '%s_%s.png' % (o, clip)))
     apply_outfit('survivor')
