@@ -39,9 +39,10 @@ func run():
 
     var use_button = _find_button(game.inventory_panel,"ИСП.")
     check(use_button != null,"inventory use button missing")
-    check(game.inv_details.text.count("\n") == 5,"full firearm description must keep six information lines")
+    # 1.45: five lines - the quick-slot hint went (the slot row says it by itself)
+    check(game.inv_details.text.count("\n") == 4,"full firearm description must keep five information lines")
     check(game.inv_details.text.contains("Моды: 45Р, ДТК"),"full firearm description lost installed mods")
-    check(game.inv_details.text.contains("Быстрый слот"),"inventory firearm description lost quick-slot hint")
+    check(not game.inv_details.text.contains("Быстрый слот"),"inventory firearm description still carries the quick-slot hint")
     check(game.inv_details.get_combined_minimum_size().y <= game.inv_details.size.y + 0.1,"inventory details control is shorter than its rendered text")
     if use_button != null:
         check(game.inv_details.position.y + game.inv_details.size.y <= use_button.position.y,"inventory firearm details overlap action row")

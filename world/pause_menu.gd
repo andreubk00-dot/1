@@ -532,7 +532,7 @@ func _build_display_tab(s: Dictionary) -> void:
     _cycle("ui_scale", "Масштаб HUD", UI_SCALES, ui_labels, float(s["ui_scale"]))
     _check("vsync", "Вертикальная синхронизация", bool(s["vsync"]))
     _check("pixel_perfect", "Чёткие пиксели (целый масштаб, с рамкой)", bool(s["pixel_perfect"]))
-    _settings_content.add_child(_note("Размер окна действует в оконном режиме. Чёткие пиксели убирают\nразмытие на нестандартных экранах ценой чёрной рамки по краям."))
+    _settings_content.add_child(_note("Чёткие пиксели: без размытия, но с рамкой по краям."))
 
 
 func _build_game_tab(s: Dictionary) -> void:

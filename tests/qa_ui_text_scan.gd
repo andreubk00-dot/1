@@ -140,6 +140,17 @@ func run():
     await snap("inventory")
     game._close_inventory()
     await frames(3)
+    # a container beside the bag
+    var ckey = "qa:0:container:qa_box"
+    game.container_states[ckey] = {"name":"ШКАФЧИК","grid_w":6,"grid_h":5,"items":[{"id":"bandage","qty":2,"x":0,"y":0},{"id":"cloth","qty":3,"x":1,"y":0},{"id":"akm","qty":1,"x":0,"y":2}]}
+    game._ensure_runtime_item_instance_ids()
+    game.active_container_key = ckey
+    game.inventory_open = true
+    game._refresh_inventory_ui()
+    await frames(4)
+    await snap("container")
+    game._close_inventory()
+    await frames(3)
     game._open_hand_crafting()
     await frames(6)
     game.selected_recipe_id = "bandage" if game.recipe_defs.has("bandage") else game.recipe_defs.keys()[0]
@@ -168,6 +179,9 @@ func run():
             break
     await frames(3)
     await snap("craft_salvage")
+    game._set_workbench_mode("service")
+    await frames(3)
+    await snap("craft_service")
     game._close_crafting()
     game._close_inventory()
     await frames(3)

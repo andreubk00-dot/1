@@ -711,6 +711,7 @@ var craft_title = null
 var selected_recipe_id = ""
 var craft_panel = null
 var craft_detail_art = null
+var craft_create_button = null
 var craft_list = null
 var craft_details = null
 var craft_status = null
@@ -10678,6 +10679,19 @@ func _refresh_workbench_mode():
 
     if workbench_craft_tab != null:
         workbench_craft_tab.disabled = workbench_mode == "craft"
+        # by hand there is nothing to switch to: no lone tab
+        workbench_craft_tab.visible = crafting_station == "bench"
+    # 1.45: the open tab is lit gold (as a disabled button it read as switched off)
+    for tab in [workbench_craft_tab,workbench_service_tab,workbench_salvage_tab]:
+        if tab == null:
+            continue
+        var on = StyleBoxFlat.new()
+        on.bg_color = Color(0.11,0.10,0.065)
+        on.border_color = Color(0.86,0.70,0.34)
+        on.set_border_width_all(1)
+        on.border_width_bottom = 2
+        tab.add_theme_stylebox_override("disabled",on)
+        tab.add_theme_color_override("font_disabled_color",Color(1.0,0.86,0.47))
     # weapon service and salvage are bench work
     var at_bench = crafting_station == "bench"
     if workbench_service_tab != null:
@@ -10754,23 +10768,76 @@ func _refresh_weapon_service_ui():
 
     if service_condition_bar != null:
         service_condition_bar.value = condition_value
+        var fill = StyleBoxFlat.new()
+        fill.bg_color = Color(0.42,0.66,0.38) if condition_value >= 70.0 else (Color(0.86,0.70,0.32) if condition_value >= 40.0 else Color(0.82,0.36,0.30))
+        var back = StyleBoxFlat.new()
+        back.bg_color = Color(0.06,0.07,0.07)
+        back.border_color = Color(0.22,0.24,0.22)
+        back.set_border_width_all(1)
+        service_condition_bar.add_theme_stylebox_override("fill",fill)
+        service_condition_bar.add_theme_stylebox_override("background",back)
 
     for id in service_weapon_buttons.keys():
         var button = service_weapon_buttons[id]
         if button != null:
             var weapon_ids = _inventory_weapon_instance_ids(str(id))
             button.disabled = weapon_ids.is_empty()
+            # only the guns in the bag (it listed every gun in the game)
+            button.visible = not weapon_ids.is_empty()
             var base_name = str(weapon_defs.get(str(id),{}).get("short_name",item_defs.get(str(id),{}).get("short",id)))
             button.text = "%s x%d" % [base_name,weapon_ids.size()] if weapon_ids.size() > 1 else base_name
 
     if service_requirements != null:
-        service_requirements.text = "ОБСЛУЖИВАНИЕ  +30%%, максимум 90%%\n%s\n\nКАПРЕМОНТ  +60%%, максимум 100%%\n%s" % [
-            _service_cost_text("maintenance"),
-            _service_cost_text("overhaul")
-        ]
+        service_requirements.text = ""
+        _service_cost_art()
 
-    if service_status != null and service_status.text == "":
-        service_status.text = "Повторный выбор типа оружия переключает его экземпляры."
+    pass
+
+# 1.45: what a service costs, as pictures with have / need
+func _service_cost_art():
+    var art = service_requirements.get_node_or_null("ServiceArt")
+    if art == null:
+        art = Control.new()
+        art.name = "ServiceArt"
+        service_requirements.add_child(art)
+        art.size = Vector2(286,92)
+    for c in art.get_children():
+        art.remove_child(c)
+        c.queue_free()
+    var rows = [["maintenance","ОБСЛУЖИТЬ  +30% · до 90%"],["overhaul","КАПРЕМОНТ  +60% · до 100%"]]
+    for r in range(rows.size()):
+        var y = r * 46.0
+        var head = Label.new()
+        head.add_theme_font_size_override("font_size",7)
+        head.text = str(rows[r][1])
+        head.modulate = Color(0.86,0.80,0.62)
+        art.add_child(head)
+        head.position = Vector2(0,y)
+        head.size = Vector2(286,10)
+        var costs = _service_costs(str(rows[r][0]))
+        var i = 0
+        for id in costs.keys():
+            var need = int(costs[id])
+            var have = _inventory_count(str(id))
+            var enough = have >= need
+            var cell = Panel.new()
+            cell.tooltip_text = str(item_defs.get(str(id),{}).get("name",id))
+            cell.mouse_filter = Control.MOUSE_FILTER_PASS
+            cell.add_theme_stylebox_override("panel",_icon_tile_style(Color(0.03,0.036,0.036),Color(0.28,0.46,0.28) if enough else Color(0.52,0.22,0.18)))
+            art.add_child(cell)
+            cell.position = Vector2(i * 54.0,y + 11.0)
+            cell.size = Vector2(50,32)
+            _item_icon_rect(cell,str(id),Vector2(3,3),Vector2(22,26),1.0)
+            var n = Label.new()
+            n.add_theme_font_size_override("font_size",7)
+            n.text = "%d/%d" % [have,need]
+            n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+            n.add_theme_color_override("font_color",Color(0.66,0.90,0.62) if enough else Color(0.95,0.52,0.44))
+            n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            cell.add_child(n)
+            n.position = Vector2(26,8)
+            n.size = Vector2(23,14)
+            i += 1
 
 func _service_selected_maintenance():
     _perform_weapon_service(service_weapon_id,"maintenance",service_weapon_instance_id)
@@ -10969,7 +11036,7 @@ func _refresh_salvage_details():
         elif not _can_salvage(selected_salvage_id):
             salvage_status.text = "Нет места для материалов."
         else:
-            salvage_status.text = "Готово к разборке."
+            salvage_status.text = ""
 
 func _salvage_selected_item():
     if selected_salvage_id == "":
@@ -11108,7 +11175,7 @@ func _create_crafting_ui():
     workbench_craft_content.add_child(craft_status)
     craft_status.size = Vector2(242,32)
 
-    _make_button(workbench_craft_content,Vector2(215,205),Vector2(120,32),"СОЗДАТЬ",_craft_selected_recipe)
+    craft_create_button = _make_button(workbench_craft_content,Vector2(215,205),Vector2(120,32),"СОЗДАТЬ",_craft_selected_recipe)
 
     # Weapon service content.
     workbench_service_content = Control.new()
@@ -11201,7 +11268,8 @@ func _create_crafting_ui():
 
     var salvage_title = Label.new()
     salvage_title.position = Vector2(14,8)
-    salvage_title.text = "РАЗБОР"
+    salvage_title.text = ""
+    salvage_title.visible = false
     salvage_title.add_theme_font_size_override("font_size",8)
     salvage_title.modulate = Color(0.62,0.66,0.61)
     workbench_salvage_content.add_child(salvage_title)
@@ -11504,6 +11572,7 @@ func _refresh_crafting_details():
         craft_details.position = Vector2(215,10)
         if craft_status != null:
             craft_status.text = ""
+        _sync_craft_button()
         return
 
     var recipe = recipe_defs[selected_recipe_id]
@@ -11573,6 +11642,16 @@ func _refresh_crafting_details():
 
     if craft_status != null:
         craft_status.text = _recipe_status_text(selected_recipe_id)
+    _sync_craft_button()
+
+# 1.45: the button says it all - lit when the thing can be made, dimmed and
+# unclickable when it cannot (the reason stands above it)
+func _sync_craft_button():
+    if craft_create_button == null:
+        return
+    var ok = selected_recipe_id != "" and recipe_defs.has(selected_recipe_id) and _can_craft(selected_recipe_id)
+    craft_create_button.disabled = not ok
+    craft_create_button.modulate = Color(1.0,1.0,1.0) if ok else Color(0.62,0.62,0.60)
 
 func _clear_craft_detail_art():
     if craft_detail_art == null:
@@ -11591,7 +11670,7 @@ func _recipe_status_text(recipe_id:String) -> String:
     if not tools.is_empty():
         return "Нет инструмента: %s." % str(item_defs.get(tools[0],{}).get("name",tools[0]))
     if _can_craft(recipe_id):
-        return "Готово."
+        return ""
     for id in recipe.get("ingredients",{}).keys():
         if _inventory_count(str(id)) < int(recipe["ingredients"][id]):
             return "Не хватает материалов."
@@ -13012,7 +13091,7 @@ func _refresh_world_chronicle_ui():
         world_chronicle_status.text = "Эфир пока тих. Здесь появятся последствия событий и найденные в мире записи."
         world_chronicle_text.text = "Нет записей."
         return
-    world_chronicle_status.text = "Сообщения и найденные записи сохраняются вместе с миром. Новые сверху."
+    world_chronicle_status.text = ""
     var lines = []
     for entry in entries:
         lines.append(WorldChronicle.entry_text(entry))
@@ -13225,7 +13304,7 @@ func _close_region_map():
 func _refresh_region_map_ui():
     if region_map_panel == null:
         return
-    region_map_coord_label.text = "ДЕНЬ %d  %s   СЕКТОР %d:%d" % [world_day,_time_text(),current_chunk.x,current_chunk.y]
+    region_map_coord_label.text = "ДЕНЬ %d  %s" % [world_day,_time_text()]
     region_map_grid.configure(_region_map_snapshot())
 
     var selected = region_map_selected_chunk
@@ -13274,9 +13353,9 @@ func _refresh_region_map_ui():
         region_map_active_label.text = "Выберите сектор и назначьте цель.\nДом: %s" % str(expedition_journal["home"].get("name","не закреплён"))
         if not _has_home():
             if VerticalSlice.active(faction_state):
-                region_map_active_label.text = "Полевой маршрут активен.\nСледуйте системной метке; дом — позже."
+                region_map_active_label.text = "Полевой маршрут активен — иди по метке."
             else:
-                region_map_active_label.text = "Сначала закрепите здание: Дом / журнал.\nИсследовать мир можно и без плана."
+                region_map_active_label.text = "Нет дома: Дом / журнал. Исследовать мир можно и без плана."
         region_map_cancel_button.disabled = true
     region_map_plan_button.text = "ОБНОВИТЬ ЦЕЛЬ" if expedition_active else "НАЗНАЧИТЬ ЦЕЛЬ"
     region_map_plan_button.disabled = selected == current_chunk or not _has_home() or selected == _home_chunk()
@@ -15608,7 +15687,7 @@ func _open_weapon_mod_panel(weapon_id,instance_id = ""):
     mod_panel_open = true
     _play_ui_sfx("open")
     _hover_hide_item()
-    mod_status.text = "Изменения применяются только к выбранному экземпляру."
+    mod_status.text = ""
     mod_panel.visible = true
     _rebuild_weapon_mod_ui()
 
@@ -16248,7 +16327,8 @@ func _create_inventory_ui():
 
     var inv_hint = Label.new()
     inv_hint.position = Vector2(16,31)
-    inv_hint.text = "ПКМ — использовать"
+    inv_hint.text = ""
+    inv_hint.visible = false
     inv_hint.add_theme_font_size_override("font_size",7)
     inv_hint.modulate = Color(0.62,0.65,0.61)
     inventory_panel.add_child(inv_hint)
@@ -16282,7 +16362,8 @@ func _create_inventory_ui():
     quick_hint.add_theme_font_size_override("font_size",6)
     quick_hint.position = Vector2(250,141)
     quick_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    quick_hint.text = "Перетащи сюда.\nПКМ — убрать."
+    quick_hint.text = ""
+    quick_hint.visible = false
     quick_hint.modulate = Color(0.56,0.59,0.56)
     inventory_panel.add_child(quick_hint)
     quick_hint.size = Vector2(106,52)
@@ -16321,7 +16402,8 @@ func _create_inventory_ui():
 
     var eq_hint = Label.new()
     eq_hint.position = Vector2(14,31)
-    eq_hint.text = "Нажми слот, чтобы снять"
+    eq_hint.text = ""
+    eq_hint.visible = false
     eq_hint.add_theme_font_size_override("font_size",7)
     eq_hint.modulate = Color(0.62,0.65,0.61)
     equipment_panel.add_child(eq_hint)
@@ -16356,7 +16438,8 @@ func _create_inventory_ui():
 
     var cont_hint = Label.new()
     cont_hint.position = Vector2(12,32)
-    cont_hint.text = "ЛУТ"
+    cont_hint.text = ""
+    cont_hint.visible = false
     cont_hint.add_theme_font_size_override("font_size",7)
     cont_hint.modulate = Color(0.62,0.65,0.61)
     container_panel.add_child(cont_hint)
@@ -18911,7 +18994,7 @@ func _refresh_inventory_ui():
     if selected_inventory_index >= 0 and selected_inventory_index < inventory_entries.size():
         inv_details.text = _entry_description(inventory_entries[selected_inventory_index])
     else:
-        inv_details.text = "Рюкзак: предметы, лут и боеприпасы."
+        inv_details.text = ""
 
     var weight_label = inventory_panel.get_node_or_null("WeightLabel")
     if weight_label != null:
@@ -19542,18 +19625,36 @@ func _refresh_equipment_panel():
         _decorate_equipment_button(equipment_buttons[slot],slot,id)
 
     var rig_pockets = _rig_pocket_count()
-    equipment_info.text = "ЗАЩИТА: Г %d%% • К %d%%
-ТЕПЛО %.1f • ДОЖДЬ %d%% • КАРМАНЫ %d
-МОБИЛЬНОСТЬ %d%% • ВЕС %.1f / %.1f кг" % [
-        int(_armor_value_for_zone("head") * 100.0),
-        int(_armor_value_for_zone("torso") * 100.0),
-        _clothing_warmth(),
-        int(_rain_protection() * 100.0),
-        rig_pockets,
-        int(_equipment_move_multiplier() * 100.0),
-        _inventory_weight(),
-        _carry_limit()
-    ]
+    # 1.45: what the gear gives, as pictures with numbers (the meaning on hover)
+    equipment_info.text = ""
+    var strip = equipment_panel.get_node_or_null("EquipStats")
+    if strip == null:
+        strip = Control.new()
+        strip.name = "EquipStats"
+        equipment_panel.add_child(strip)
+        strip.position = Vector2(14,272)
+        strip.size = Vector2(210,48)
+    var row1 = strip.get_node_or_null("Row1")
+    var row2 = strip.get_node_or_null("Row2")
+    if row1 == null:
+        row1 = Control.new()
+        row1.name = "Row1"
+        strip.add_child(row1)
+        row1.size = Vector2(210,16)
+        row2 = Control.new()
+        row2.name = "Row2"
+        strip.add_child(row2)
+        row2.position = Vector2(0,22)
+        row2.size = Vector2(210,16)
+    _stat_strip(row1,[
+        ["shield","%d / %d%%" % [int(_armor_value_for_zone("head") * 100.0),int(_armor_value_for_zone("torso") * 100.0)],"Защита: голова / корпус"],
+        ["flame","%.1f" % _clothing_warmth(),"Тепло одежды"],
+        ["drop","%d%%" % int(_rain_protection() * 100.0),"Защита от дождя"]
+    ])
+    var second = [["route","%d%%" % int(_equipment_move_multiplier() * 100.0),"Подвижность"]]
+    if rig_pockets > 0:
+        second.append(["box",str(rig_pockets),"Быстрые карманы разгрузки (7, 8)"])
+    _stat_strip(row2,second)
 
 
 func _entry_description(entry):
@@ -19584,7 +19685,6 @@ func _entry_description(entry):
                 _hud_ammo_display_name(str(firearm.get("ammo","")))
             ]
             text += "\nМоды: %s" % _weapon_mod_summary(id,iid)
-        text += "\nБыстрый слот: перетащи в ряд справа или нажми %s." % _quick_slot_keys_text()
     elif str(item.get("category","")) == "melee" and melee_defs.has(id):
         var melee = melee_defs[id]
         text += "\nУрон: %d   Выносливость: %d   Дистанция: %d" % [
@@ -19592,7 +19692,6 @@ func _entry_description(entry):
             int(melee.get("stamina",0)),
             int(melee.get("range",0))
         ]
-        text += "\nБыстрый слот: перетащи в ряд справа или нажми %s." % _quick_slot_keys_text()
 
     if _is_water_container_item(id):
         var iid = str(entry.get("instance_id",""))
