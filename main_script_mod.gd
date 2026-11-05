@@ -28955,6 +28955,7 @@ func _dress_sparse_interior(building,sign_text,archetype_id,archetype_data,size:
                 c.set_meta("dress_fill",true)
     _dress_interior_walls(building,set_key,size,str(building_id))
     building.set_meta("dress_doorways",true)
+    _dress_back_windows(building,size,str(building_id))
     _scatter_interior_litter(building,size,str(building_id))
 
 # 1.43: the back wall of a room carries what people hung on it - a clock, a
@@ -29053,6 +29054,55 @@ func _dress_doorways(building,building_id:String) -> void:
         _rect(centre + (Vector2(-1.5,0) if horizontal else Vector2(0,-1.5)),Vector2(1,lw - 2.0) if horizontal else Vector2(lw - 2.0,1),DOOR_JAMB_LIT,building).z_index = 2
         var knob = centre + (Vector2(0,into * (lw * 0.5 - 3.0)) if horizontal else Vector2(into * (lw * 0.5 - 3.0),0))
         _rect(knob,Vector2(2,2),Color(0.78,0.66,0.40),building).z_index = 3
+
+# 1.44: the back wall has windows - a frame in the wall band, the panes (one
+# in four broken, boarded or dark), a sill, and the daylight lying on the
+# floor under them. Never behind a tall piece or a thing hung on the wall.
+func _dress_back_windows(building,size:Vector2,building_id:String) -> void:
+    if size.x < 100.0:
+        return
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(hash(building_id + ":windows")) + 5
+    var count = clamp(int(size.x / 95.0),1,5)
+    var y = -size.y * 0.5 + 10.0
+    var placed = 0
+    for i in range(count):
+        var x = -size.x * 0.5 + size.x * (float(i) + 0.5) / float(count) + rng.randf_range(-10.0,10.0)
+        var clear = true
+        for c in building.get_children():
+            if not (c is Sprite2D) or abs(c.position.x - x) > 18.0 or c.position.y > -size.y * 0.5 + 64.0:
+                continue
+            if c.has_meta("interior_wall_dressing") or (c.has_meta("prop_solid") and c.texture != null and c.texture.get_size().y * c.scale.y > 30.0):
+                clear = false
+                break
+        if not clear:
+            continue
+        var w = 18.0
+        _rect(Vector2(x,y),Vector2(w + 4.0,11.0),Color(0.22,0.20,0.17),building).z_index = 1
+        var state = rng.randf()
+        var glass = Color(0.52,0.63,0.68)
+        if state < 0.12:
+            glass = Color(0.08,0.09,0.10)                     # dark: the glass is gone
+        elif state < 0.22:
+            glass = Color(0.42,0.32,0.22)                     # boarded up
+        _rect(Vector2(x,y),Vector2(w,8.0),glass,building).z_index = 1
+        if state >= 0.22:
+            _rect(Vector2(x - w * 0.25,y - 2.0),Vector2(3,2),Color(0.80,0.88,0.90,0.9),building).z_index = 1
+            _rect(Vector2(x,y),Vector2(1,8.0),Color(0.22,0.20,0.17),building).z_index = 1     # the mullion
+            if state > 0.82:
+                _rect(Vector2(x + w * 0.22,y + 1.0),Vector2(5,1),Color(0.10,0.10,0.11),building).z_index = 1   # a crack
+            # daylight on the floor below: a pale wedge, wider as it falls
+            var light = Polygon2D.new()
+            light.polygon = PackedVector2Array([Vector2(x - w * 0.5,y + 6.0),Vector2(x + w * 0.5,y + 6.0),Vector2(x + w * 0.9,y + 40.0),Vector2(x - w * 0.9,y + 40.0)])
+            light.color = Color(1.0,0.96,0.84,0.07)
+            light.z_index = -1
+            building.add_child(light)
+        else:
+            for k in range(3):
+                _rect(Vector2(x,y - 2.5 + float(k) * 2.5),Vector2(w,1),Color(0.30,0.22,0.15),building).z_index = 1
+        _rect(Vector2(x,y + 6.0),Vector2(w + 6.0,2.0),Color(0.46,0.44,0.40),building).z_index = 1
+        placed += 1
+    building.set_meta("back_windows",placed)
 
 func _scatter_interior_litter(building,size:Vector2,building_id:String) -> void:
     var rng = RandomNumberGenerator.new()
