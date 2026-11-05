@@ -52,6 +52,12 @@ func run():
             for c in b.get_children():
                 if c is Sprite2D and c.has_meta("prop_solid"):
                     solid_props += 1
+                    # the body stands under its own piece (a nudged piece takes it along)
+                    var body = c.get_meta("prop_body", null)
+                    if is_instance_valid(body) and not body.is_queued_for_deletion() and not c.is_queued_for_deletion():
+                        var off = body.position - c.position
+                        var vis = c.texture.get_size() * c.scale
+                        check(abs(off.x) <= vis.x * 0.5 + 1.0 and abs(off.y) <= vis.y * 0.5 + 1.0, "%s: the body of a %s stands %s away from it" % [str(b.get_meta("building_id", "")), str(c.get_meta("world_prop_kind", "")), str(off.round())])
             # flood the floor from just inside the door, on the survivor's capsule
             var door = b.global_position + Vector2(float(b.get_meta("door_local_x", 0.0)), size.y * 0.5 - 22.0)
             if not free_at(space, shape, door, exclude):

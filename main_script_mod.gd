@@ -16537,6 +16537,8 @@ func _visual_button_style(button):
 
 
 func _world_prop_region(kind):
+    if HOME_PROP_REGIONS.has(str(kind)):
+        return Rect2(Vector2.ZERO,_home_prop_used_size(str(kind)))
     var regions = {
         "car":Rect2(0,0,96,56),
         "tree":Rect2(96,0,64,72),
@@ -16719,7 +16721,67 @@ func _litter_decal_sprite(kind:String,parent,pos:Vector2,z_value:int):
     parent.add_child(sprite)
     return sprite
 
+# 1.44: the rooms people lived and worked in (tools/home_props_v1.py)
+const HOME_PROP_REGIONS = {
+    "sofa":Rect2(0,0,72,56),
+    "armchair":Rect2(72,0,72,56),
+    "wardrobe":Rect2(144,0,72,56),
+    "bookshelf":Rect2(216,0,72,56),
+    "kitchen_stove":Rect2(288,0,72,56),
+    "kitchen_counter":Rect2(360,0,72,56),
+    "dining_table":Rect2(432,0,72,56),
+    "bed":Rect2(504,0,72,56),
+    "tv_stand":Rect2(576,0,72,56),
+    "dresser":Rect2(648,0,72,56),
+    "rug":Rect2(720,0,72,56),
+    "bathtub":Rect2(792,0,72,56),
+    "washing_machine":Rect2(864,0,72,56),
+    "computer_desk":Rect2(936,0,72,56),
+    "water_cooler":Rect2(1008,0,72,56),
+    "freezer_chest":Rect2(1080,0,72,56)
+}
+
+func _home_prop_sprite(kind:String,parent,pos,z_value,scale_value):
+    var atlas = load("res://art/world_hd/props_home_v1.png")
+    if atlas == null:
+        return null
+    var region:Rect2 = HOME_PROP_REGIONS[kind]
+    var tex = AtlasTexture.new()
+    tex.atlas = atlas
+    tex.region = region
+    var sprite = Sprite2D.new()
+    sprite.texture = tex
+    sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    sprite.region_filter_clip_enabled = true
+    var integrated_scale = _integrated_sprite_scale(scale_value)
+    sprite.position = Vector2(round(pos.x),round(pos.y))
+    sprite.scale = Vector2(integrated_scale,integrated_scale)
+    sprite.z_index = z_value
+    sprite.set_meta("world_prop_kind",kind)
+    sprite.set_meta("world_prop_scale",integrated_scale)
+    if kind != "rug":
+        var used = _home_prop_used_size(kind)
+        var contact = _ellipse(
+            Vector2(sprite.position.x,round(sprite.position.y + used.y * integrated_scale * 0.48)),
+            clamp(used.x * integrated_scale * 0.42,5.0,26.0),clamp(used.y * integrated_scale * 0.06,1.5,4.0),
+            Color(0.01,0.012,0.012,0.26),parent
+        )
+        contact.z_index = z_value - 1
+    parent.add_child(sprite)
+    return sprite
+
+# the art inside each 72 x 56 cell (for the floor footprint and the shadow)
+const HOME_PROP_USED = {"sofa":Vector2(52,28),"armchair":Vector2(26,28),"wardrobe":Vector2(30,46),"bookshelf":Vector2(34,42),
+    "kitchen_stove":Vector2(26,30),"kitchen_counter":Vector2(50,28),"dining_table":Vector2(46,30),"bed":Vector2(34,50),
+    "tv_stand":Vector2(30,34),"dresser":Vector2(30,28),"rug":Vector2(50,30),"bathtub":Vector2(50,30),
+    "washing_machine":Vector2(26,30),"computer_desk":Vector2(46,34),"water_cooler":Vector2(16,38),"freezer_chest":Vector2(48,30)}
+
+func _home_prop_used_size(kind:String) -> Vector2:
+    return HOME_PROP_USED.get(kind,Vector2(40,30))
+
 func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value = 1.0):
+    if HOME_PROP_REGIONS.has(str(kind)):
+        return _home_prop_sprite(str(kind),parent,pos,z_value,scale_value)
     if LITTER_TO_DECAL.has(str(kind)) and _hd_exists("res://art/world_hd/ground_decals_hd.png"):
         return _litter_decal_sprite(str(kind),parent,pos,z_value)
     if PROP_HD_KINDS.has(str(kind)) and _hd_exists("res://art/world_hd/props_hd.png"):
@@ -17832,7 +17894,9 @@ func _interior_prop_uses_depth(kind):
         "weapon_rack","metal_shelving","drawer_cabinet","cabinet","hospital_bed",
         "wheelchair","med_cart","cot","medical_screen","defib_unit",
         "reception_desk","filing_cabinet","broken_trolley","tipped_chair",
-        "rolling_stand","folded_screen","broken_cabinet","stretcher"
+        "rolling_stand","folded_screen","broken_cabinet","stretcher",
+        "sofa","armchair","wardrobe","bookshelf","kitchen_stove","kitchen_counter","dining_table","bed",
+        "tv_stand","dresser","bathtub","washing_machine","computer_desk","water_cooler","freezer_chest"
     ]
 
 func _update_interior_prop_depth():
@@ -23153,6 +23217,11 @@ func _load_chunk(coord):
     _record_map_footprint(chunk,coord)
     _place_ether_note(chunk,coord)
     _clear_prop_bodies_off_containers(chunk)
+    # doorways are framed once the partitions are final (the walk from the
+    # front door trims some after the rooms are laid out)
+    for b in chunk.get_children():
+        if b.has_meta("dress_doorways"):
+            _dress_doorways(b,str(b.get_meta("building_id","")))
 
     _spawn_saved_drops_for_chunk(chunk,coord)
     _spawn_player_bodies_for_chunk(chunk,coord)
@@ -28561,8 +28630,29 @@ func _add_prop_body(parent,rect:Rect2,sprite):
     body.set_meta("prop_solid_body",true)
     if is_instance_valid(sprite):
         sprite.set_meta("prop_solid",true)
+        sprite.set_meta("prop_body",body)
         body.set_meta("prop_sprite",sprite)
     return body
+
+# a piece nudged off a wall or out of a doorway takes its body with it; a
+# piece taken out takes its body away
+func _resync_prop_bodies(building) -> void:
+    for spr in building.get_children():
+        if not (spr is Sprite2D) or not spr.has_meta("prop_body"):
+            continue
+        var body = spr.get_meta("prop_body")
+        if not is_instance_valid(body):
+            continue
+        if spr.is_queued_for_deletion():
+            body.queue_free()
+            continue
+        var rect = _interior_prop_solid_rect(spr,str(spr.get_meta("world_prop_kind","")),true)
+        if rect.size == Vector2.ZERO:
+            continue
+        body.position = rect.get_center()
+        var shape = RectangleShape2D.new()
+        shape.size = rect.size
+        body.get_child(0).shape = shape
 
 # a container (a cache, a locker to search) must stand clear: a piece of
 # furniture whose new body covers one gives way - its body, and if it was
@@ -28617,6 +28707,8 @@ func _interior_prop_solid_rect(sprite,kind:String,force:bool = false) -> Rect2:
     if not is_instance_valid(sprite) or sprite.texture == null or (not force and _interior_kind_walkable(kind)) or Engine.has_meta("qa_no_prop_solid"):
         return Rect2()
     var vis = sprite.texture.get_size() * sprite.scale
+    if HOME_PROP_REGIONS.has(kind):
+        vis = _home_prop_used_size(kind) * sprite.scale
     if vis.x < 6.0 or vis.y < 6.0:
         return Rect2()
     # the part that stands on the floor: most of the width, the lower third
@@ -28788,10 +28880,12 @@ func _decorate_archetype_interior(building,archetype_id,data,size,building_id):
 # the pieces already placed. Clinics are left as authored.
 const INTERIOR_FILL = {
     "storage":[["crate",0.52],["supply_crate",0.54],["cardboard_boxes",0.50],["barrel",0.50],["metal_shelving",0.58],["gas_can",0.48]],
-    "military":[["cot",0.52],["locker",0.50],["ammo_crate",0.50],["supply_crate",0.52],["desk",0.46],["chair",0.44]],
-    "home":[["chair",0.46],["tipped_chair",0.44],["cabinet",0.48],["old_mattress",0.44],["cardboard_boxes",0.46],["desk",0.46]],
-    "retail":[["retail_shelf",0.58],["cardboard_boxes",0.48],["chair",0.44],["tipped_chair",0.44],["crate",0.48]],
-    "work":[["tool_case",0.52],["gas_can",0.48],["barrel",0.50],["crate",0.50],["metal_shelving",0.58],["filing_cabinet",0.48]],
+    "military":[["cot",0.52],["locker",0.50],["ammo_crate",0.50],["supply_crate",0.52],["desk",0.46],["chair",0.44],["computer_desk",0.50],["bookshelf",0.50]],
+    "home":[["chair",0.46],["tipped_chair",0.44],["cabinet",0.48],["old_mattress",0.44],["cardboard_boxes",0.46],["desk",0.46],
+        ["sofa",0.52],["armchair",0.50],["wardrobe",0.54],["bookshelf",0.54],["kitchen_stove",0.52],["kitchen_counter",0.52],
+        ["bed",0.52],["tv_stand",0.50],["dresser",0.50],["washing_machine",0.50],["bathtub",0.50]],
+    "retail":[["retail_shelf",0.58],["cardboard_boxes",0.48],["chair",0.44],["tipped_chair",0.44],["crate",0.48],["freezer_chest",0.54],["water_cooler",0.52]],
+    "work":[["tool_case",0.52],["gas_can",0.48],["barrel",0.50],["crate",0.50],["metal_shelving",0.58],["filing_cabinet",0.48],["computer_desk",0.52],["water_cooler",0.50]],
     "medical":[["hospital_bed",0.62],["iv_stand",0.56],["medical_shelf",0.62],["filing_cabinet",0.48],["oxygen_cylinder",0.48],["wheelchair",0.52],["medicine_boxes",0.50],["broken_trolley",0.52]]
 }
 # dev78: the open floor of a big hall - a ward's beds, a store's stacks, a
@@ -28799,8 +28893,8 @@ const INTERIOR_FILL = {
 const INTERIOR_ISLANDS = {
     "storage":[["crate",0.54],["supply_crate",0.56],["cardboard_boxes",0.52],["barrel",0.50],["crate",0.50]],
     "military":[["cot",0.54],["ammo_crate",0.52],["supply_crate",0.52],["cot",0.54]],
-    "home":[["old_mattress",0.46],["cardboard_boxes",0.46],["tipped_chair",0.44]],
-    "retail":[["cardboard_boxes",0.48],["shopping_cart",0.50],["crate",0.48]],
+    "home":[["old_mattress",0.46],["cardboard_boxes",0.46],["tipped_chair",0.44],["dining_table",0.52],["rug",0.52],["armchair",0.50]],
+    "retail":[["cardboard_boxes",0.48],["shopping_cart",0.50],["crate",0.48],["freezer_chest",0.54]],
     "work":[["crate",0.52],["barrel",0.50],["tool_case",0.52],["gas_can",0.48]],
     "medical":[["hospital_bed",0.62],["stretcher",0.56],["broken_trolley",0.52],["med_tray",0.52],["hospital_bed",0.62]]
 }
@@ -28860,6 +28954,7 @@ func _dress_sparse_interior(building,sign_text,archetype_id,archetype_data,size:
             if not before.has(c) and c is Sprite2D:
                 c.set_meta("dress_fill",true)
     _dress_interior_walls(building,set_key,size,str(building_id))
+    building.set_meta("dress_doorways",true)
     _scatter_interior_litter(building,size,str(building_id))
 
 # 1.43: the back wall of a room carries what people hung on it - a clock, a
@@ -28906,6 +29001,58 @@ func _dress_interior_walls(building,set_key:String,size:Vector2,building_id:Stri
         var spr = _world_prop_sprite(str(it[0]),building,Vector2(round(x),round(y)),2,float(it[1]) * 0.8)
         if is_instance_valid(spr):
             spr.set_meta("interior_wall_dressing",true)
+
+# 1.44: a gap in a partition is a doorway - wooden jambs at its ends, a
+# threshold board across the floor, and in some a door left standing open
+# against the wall (visual only: the way through is unchanged)
+const DOOR_JAMB = Color(0.38,0.28,0.19)
+const DOOR_JAMB_LIT = Color(0.52,0.40,0.27)
+const DOOR_LEAF = Color(0.44,0.33,0.22)
+
+func _partition_at(building,p:Vector2) -> bool:
+    for b in building.get_children():
+        if b is StaticBody2D and b.has_meta("partition") and b.get_child_count() > 0 and not b.is_queued_for_deletion():
+            var sh = b.get_child(0).shape
+            if sh is RectangleShape2D and Rect2(b.position - sh.size * 0.5,sh.size).grow(2.0).has_point(p):
+                return true
+    return false
+
+func _dress_doorways(building,building_id:String) -> void:
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(hash(building_id + ":doors")) + 11
+    for raw in building.get_meta("partition_gaps",[]):
+        var r:Rect2 = raw
+        var horizontal = r.size.y > r.size.x     # a gap in an east-west wall is tall (the walk) and narrow
+        var span = r.size.x if horizontal else r.size.y
+        if span > 48.0 or span < 16.0:
+            continue                             # an archway or a sliver: no door was ever hung there
+        var c = r.get_center()
+        var lo = (r.position.x if horizontal else r.position.y)
+        var hi = (r.end.x if horizontal else r.end.y)
+        # the frame: a jamb at each end that meets a real piece of wall
+        for t in [lo + 2.0,hi - 2.0]:
+            var pos = Vector2(t,c.y) if horizontal else Vector2(c.x,t)
+            var outward = -5.0 if t < (lo + hi) * 0.5 else 5.0
+            var probe = pos + (Vector2(outward,0) if horizontal else Vector2(0,outward))
+            if not _partition_at(building,probe):
+                continue
+            _rect(pos,Vector2(4,10) if horizontal else Vector2(10,4),DOOR_JAMB,building).z_index = 1
+            _rect(pos + (Vector2(-1,-3) if horizontal else Vector2(-3,-1)),Vector2(2,3) if horizontal else Vector2(3,2),DOOR_JAMB_LIT,building).z_index = 1
+        if rng.randf() > 0.35:
+            continue
+        # a door left open: a slab square to the wall from one jamb, its edge
+        # lit, a knob, a strip of shadow on the floor beside it
+        var lw = span - 8.0
+        var into = 1.0 if rng.randf() < 0.5 else -1.0
+        var hinge = (lo + 4.0) if rng.randf() < 0.5 else (hi - 4.0)
+        var centre = Vector2(hinge,c.y + into * (5.0 + lw * 0.5)) if horizontal else Vector2(c.x + into * (5.0 + lw * 0.5),hinge)
+        var dims = Vector2(4,lw) if horizontal else Vector2(lw,4)
+        var shadow = _rect(centre + Vector2(2,1),dims,Color(0.0,0.0,0.0,0.22),building)
+        shadow.z_index = 1
+        _rect(centre,dims,DOOR_LEAF,building).z_index = 2
+        _rect(centre + (Vector2(-1.5,0) if horizontal else Vector2(0,-1.5)),Vector2(1,lw - 2.0) if horizontal else Vector2(lw - 2.0,1),DOOR_JAMB_LIT,building).z_index = 2
+        var knob = centre + (Vector2(0,into * (lw * 0.5 - 3.0)) if horizontal else Vector2(into * (lw * 0.5 - 3.0),0))
+        _rect(knob,Vector2(2,2),Color(0.78,0.66,0.40),building).z_index = 3
 
 func _scatter_interior_litter(building,size:Vector2,building_id:String) -> void:
     var rng = RandomNumberGenerator.new()
@@ -29104,6 +29251,7 @@ func _settle_interior_props(building,size:Vector2,check_rooms:bool = true):
             spr.queue_free()
             removed += 1
     building.set_meta("interior_props_settled",[moved,removed])
+    _resync_prop_bodies(building)
     if check_rooms and _open_blocked_rooms(building,size):
         # a doorway was cut: clear it of furniture, then check once more
         _settle_interior_props(building,size,false)

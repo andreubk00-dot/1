@@ -5,12 +5,15 @@ extends SceneTree
 #   --script tests/qa_interior_tour.gd -- --qa-output=<dir>
 const Main = preload("res://main_script_mod.gd")
 var output = ""
+var want_kind = ""
 var game = null
 
 func _initialize():
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--qa-output="):
             output = arg.trim_prefix("--qa-output=")
+        if arg.begins_with("--qa-kind="):
+            want_kind = arg.trim_prefix("--qa-kind=")
     call_deferred("run")
 
 func frames(n: int) -> void:
@@ -28,7 +31,10 @@ func run():
     game.field_hints.enabled = false
     var seen = {}
     var shot = 0
-    for stop in [Vector2i(0, 0), Vector2i(-8, -2), Vector2i(3, -4), Vector2i(-5, 5), Vector2i(6, 6), Vector2i(-3, -7), Vector2i(8, -1)]:
+    var stops = [Vector2i(0, 0), Vector2i(-8, -2), Vector2i(3, -4), Vector2i(-5, 5), Vector2i(6, 6), Vector2i(-3, -7), Vector2i(8, -1)]
+    if want_kind != "":
+        stops = [Vector2i(2, 2), Vector2i(-2, 3), Vector2i(4, -2), Vector2i(-4, -3), Vector2i(1, 5), Vector2i(-6, 1), Vector2i(5, 4), Vector2i(-1, -5), Vector2i(7, 2), Vector2i(-7, -6)]
+    for stop in stops:
         game._qa_move_to_world_chunk(stop)
         game.world_minutes = 12.0 * 60.0
         await frames(30)
@@ -40,6 +46,13 @@ func run():
             var size: Vector2 = b.get_meta("building_size")
             if size.x < 110 or size.y < 90:
                 continue
+            if want_kind != "":
+                var has = false
+                for c in b.get_children():
+                    if c is Sprite2D and game.HOME_PROP_REGIONS.has(str(c.get_meta("world_prop_kind", ""))):
+                        has = true
+                if not has:
+                    continue
             var kind = str(b.get_meta("archetype_id", b.get_meta("sign_text", "")))
             var key = "%s:%d" % [kind, int(size.x / 80)]
             if seen.has(key):
