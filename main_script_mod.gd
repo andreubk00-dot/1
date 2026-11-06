@@ -26504,6 +26504,13 @@ func _settlement_crossing_paint(layer,rng,keep_out:float,col:Color,zebra:bool):
 const SETTLEMENT_DECALS = ["puddle_a","puddle_b","pothole","mud","oil","patch","ruts","drain"]
 
 func _settlement_decal(parent,kind:String,pos:Vector2,rot:float = 0.0,scale_value:float = 1.0):
+    # 1.48: the settlements' puddles are the HD puddles of the rest of the world
+    # (the old cells were jagged polygons); the flat rectangular "patch" is gone
+    if kind == "patch":
+        return null
+    if (kind == "puddle_a" or kind == "puddle_b" or kind == "pothole") and _hd_exists(PUDDLE_TEX):
+        var v = int(abs(pos.x * 7.0 + pos.y * 3.0)) % 8
+        return _make_puddle(parent,pos,v,false)
     var atlas = load("res://settlement_ground_decals_v1.png")
     var index = SETTLEMENT_DECALS.find(kind)
     if atlas == null or index < 0:
@@ -26520,7 +26527,7 @@ func _settlement_decal(parent,kind:String,pos:Vector2,rot:float = 0.0,scale_valu
     sprite.scale = Vector2(scale_value,scale_value)
     sprite.flip_h = int(pos.x + pos.y) % 2 == 0
     sprite.flip_v = rot < -0.15
-    sprite.modulate = Color(1,1,1,0.82 if kind != "ruts" else 1.0)
+    sprite.modulate = Color(1,1,1,1.0 if kind == "ruts" else (0.5 if kind == "oil" else 0.82))
     parent.add_child(sprite)
     return sprite
 
@@ -26530,7 +26537,7 @@ func _settlement_road_decals(layer,cell_data:Dictionary,style:String,rng):
         "perron":["mud","puddle_a","puddle_b","mud"],
         "rubezh":["puddle_b","oil","patch","mud"],
         "mechanics":["pothole","puddle_a","oil","patch","pothole"],
-        "lazaret":["puddle_b","puddle_a","mud"]
+        "lazaret":["puddle_b","mud","mud","oil"]
     }.get(style,["puddle_a"])
     # main streets
     for axis in [0,1]:

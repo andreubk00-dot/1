@@ -30,8 +30,9 @@ def _all(t):
 
 def _leaves(t, seed, dense=0.05, sparse=0.006):
     lf = fbm(S, S, 48, seed + 70, 3)
-    t.leaves(lf > 0.64, dense, seed=seed + 71)
-    t.leaves((lf <= 0.64) & (lf > 0.45), sparse, seed=seed + 72)
+    # 1.48: leaves gather in drifts; the even sprinkle read as confetti
+    t.leaves(lf > 0.66, dense * 0.8, seed=seed + 71)
+    t.leaves((lf <= 0.66) & (lf > 0.5), sparse * 0.3, seed=seed + 72)
 
 
 def _cracks(t, rng, n, col=(26, 26, 28), hi=(78, 78, 76), branch=0.6):
