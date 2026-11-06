@@ -25680,7 +25680,25 @@ func _settlement_spot_clear(chunk,pos,radius:float) -> bool:
             return false
     return true
 
+# 1.49: the Blender vehicles were baked at different scales - a burnt Zhiguli
+# in a settlement came out at 49 units against the 79 of a parked one, a UAZ
+# ambulance at 52, a KamAZ bowser at 76. Body and footprint grow together.
+const VEHICLE_SIZE_FIX = {"burnt_car":1.5,"ambulance":1.5,"hr:burnt_ambulance":1.28,"hr:fuel_bowser":1.4}
+
+func _vehicle_piece_fixed(piece:Dictionary) -> Dictionary:
+    var k = float(VEHICLE_SIZE_FIX.get(str(piece.get("kind","")),1.0))
+    if k == 1.0 or piece.has("size_fixed"):
+        return piece
+    var out = piece.duplicate()
+    out["scale"] = float(piece.get("scale",0.5)) * k
+    var sv = piece.get("solid",Vector2.ZERO)
+    if sv is Vector2 and sv != Vector2.ZERO:
+        out["solid"] = sv * k
+    out["size_fixed"] = true
+    return out
+
 func _settlement_piece(chunk,piece:Dictionary):
+    piece = _vehicle_piece_fixed(piece)
     var kind = str(piece.get("kind",""))
     var pos = piece.get("pos",Vector2.ZERO)
     var solid = piece.get("solid",Vector2.ZERO)
@@ -26822,6 +26840,7 @@ func _hr_visual_conflict(chunk,node) -> bool:
     return _hr_box_conflict(chunk,box,node)
 
 func _hr_measure_piece(piece:Dictionary) -> Rect2:
+    piece = _vehicle_piece_fixed(piece)
     # opaque bounds of a piece's sprite relative to its origin, from the same
     # atlas cell, scale and anchor _settlement_piece uses (no node needed)
     var kind = str(piece.get("kind",""))
