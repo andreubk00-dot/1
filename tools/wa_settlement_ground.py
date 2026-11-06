@@ -163,8 +163,11 @@ def grass_leaves(seed=305, dry=0.0):
     g *= (0.80 + 0.36 * n2)[..., None]
     t.rgb = g
     A = _all(t)
-    t.speckle(A, 0.06, [(88, 104, 54), (98, 112, 60), (70, 86, 44)], seed=seed + 4)
-    t.speckle(A, 0.03, [(34, 42, 26), (40, 48, 30)], seed=seed + 5)
+    # 1.48: blades in clumps, not salt-and-pepper over every texel
+    clump = fbm(S, S, 14, seed + 6, 2) > 0.5
+    t.speckle(A & clump, 0.05, [(88, 104, 54), (98, 112, 60), (70, 86, 44)], seed=seed + 4)
+    t.speckle(A & ~clump, 0.012, [(80, 96, 50)], seed=seed + 7)
+    t.speckle(A & clump, 0.02, [(34, 42, 26), (40, 48, 30)], seed=seed + 5)
     _weeds(t, rng, soil < 0.4, 900)
     _leaves(t, seed, 0.08, 0.012)
     return t.image()
