@@ -29744,7 +29744,8 @@ func _furnish_interior_set(building,set_key:String,size:Vector2,building_id,cap:
         if bad:
             continue
         _archetype_prop(building,INTERIOR_LITTER[rng.randi_range(0,INTERIOR_LITTER.size() - 1)],lp,rng.randf_range(0.36,0.46),2)
-    building.set_meta("interior_fill_count",placed)
+    # a second pass (the dressing of a bare hall) adds to what is there
+    building.set_meta("interior_fill_count",int(building.get_meta("interior_fill_count",0)) + placed)
 
 func _prop_foot(spr) -> Rect2:
     # the floor footprint of a standing piece: the lower part of what it draws
