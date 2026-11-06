@@ -1667,7 +1667,12 @@ func _run_static_self_tests():
         "arms":100.0,
         "legs":100.0
     }
+    # the arm counts as already broken here: the startup check must not roll a
+    # real fracture (it showed "ПЕРЕЛОМ: РУКА" on a fresh game one start in three)
+    var old_injury_zone_test = last_injury_zone
+    fractures = {"arms":1,"legs":0}
     _apply_body_injury("arms",20.0)
+    last_injury_zone = old_injury_zone_test
     _record_test(abs(_body_condition_value("arms") - 80.0) < 0.01,"Body injury не уменьшает состояние зоны")
     _record_test(pain > 15.0,"Body injury не добавляет боль")
 
@@ -17456,12 +17461,32 @@ func _dress_tall_facade(facade,style,w,fh,storeys,door_x,building_id):
             _facade_atlas_sprite(facade,path,_facade_detail_region("drainpipe",fh),Vector2(side * (w * 0.5 - 9.0),-fh * 0.5))
     # AC units on residential / clinic / shop walls
     if style <= 2 and w > 110.0:
-        for i in range(rng.randi_range(1,2)):
-            var ax = rng.randf_range(-w * 0.36,w * 0.36)
-            if abs(ax - door_x) < 30.0:
-                ax += 50.0 * sign(ax - door_x + 0.01)
-            var ay = -10.0 - 28.0 * float(storeys - 1) - 16.0
-            _facade_atlas_sprite(facade,path,Rect2(3 * 48,20,48,40),Vector2(clamp(ax,-w*0.42,w*0.42),ay),0.6)
+        # 1.47: only on a bare pier of the top storey - a random x hung them over
+        # the glass. The piers are measured from the windows already on the wall.
+        var ay = -10.0 - 28.0 * float(storeys - 1) - 16.0
+        var ac_w = 48.0 * 0.5
+        var spans = []
+        for c in facade.get_children():
+            if c is Sprite2D and c.texture != null and abs(c.position.y - ay) < 22.0 and c.position.y < -12.0:
+                var cw = c.texture.get_size().x * abs(c.scale.x)
+                if cw > 10.0:
+                    spans.append(Vector2(c.position.x - cw * 0.5,c.position.x + cw * 0.5))
+        var piers = []
+        var px = -w * 0.5 + 14.0 + ac_w * 0.5
+        while px < w * 0.5 - 14.0 - ac_w * 0.5:
+            var free = true
+            for sp in spans:
+                if px + ac_w * 0.5 > sp.x - 1.0 and px - ac_w * 0.5 < sp.y + 1.0:
+                    free = false
+                    break
+            if free:
+                piers.append(px)
+                px += ac_w + 10.0
+            else:
+                px += 2.0
+        for i in range(min(piers.size(),rng.randi_range(1,2))):
+            var ax = float(piers.pop_at(rng.randi_range(0,piers.size() - 1)))
+            _facade_atlas_sprite(facade,path,Rect2(3 * 48,20,48,40),Vector2(ax,ay),0.5)
     # sagging wires under the cornice
     if (style == 0 or style == 2 or style == 3) and rng.randf() < 0.45:
         _facade_atlas_sprite(facade,path,Rect2(4 * 48,0,48,64),Vector2(rng.randf_range(-w*0.3,w*0.3),-fh + 30.0))
@@ -18029,6 +18054,14 @@ func _update_interior_prop_depth():
             continue
         var foot_offset = float(sprite.get_meta("depth_foot_offset",6.0))
         var foot_y = sprite.global_position.y + foot_offset
+        # 1.47: seen from the street a piece by the south wall stays behind the
+        # facade (z 18) - a washing machine showed on the wall over the windows
+        var house = sprite.get_parent()
+        if house is Node2D and house.has_meta("building_size"):
+            var hs:Vector2 = house.get_meta("building_size")
+            if not Rect2(house.global_position - hs * 0.5,hs).grow(2.0).has_point(player.global_position):
+                sprite.z_index = 17
+                continue
         var near_player = abs(sprite.global_position.x - player.global_position.x) < 125.0 and abs(foot_y - player.global_position.y) < 105.0
         if near_player and player.global_position.y < foot_y - 2.0:
             sprite.z_index = 22
@@ -23359,6 +23392,7 @@ func _load_chunk(coord):
     _record_map_footprint(chunk,coord)
     _place_ether_note(chunk,coord)
     _clear_prop_bodies_off_containers(chunk)
+    _tidy_chunk_props(chunk)
     # doorways are framed once the partitions are final (the walk from the
     # front door trims some after the rooms are laid out)
     for b in chunk.get_children():
@@ -23982,7 +24016,7 @@ vec3 ground_weather(vec3 c, vec2 wp) {
         // tarmac with a worn, uneven edge and a black bitumen seam around it
         vec2 cs = vec2(72.0, 44.0);
         vec2 cell = floor(tp / cs);
-        if (gw_h(cell + 3.1) > 0.78) {
+        if (gw_h(cell + 3.1) > 0.87) {
             vec2 f = fract(tp / cs);
             vec2 lo = vec2(0.06) + vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.30;
             vec2 hi = lo + vec2(0.30) + vec2(gw_h(cell + 9.0), gw_h(cell + 11.0)) * 0.30;
@@ -26332,16 +26366,29 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
         _rect(pad,Vector2(9,18),Color(0.70,0.26,0.22,0.85),layer)
 
 func _settlement_paint(layer,center:Vector2,size:Vector2,col:Color,rng):
-    # worn road paint: random fade, chipped gaps, never perfectly crisp
+    # worn road paint: random fade, chipped gaps, never perfectly crisp. A chip
+    # is a gap in the paint (the paving shows through), not a dark patch on it -
+    # the 1.46 dark chips turned every zebra into a pattern of grey squares.
     if rng.randf() < 0.08:
         return
     var c = Color(col.r,col.g,col.b,col.a * rng.randf_range(0.55,1.0))
-    _rect(center,size,c,layer)
+    var along_x = size.x >= size.y
+    var length = size.x if along_x else size.y
+    var cuts = []
     for i in range(rng.randi_range(0,2)):
-        var along_x = size.x >= size.y
-        var chip = Vector2(rng.randf_range(2,5),size.y) if along_x else Vector2(size.x,rng.randf_range(2,5))
-        var off = Vector2(rng.randf_range(-size.x * 0.4,size.x * 0.4),0) if along_x else Vector2(0,rng.randf_range(-size.y * 0.4,size.y * 0.4))
-        _rect(center + off,chip,Color(0.16,0.16,0.16,0.55),layer)
+        var w = rng.randf_range(2.0,4.0)
+        var at = rng.randf_range(-length * 0.4,length * 0.4)
+        cuts.append(Vector2(at - w * 0.5,at + w * 0.5))
+    cuts.sort_custom(func(a,b): return a.x < b.x)
+    var start = -length * 0.5
+    for cut in cuts + [Vector2(length * 0.5,length * 0.5)]:
+        var stop = min(cut.x,length * 0.5)
+        if stop - start >= 1.5:
+            var mid = (start + stop) * 0.5
+            var seg = Vector2(stop - start,size.y) if along_x else Vector2(size.x,stop - start)
+            var off = Vector2(mid,0) if along_x else Vector2(0,mid)
+            _rect(center + off,seg,c,layer)
+        start = max(start,cut.y)
 
 func _settlement_street_marks(layer,style:String,rng,idx:int = -1):
     # Markings follow the street axes exactly (x/y = 384); they stop short of the
@@ -28807,6 +28854,96 @@ func _resync_prop_bodies(building) -> void:
 # a container (a cache, a locker to search) must stand clear: a piece of
 # furniture whose new body covers one gives way - its body, and if it was
 # only filler, the piece itself
+# 1.47: the last word on a freshly built chunk - nothing upright stands on a
+# parked car, and no piece of furniture stands inside another one (two dressing
+# passes could pick the same spot: a cabinet in a wardrobe, a crate in a bench).
+func _tidy_chunk_props(chunk) -> void:
+    if not is_instance_valid(chunk) or chunk.has_meta("marauder_base"):
+        return
+    var keep = []
+    for n in get_tree().get_nodes_in_group("interactable"):
+        if is_instance_valid(n) and chunk.is_ancestor_of(n):
+            keep.append(n.global_position)
+    var cars = []
+    for c in chunk.get_children():
+        if c is Node2D and c.has_meta("world_car"):
+            cars.append(c)
+    if not cars.is_empty():
+        for n in chunk.get_children():
+            if not (n is Sprite2D) or n.is_queued_for_deletion():
+                continue
+            var kind = str(n.get_meta("world_prop_kind",n.get_meta("street_furniture_kind","")))
+            if kind == "" or _interior_kind_walkable(kind):
+                continue
+            for c in cars:
+                var lp = (n.position - c.position).rotated(-c.rotation)
+                if abs(lp.x) < 30.0 and abs(lp.y) < 12.0 and not _near_any(n.global_position,keep,12.0):
+                    _drop_prop(n)
+                    break
+    # nothing from the street stands in a house's wall or on its floor
+    var rooms = []
+    for b in chunk.get_children():
+        if b is Node2D and b.is_in_group("world_buildings") and b.has_meta("building_size"):
+            var sz:Vector2 = b.get_meta("building_size")
+            if sz.x < 420.0:
+                rooms.append(Rect2(b.position - sz * 0.5,sz).grow(4.0))
+    if not rooms.is_empty():
+        for n in chunk.get_children():
+            if not (n is Sprite2D) or n.is_queued_for_deletion():
+                continue
+            var kind = str(n.get_meta("world_prop_kind",n.get_meta("street_furniture_kind","")))
+            if kind == "" or _interior_kind_walkable(kind):
+                continue
+            for r in rooms:
+                if r.has_point(n.position) and not _near_any(n.global_position,keep,12.0):
+                    _drop_prop(n)
+                    break
+    for b in chunk.get_children():
+        if b is Node2D and b.is_in_group("world_buildings"):
+            _separate_furniture(b,keep)
+
+func _near_any(p:Vector2,points:Array,radius:float) -> bool:
+    for q in points:
+        if p.distance_to(q) <= radius:
+            return true
+    return false
+
+func _drop_prop(spr) -> void:
+    var body = spr.get_meta("prop_body") if spr.has_meta("prop_body") else null
+    if is_instance_valid(body):
+        body.queue_free()
+    spr.remove_from_group("interior_depth_props")
+    spr.queue_free()
+
+func _separate_furniture(building,keep:Array) -> void:
+    var items = []
+    for c in building.get_children():
+        if c is StaticBody2D and c.has_meta("prop_solid_body") and not c.is_queued_for_deletion() and c.get_child_count() > 0:
+            var sh = c.get_child(0)
+            var spr = c.get_meta("prop_sprite",null)
+            if sh is CollisionShape2D and sh.shape is RectangleShape2D and is_instance_valid(spr):
+                items.append([c,spr,Rect2(c.global_position + sh.position - sh.shape.size * 0.5,sh.shape.size)])
+    for i in range(items.size()):
+        if items[i][0].is_queued_for_deletion():
+            continue
+        for j in range(i + 1,items.size()):
+            if items[j][0].is_queued_for_deletion() or items[i][0].is_queued_for_deletion():
+                continue
+            var a:Rect2 = items[i][2]
+            var b:Rect2 = items[j][2]
+            if a.intersection(b).get_area() <= 0.35 * min(a.get_area(),b.get_area()):
+                continue
+            # the smaller piece goes, unless something is stored in it
+            var small = items[j] if b.get_area() <= a.get_area() else items[i]
+            var big = items[i] if small == items[j] else items[j]
+            if _near_any(small[1].global_position,keep,14.0):
+                small = big
+                if _near_any(small[1].global_position,keep,14.0):
+                    continue
+            small[0].queue_free()
+            small[1].remove_from_group("interior_depth_props")
+            small[1].queue_free()
+
 func _clear_prop_bodies_off_containers(chunk) -> void:
     # the raiders' base is laid out by hand (everything solid comes from its
     # catalog): the generic bodies and filler pieces stand aside there
@@ -34007,7 +34144,7 @@ vec3 ground_weather(vec3 c, vec2 wp) {
         // tarmac with a worn, uneven edge and a black bitumen seam around it
         vec2 cs = vec2(72.0, 44.0);
         vec2 cell = floor(tp / cs);
-        if (gw_h(cell + 3.1) > 0.78) {
+        if (gw_h(cell + 3.1) > 0.87) {
             vec2 f = fract(tp / cs);
             vec2 lo = vec2(0.06) + vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.30;
             vec2 hi = lo + vec2(0.30) + vec2(gw_h(cell + 9.0), gw_h(cell + 11.0)) * 0.30;

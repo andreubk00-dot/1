@@ -353,16 +353,21 @@ def oxygen_cylinder():
 
 
 def reception_desk():
-    front = wood((130, 98, 66))
-    box((0, 2, 9), (23, 4, 9), front, bevel=0.6)
-    box((0, 1.5, 18.4), (24, 5, 0.6), wood((150, 116, 80)), bevel=0.3)
-    for x in range(-18, 19, 9):
-        box((x, 6.05, 9), (4, 0.1, 7.5), wood((118, 88, 58)), bevel=0.2)
-    box((0, -6, 12), (22, 3, 0.5), wood((140, 108, 72)), bevel=0.2)                  # the inner top
-    box((12, -5, 16), (4, 3, 3.6), paint((180, 176, 160)), bevel=0.7)                 # a monitor
-    box((-10, 2, 19.2), (3.4, 2.2, 0.25), mat(PAPER, rough=0.9), bevel=0, rot=(0, 0, 0.25))
-    box((-4, 2.5, 19.3), (1.6, 1.0, 0.5), mat((30, 30, 30), rough=0.6), bevel=0.2)   # a phone
-    box((4, 6.2, 12), (3.0, 0.05, 1.4), mat((40, 80, 130), rough=0.8), bevel=0)      # a sign
+    # a tall front with a raised ledge: from the camera it is mostly front
+    front = wood((124, 92, 60))
+    trim = wood((92, 66, 42))
+    box((0, 0, 11), (23, 3, 11), front, bevel=0.5)
+    for x in range(-18, 19, 9):                                    # panels
+        box((x, 3.05, 10), (3.8, 0.1, 8), wood((136, 102, 68)), bevel=0.2)
+        box((x, 3.12, 10), (3.2, 0.05, 7.2), front, bevel=0)
+    box((0, 3.1, 1.0), (23, 0.2, 1.0), trim, bevel=0)              # kick plate
+    box((0, 0.5, 22.4), (24, 4.0, 0.6), wood((158, 122, 84)), bevel=0.3)   # the ledge
+    box((0, 3.3, 22.4), (24, 0.3, 0.7), trim, bevel=0)
+    box((12, -2, 25), (3.6, 2.4, 2.6), paint((180, 176, 160)), bevel=0.6)  # a monitor behind
+    box((-10, 1, 23.2), (3.0, 2.0, 0.2), mat(PAPER, rough=0.9), bevel=0, rot=(0, 0, 0.25))
+    box((-4, 1.5, 23.4), (1.6, 1.0, 0.5), mat((30, 30, 30), rough=0.6), bevel=0.2)   # a phone
+    box((4, 3.25, 15), (3.0, 0.05, 1.4), mat((40, 80, 130), rough=0.8), bevel=0)     # a sign
+    box((4, 3.3, 15), (2.0, 0.05, 0.3), mat((220, 220, 210), rough=0.8), bevel=0)
 
 
 def stretcher():
