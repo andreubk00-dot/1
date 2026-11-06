@@ -16901,7 +16901,7 @@ func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value =
         return _litter_decal_sprite(str(kind),parent,pos,z_value)
     if PROP_HD_KINDS.has(str(kind)) and _hd_exists("res://art/world_hd/props_hd.png"):
         return _hd_prop_sprite(str(kind),parent,pos,z_value,scale_value)
-    var atlas = load("res://world_props_v19.png")
+    var atlas = _world_props_atlas()
     if atlas == null:
         return null
     var region = _world_prop_region(kind)
@@ -16932,10 +16932,17 @@ func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value =
     parent.add_child(sprite)
     return sprite
 
+func _world_props_atlas():
+    # 1.46: the same layout with the common pieces remodelled in Blender
+    # (tools/blender/props_v20.py); the 1x drawings stay the fallback
+    if _hd_exists("res://art/world_hd/world_props_v20.png"):
+        return load("res://art/world_hd/world_props_v20.png")
+    return load("res://world_props_v19.png")
+
 func _set_world_prop_sprite_kind(sprite,kind):
     if not is_instance_valid(sprite):
         return false
-    var atlas = load("res://world_props_v19.png")
+    var atlas = _world_props_atlas()
     if atlas == null:
         return false
     var region = _world_prop_region(kind)
@@ -23808,6 +23815,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/vehicles/world_cars_hd_v2.png")
     paths.append("res://art/vehicles/vehicles_hd_v1.png")
     paths.append("res://art/high_risk/hr_props_v1.png")
+    paths.append("res://art/world_hd/world_props_v20.png")
     paths.append("res://settlement_props_v1.png")
     for family in ["city","rural","woodland","military","industrial"]:
         paths.append("res://art/world_hd/ground_%s_hd.png" % family)
