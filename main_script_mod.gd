@@ -30228,7 +30228,11 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
         else:
             _decorate_interior_architecture(building,sign_text,size)
             _decorate_building_art(building,sign_text,size,building_id)
-        if settlement_model.is_empty():
+        # 1.49: the halls of the High Risk compounds (Bastion, Vector, clinic
+        # No. 4) carry an authored facade, not an authored floor - they were
+        # left bare. Settlement houses keep their hand-placed rooms.
+        var hr_model = str(archetype_data.get("settlement_model","")) if archetype_id != "" else ""
+        if settlement_model.is_empty() or HighRiskBuildingModels.has(hr_model):
             _dress_sparse_interior(building,sign_text,archetype_id,archetype_data,size,building_id)
 
     var facade = Node2D.new()
