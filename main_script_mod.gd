@@ -16762,6 +16762,39 @@ func _integrated_sprite_scale(value):
     # Quantized scaling keeps pixel density consistent between unrelated source assets.
     return clamp(round(float(value) * 7.0) / 8.0,0.25,1.5)
 
+var _hd_prop_used = {}
+
+func _hd_prop_used_rect(kind:String) -> Rect2:
+    # the opaque part of a kind's 128 px cell (cached; read once from the sheet)
+    if _hd_prop_used.has(kind):
+        return _hd_prop_used[kind]
+    var r = Rect2()
+    var tex = load("res://art/world_hd/props_hd.png")
+    if tex != null and PROP_HD_KINDS.has(kind):
+        var img = tex.get_image()
+        if img != null:
+            if img.is_compressed():
+                img.decompress()
+            var idx = int(PROP_HD_KINDS[kind])
+            var cell = img.get_region(Rect2i((idx % PROP_HD_COLS) * 128,int(idx / PROP_HD_COLS) * 128,128,128))
+            var used = cell.get_used_rect()
+            # the baked drop shadow is soft and low: keep the solid pixels only
+            var minx = 128
+            var maxx = -1
+            var miny = 128
+            var maxy = -1
+            for y in range(used.position.y,used.end.y):
+                for x in range(used.position.x,used.end.x):
+                    if cell.get_pixel(x,y).a > 0.9:
+                        minx = min(minx,x)
+                        maxx = max(maxx,x)
+                        miny = min(miny,y)
+                        maxy = max(maxy,y)
+            if maxx >= minx:
+                r = Rect2(minx,miny,maxx - minx + 1,maxy - miny + 1)
+    _hd_prop_used[kind] = r
+    return r
+
 func _hd_prop_sprite(kind:String,parent,pos:Vector2,z_value:int,scale_value:float):
     # the 1x prop stood centred on pos; the HD cell is bottom-anchored, so keep
     # the old ground line (bottom of the 1x sprite) and real-size the model
@@ -16770,7 +16803,7 @@ func _hd_prop_sprite(kind:String,parent,pos:Vector2,z_value:int,scale_value:floa
     var idx = int(PROP_HD_KINDS[kind])
     var tex = AtlasTexture.new()
     tex.atlas = load("res://art/world_hd/props_hd.png")
-    tex.region = Rect2((idx % 4) * 128,int(idx / 4) * 128,128,128)
+    tex.region = Rect2((idx % PROP_HD_COLS) * 128,int(idx / PROP_HD_COLS) * 128,128,128)
     var sprite = Sprite2D.new()
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -18794,7 +18827,11 @@ func _update_detail_lights(delta):
 const GROUND_DECAL_KINDS = ["rubble_a","rubble_b","rubble_c","blood_a","blood_b","blood_dry","papers_a","papers_b","glass","oil","planks","tiles"]
 # HD Blender props (tools/blender/props_hd.py): 64-unit cells, 128 texels, drawn at 0.5
 const PROP_HD_KINDS = {"crate":0,"barrel":1,"workbench":2,"lamp":3,"supply_crate":4,"gas_can":5,"cardboard_boxes":6,"trash_bin":7,
-    "woodpile":8,"stump":9,"wheelbarrow":10,"milk_can":11,"signpost":12}
+    "woodpile":8,"stump":9,"wheelbarrow":10,"milk_can":11,"signpost":12,
+    # 1.46: the street furniture and the roads' small things, modelled too
+    "bench":13,"dumpster":14,"el_cabinets":15,"bus_stop":16,"bollards":17,"planter":18,"tires":19,"notice_board":20,
+    "traffic_cone":21,"road_barrier":22,"sandbags":23,"trash_bag":24,"road_sign":25}
+const PROP_HD_COLS = 8
 # old 1x litter heaps (noisy white / red speckle blobs) -> HD ground decal cells
 const LITTER_TO_DECAL = {"debris":1,"rubble_papers":0,"broken_tile_pile":11,"wooden_debris":10,
     "floor_papers":6,"newspapers":7,"newspapers_wide":6,"shattered_glass":8}
@@ -23768,7 +23805,7 @@ func _ensure_world_hd_preloaded():
         paths.append("res://art/world_hd/roof_edge_h_s%d_hd.png" % st)
         paths.append("res://art/world_hd/roof_edge_v_s%d_hd.png" % st)
     paths.append("res://art/world_hd/roof_props_hd.png")
-    paths.append("res://art/vehicles/world_cars_hd_v1.png")
+    paths.append("res://art/vehicles/world_cars_hd_v2.png")
     paths.append("res://art/vehicles/vehicles_hd_v1.png")
     paths.append("res://art/high_risk/hr_props_v1.png")
     paths.append("res://settlement_props_v1.png")
@@ -23933,14 +23970,21 @@ vec3 ground_weather(vec3 c, vec2 wp) {
     float broad = gw_n(tp / 260.0) * 0.6 + gw_n(tp / 90.0 + 17.0) * 0.4;
     float k = mix(0.84, 1.12, broad);
     if (hard) {
-        // patched asphalt: a few crisp, darker rectangles per lot
-        vec2 cs = vec2(28.0, 18.0);
+        // 1.46 patched asphalt: a few repairs per street - a slab of newer, darker
+        // tarmac with a worn, uneven edge and a black bitumen seam around it
+        vec2 cs = vec2(72.0, 44.0);
         vec2 cell = floor(tp / cs);
-        if (gw_h(cell + 3.1) > 0.88) {
+        if (gw_h(cell + 3.1) > 0.78) {
             vec2 f = fract(tp / cs);
-            vec2 lo = vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.3;
-            vec2 hi = lo + 0.45 + gw_h(cell + 9.0) * 0.2;
-            if (f.x > lo.x && f.x < hi.x && f.y > lo.y && f.y < hi.y) k *= 0.82;
+            vec2 lo = vec2(0.06) + vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.30;
+            vec2 hi = lo + vec2(0.30) + vec2(gw_h(cell + 9.0), gw_h(cell + 11.0)) * 0.30;
+            vec2 d = min(f - lo, hi - f) * cs;
+            float edge = min(d.x, d.y) + (gw_n(tp / 2.5 + cell * 13.0) - 0.5) * 2.6 + (gw_n(tp / 9.0 + 5.0) - 0.5) * 3.0;
+            if (edge > 0.0) {
+                k *= gw_h(cell + 13.0) > 0.45 ? 0.86 : 0.93;
+                k *= 0.97 + gw_h(tp * 1.7 + 2.0) * 0.06;
+                if (edge < 1.1) k *= 0.66;
+            }
         }
         // damp and oil: irregular dark blotches with a soft rim
         float blot = gw_n(tp / 38.0 + 7.0) * 0.7 + gw_n(tp / 11.0 + 3.0) * 0.3;
@@ -28807,6 +28851,20 @@ func _interior_prop_solid_rect(sprite,kind:String,force:bool = false) -> Rect2:
     var vis = sprite.texture.get_size() * sprite.scale
     if HOME_PROP_REGIONS.has(kind):
         vis = _home_prop_used_size(kind) * sprite.scale
+    if sprite.has_meta("world_prop_hd") and PROP_HD_KINDS.has(kind):
+        # the HD cell is 64 x 64 units round a much smaller model: measure the
+        # model itself (a drum got a 50-unit body before)
+        var used = _hd_prop_used_rect(kind)
+        if used.size == Vector2.ZERO:
+            return Rect2()
+        var u = Rect2(used.position * sprite.scale.x,used.size * sprite.scale.x)
+        var cell_half = sprite.texture.get_size() * sprite.scale * 0.5
+        var left = (cell_half.x * 2.0 - u.end.x) if sprite.flip_h else u.position.x
+        var wv = max(6.0,u.size.x * 0.74)
+        var hv = clamp(u.size.y * 0.22,4.0,14.0)
+        var cx = sprite.position.x - cell_half.x + left + u.size.x * 0.5
+        var bottom = sprite.position.y - cell_half.y + u.end.y - u.size.y * 0.06
+        return Rect2(Vector2(cx - wv * 0.5,bottom - hv),Vector2(wv,hv))
     if vis.x < 6.0 or vis.y < 6.0:
         return Rect2()
     # the part that stands on the floor: most of the width, the lower third
@@ -30300,7 +30358,15 @@ func _create_car(chunk,pos,color,angle):
         blob.add_to_group("sun_blob_shadows")
     var sprite = Sprite2D.new()
     var car_atlas = load("res://car_v4.png")
-    var hd_cars = load("res://art/vehicles/world_cars_hd_v1.png") if _hd_exists("res://art/vehicles/world_cars_hd_v1.png") else null
+    var hd_cars = null
+    var hd_rows = 1
+    if _hd_exists("res://art/vehicles/world_cars_hd_v2.png"):
+        # 1.46: each model rendered in four worn paints (mottled paint, rust low on
+        # the body, road dust) - the colour is baked in, no flat tint
+        hd_cars = load("res://art/vehicles/world_cars_hd_v2.png")
+        hd_rows = 4
+    elif _hd_exists("res://art/vehicles/world_cars_hd_v1.png"):
+        hd_cars = load("res://art/vehicles/world_cars_hd_v1.png")
     if hd_cars != null:
         # Blender-modelled Zhiguli / Niva / Moskvich in three views (side, nose to the
         # camera, tail to the camera): pick the view nearest to the heading and only
@@ -30321,7 +30387,10 @@ func _create_car(chunk,pos,color,angle):
             rest = a + PI * 0.5
         var hd_tex = AtlasTexture.new()
         hd_tex.atlas = hd_cars
-        hd_tex.region = Rect2(view * 256,_car_model_index(pos) * 256,256,256)
+        var paint = 0
+        if hd_rows > 1:
+            paint = int(abs(int(pos.x) * 31 + int(pos.y) * 17 + int(pos.x / 7.0))) % hd_rows
+        hd_tex.region = Rect2(view * 256,(_car_model_index(pos) * hd_rows + paint) * 256,256,256)
         sprite.texture = hd_tex
         sprite.offset = Vector2(0,-32)
         sprite.flip_h = flip
@@ -30330,7 +30399,10 @@ func _create_car(chunk,pos,color,angle):
         sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
         # paint tone close to the body colour: a pale tint made parked cars glow
         # white under the night CanvasModulate
-        sprite.modulate = Color(0.55,0.55,0.55).lerp(color,0.9)
+        if hd_rows > 1:
+            sprite.modulate = Color(0.96,0.96,0.96)
+        else:
+            sprite.modulate = Color(0.55,0.55,0.55).lerp(color,0.9)
         sprite.material = _sun_shadow_material()
         car.set_meta("car_model",_car_model_index(pos))
         car.set_meta("car_view",view)
@@ -30872,6 +30944,19 @@ const STREET_SOLID_KINDS = ["bench","dumpster","el_cabinets","bus_stop","planter
 const VERGE_SOLID_KINDS = ["road_barrier","sandbags","supply_crate","barrel","crate","woodpile","stump","wheelbarrow","milk_can","trash_bin","rubble_crate"]
 
 func _street_furniture_sprite(kind,parent,pos,z_value = 5):
+    if PROP_HD_KINDS.has(str(kind)) and _hd_exists("res://art/world_hd/props_hd.png"):
+        # 1.46: modelled like the yard props; the ground line stays where the
+        # old drawing's bottom was (pos + 12)
+        var hd = _hd_prop_sprite(str(kind),parent,Vector2(pos.x,pos.y),z_value,0.5)
+        hd.position = Vector2(round(pos.x),round(pos.y + 12.0 - 31.0))
+        hd.z_as_relative = false
+        hd.set_meta("street_furniture_kind",kind)
+        hd.add_to_group("street_furniture")
+        if kind in STREET_SOLID_KINDS:
+            var solid = _interior_prop_solid_rect(hd,str(kind),true)
+            if solid.size != Vector2.ZERO:
+                _add_prop_body(parent,solid,hd)
+        return hd
     var atlas = load("res://street_furniture_v1.png")
     if atlas == null:
         return null
@@ -33910,14 +33995,21 @@ vec3 ground_weather(vec3 c, vec2 wp) {
     float broad = gw_n(tp / 260.0) * 0.6 + gw_n(tp / 90.0 + 17.0) * 0.4;
     float k = mix(0.84, 1.12, broad);
     if (hard) {
-        // patched asphalt: a few crisp, darker rectangles per lot
-        vec2 cs = vec2(28.0, 18.0);
+        // 1.46 patched asphalt: a few repairs per street - a slab of newer, darker
+        // tarmac with a worn, uneven edge and a black bitumen seam around it
+        vec2 cs = vec2(72.0, 44.0);
         vec2 cell = floor(tp / cs);
-        if (gw_h(cell + 3.1) > 0.88) {
+        if (gw_h(cell + 3.1) > 0.78) {
             vec2 f = fract(tp / cs);
-            vec2 lo = vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.3;
-            vec2 hi = lo + 0.45 + gw_h(cell + 9.0) * 0.2;
-            if (f.x > lo.x && f.x < hi.x && f.y > lo.y && f.y < hi.y) k *= 0.82;
+            vec2 lo = vec2(0.06) + vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.30;
+            vec2 hi = lo + vec2(0.30) + vec2(gw_h(cell + 9.0), gw_h(cell + 11.0)) * 0.30;
+            vec2 d = min(f - lo, hi - f) * cs;
+            float edge = min(d.x, d.y) + (gw_n(tp / 2.5 + cell * 13.0) - 0.5) * 2.6 + (gw_n(tp / 9.0 + 5.0) - 0.5) * 3.0;
+            if (edge > 0.0) {
+                k *= gw_h(cell + 13.0) > 0.45 ? 0.86 : 0.93;
+                k *= 0.97 + gw_h(tp * 1.7 + 2.0) * 0.06;
+                if (edge < 1.1) k *= 0.66;
+            }
         }
         // damp and oil: irregular dark blotches with a soft rim
         float blot = gw_n(tp / 38.0 + 7.0) * 0.7 + gw_n(tp / 11.0 + 3.0) * 0.3;

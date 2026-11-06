@@ -39,6 +39,96 @@ def burnt_paint():
     return mat((70, 56, 46), rough=0.95, grime=0.35, scale=0.2)
 
 
+# 1.46: a car left out for two winters - the paint faded in patches, rust
+# breaking through along the sills, the arches and the lower doors (more the
+# lower it is), road dust over the bottom. CAR_RUST > 0 turns it on.
+CAR_RUST = 0.0
+
+
+def car_paint(colour, rough=0.48, dust=0.5):
+    if CAR_RUST <= 0.0:
+        return mat(colour, rough=rough, grime=0.10, dust=dust)
+    key = ('worn', tuple(colour), round(CAR_RUST, 2))
+    if key in bk._MAT:
+        return bk._MAT[key]
+    import bpy
+    m = bpy.data.materials.new('worn_%d_%d_%d' % tuple(colour))
+    m.use_nodes = True
+    nt = m.node_tree
+    N, L = nt.nodes, nt.links
+    bsdf = N['Principled BSDF']
+    lin = lambda c: tuple(bk.srgb2lin(v) for v in c) + (1,)
+    tc = N.new('ShaderNodeTexCoord')
+    # faded paint: broad mottling a little lighter / darker
+    n1 = N.new('ShaderNodeTexNoise')
+    n1.inputs['Scale'].default_value = 0.06
+    n1.inputs['Detail'].default_value = 4
+    L.new(tc.outputs['Object'], n1.inputs['Vector'])
+    r1 = N.new('ShaderNodeMapRange')
+    r1.inputs['From Min'].default_value = 0.3
+    r1.inputs['From Max'].default_value = 0.7
+    r1.inputs['To Min'].default_value = 0.84
+    r1.inputs['To Max'].default_value = 1.08
+    L.new(n1.outputs['Fac'], r1.inputs['Value'])
+    base = N.new('ShaderNodeMix')
+    base.data_type = 'RGBA'
+    base.blend_type = 'MULTIPLY'
+    base.inputs['Factor'].default_value = 1.0
+    base.inputs['A'].default_value = lin(colour)
+    L.new(r1.outputs['Result'], base.inputs['B'])
+    # rust: blotches, denser low on the body
+    n2 = N.new('ShaderNodeTexNoise')
+    n2.inputs['Scale'].default_value = 0.24
+    n2.inputs['Detail'].default_value = 7
+    n2.inputs['Roughness'].default_value = 0.68
+    L.new(tc.outputs['Object'], n2.inputs['Vector'])
+    geo = N.new('ShaderNodeNewGeometry')
+    sep = N.new('ShaderNodeSeparateXYZ')
+    L.new(geo.outputs['Position'], sep.inputs['Vector'])
+    low = N.new('ShaderNodeMapRange')
+    low.inputs['From Min'].default_value = 22
+    low.inputs['From Max'].default_value = 5
+    low.inputs['To Min'].default_value = 0.0
+    low.inputs['To Max'].default_value = 0.30 * CAR_RUST
+    L.new(sep.outputs['Z'], low.inputs['Value'])
+    thr = N.new('ShaderNodeMath')
+    thr.operation = 'ADD'
+    L.new(n2.outputs['Fac'], thr.inputs[0])
+    L.new(low.outputs['Result'], thr.inputs[1])
+    rm = N.new('ShaderNodeMapRange')
+    rm.inputs['From Min'].default_value = 0.75 - 0.06 * CAR_RUST
+    rm.inputs['From Max'].default_value = 0.78 - 0.06 * CAR_RUST
+    rm.inputs['To Min'].default_value = 0.0
+    rm.inputs['To Max'].default_value = 1.0
+    L.new(thr.outputs['Value'], rm.inputs['Value'])
+    rust = N.new('ShaderNodeMix')
+    rust.data_type = 'RGBA'
+    L.new(rm.outputs['Result'], rust.inputs['Factor'])
+    L.new(base.outputs['Result'], rust.inputs['A'])
+    rust.inputs['B'].default_value = lin((112, 60, 34))
+    # road dust over the bottom
+    dz = N.new('ShaderNodeMapRange')
+    dz.inputs['From Min'].default_value = 14
+    dz.inputs['From Max'].default_value = 2
+    dz.inputs['To Min'].default_value = 0.0
+    dz.inputs['To Max'].default_value = dust
+    L.new(sep.outputs['Z'], dz.inputs['Value'])
+    dmix = N.new('ShaderNodeMix')
+    dmix.data_type = 'RGBA'
+    L.new(dz.outputs['Result'], dmix.inputs['Factor'])
+    L.new(rust.outputs['Result'], dmix.inputs['A'])
+    dmix.inputs['B'].default_value = lin((112, 98, 76))
+    L.new(dmix.outputs['Result'], bsdf.inputs['Base Color'])
+    # rust is matte, the paint keeps a little sheen
+    rr = N.new('ShaderNodeMapRange')
+    rr.inputs['To Min'].default_value = rough
+    rr.inputs['To Max'].default_value = 0.95
+    L.new(rm.outputs['Result'], rr.inputs['Value'])
+    L.new(rr.outputs['Result'], bsdf.inputs['Roughness'])
+    bk._MAT[key] = m
+    return m
+
+
 def lamp(on=False):
     return mat((210, 206, 180), rough=0.2, grime=0.02, emit=(255, 230, 170) if on else None)
 
@@ -47,7 +137,7 @@ def lamp(on=False):
 def lada(colour=(98, 116, 128), burnt=False, seed=1, on_blocks=False):
     """VAZ-2105/2107 sedan: three-box body, chrome bumpers, square lamps."""
     rng = random.Random(seed)
-    paint = burnt_paint() if burnt else mat(colour, rough=0.48, grime=0.10, dust=0.5)
+    paint = burnt_paint() if burnt else car_paint(colour, rough=0.48, dust=0.5)
     under = mat((40, 40, 38), rough=0.9)
     lift = 7.0 if on_blocks else 0.0
     # wheels (track 30, wheelbase 50)
@@ -913,7 +1003,7 @@ def build_all(P, only=None, tmpdir=None, cached=None):
 # ----------------------------------------------------------- world cars --
 def niva(colour=(170, 172, 168), seed=31):
     """VAZ-2121 Niva: short boxy 3-door, high stance, spare wheel under the bonnet."""
-    paint = mat(colour, rough=0.5, grime=0.10, dust=0.6)
+    paint = car_paint(colour, rough=0.5, dust=0.6)
     for x in (-20, 22):
         for y in (-14, 14):
             wheel(x, y, 0, 8.4, 5.0, side=1 if y > 0 else -1)
@@ -951,7 +1041,7 @@ def niva(colour=(170, 172, 168), seed=31):
 
 def moskvich(colour=(170, 172, 168), seed=32):
     """AZLK-2141 hatchback: wedge nose, long sloping tailgate."""
-    paint = mat(colour, rough=0.48, grime=0.10, dust=0.5)
+    paint = car_paint(colour, rough=0.48, dust=0.5)
     for x in (-27, 26):
         for y in (-14, 14):
             wheel(x, y, 0, 7.2, 4.4, side=1 if y > 0 else -1)
@@ -1020,6 +1110,50 @@ def build_world_cars(P, cached=None, tmpdir=None):
             print('car', key, flush=True)
     sheet.save(os.path.join(P, 'art', 'vehicles', 'world_cars_hd_v1.png'))
 
+
+# 1.46: the cars in their own colours (the old sheet was one neutral paint the
+# game tinted - glass, chrome, tyres and lamps took the tint too). Rows: model
+# x colour; columns: side / front / rear, as v1.
+WORLD_CAR_COLOURS = {
+    'zhiguli': [((196, 184, 150), 0.5), ((150, 52, 40), 0.8), ((70, 96, 72), 0.6), ((66, 90, 128), 0.9)],
+    'niva': [((128, 132, 90), 0.6), ((176, 170, 150), 0.8), ((110, 40, 34), 0.7), ((72, 96, 110), 0.5)],
+    'moskvich': [((150, 112, 64), 0.8), ((90, 110, 130), 0.6), ((60, 70, 58), 0.9), ((176, 160, 120), 0.5)],
+}
+
+
+def build_world_cars_v2(P, tmpdir=None):
+    import tempfile
+    global CAR_RUST
+    tmpdir = tmpdir or tempfile.mkdtemp(prefix='ostatok_cars2_')
+    W = WORLD_CAR_CELL * bk.HD
+    rows = sum(len(v) for v in WORLD_CAR_COLOURS.values())
+    sheet = Image.new('RGBA', (W * 3, W * rows))
+    r = 0
+    for (name, fn, k) in WORLD_CAR_MODELS:
+        for (colour, rust) in WORLD_CAR_COLOURS[name]:
+            CAR_RUST = rust
+            for c, (view, yaw) in enumerate(WORLD_CAR_VIEWS):
+                bk.reset()
+                bk.camera(WORLD_CAR_CELL, 80, 64)
+                if name == 'zhiguli':
+                    lada(colour, seed=41)
+                elif name == 'niva':
+                    niva(colour)
+                else:
+                    moskvich(colour)
+                bk.transform_all(k, yaw)
+                raw = bk.render(os.path.join(tmpdir, 'c_%d_%d.png' % (r, c)))
+                spr = bk.to_sprite(raw, WORLD_CAR_CELL, colours=64)
+                sheet.alpha_composite(spr, (c * W, r * W))
+            print('car', name, colour, flush=True)
+            r += 1
+    CAR_RUST = 0.0
+    sheet.save(os.path.join(P, 'art', 'vehicles', 'world_cars_hd_v2.png'))
+
+
+if __name__ == '__main__' and len(sys.argv) > 2 and sys.argv[2] == 'world_cars_v2':
+    build_world_cars_v2(sys.argv[1])
+    sys.exit(0)
 
 if __name__ == '__main__':
     P = sys.argv[1] if len(sys.argv) > 1 else '.'
