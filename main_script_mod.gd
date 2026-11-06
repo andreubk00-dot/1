@@ -2042,7 +2042,7 @@ func _run_runtime_smoke_tests():
     _record_test(load("res://ground_chunk_v11.png") != null,"0.79: не загружается новый ground chunk")
     _record_test(load("res://wet_surface_v1.png") != null,"0.80: не загружается wet surface atlas")
     _record_test(weather_visual_root != null and fog_bands.size() == 5,"0.80: fog atmosphere не создана")
-    _record_test(rain_splashes.size() == 12,"0.80: rain splash FX не созданы")
+    _record_test(rain_splashes.size() == RAIN_SPLASH_RINGS,"0.80: rain splash FX не созданы")
     _record_test(load("res://tree_v2.png") != null,"Не загружается новый tree sprite")
     _record_test(load("res://fence_segment_v2.png") != null,"Не загружается новый fence sprite")
     _record_test(load("res://hud_status_icons_v1.png") != null,"Не загружается новый HUD status atlas")
@@ -2197,7 +2197,7 @@ func _run_runtime_smoke_tests():
 
 
     _record_test(weather_visual_root != null,"Не создан weather visual root")
-    _record_test(rain_lines.size() == 28,"Неверное число rain lines")
+    _record_test(rain_lines.size() == RAIN_DROPS,"Неверное число rain lines")
     _record_test(body_temperature >= 30.5 and body_temperature <= 40.5,"Body temperature вне диапазона")
     _record_test(wetness >= 0.0 and wetness <= 100.0,"Wetness вне диапазона")
 
@@ -35181,23 +35181,22 @@ void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy; }
 void fragment() {
     vec2 tp = floor(wpos * 2.0);            // HD texel grid
     vec2 w = tp * 0.5;
-    // banks: two octaves drifting with the wind, the slow one stretched sideways
-    float n = vn((w + drift) / vec2(260.0, 150.0)) * 0.65 + vn((w + drift * 1.7) / vec2(90.0, 60.0)) * 0.35;
-    float bank = smoothstep(0.2, 0.9, n);
-    // the clear pocket around the player, its edge ragged by the same noise
+    // 1.48: banks of fog lying over the whole town, drifting with the wind -
+    // three octaves, the slow one stretched sideways; they roll past the player
+    // like everything else in the world (there used to be a clear disc round
+    // the player and a wall at the screen edges)
+    float n = vn((w + drift) / vec2(230.0, 130.0)) * 0.55 + vn((w + drift * 1.6) / vec2(84.0, 52.0)) * 0.30 + vn((w + drift * 2.5) / vec2(26.0, 18.0)) * 0.15;
+    float bank = smoothstep(0.22, 0.86, n);
     float d = length((w - player) * vec2(1.0, 1.25));
-    float edge = vn((w + drift * 0.6) / vec2(40.0, 30.0));
-    // (a gentle wobble: deep lobes read as dark smudges on the asphalt)
-    float r = clear_r * (0.86 + 0.18 * n + 0.08 * edge);
-    // thin at the pocket's edge, a wall a few dozen steps further out
-    float pocket = smoothstep(r - 20.0, r + 110.0, d);
-    float far = smoothstep(r + 40.0, r + 240.0, d);
-    float a = density * (0.75 + 0.25 * bank) * (0.12 + 0.58 * pocket + 0.55 * far);
-    a = clamp(a, 0.0, 0.94);
+    // a breath of clearer air at arm's length - the banks still pass through it
+    float near = smoothstep(clear_r * 0.25, clear_r, d);
+    float a = density * (0.30 + 0.70 * bank) * (0.50 + 0.50 * near);
+    a = clamp(a, 0.0, 0.86);
+    vec3 col = mix(fog_col * 0.90, fog_col * 1.04, bank);
     // fine flat steps, snapped to the HD texel grid: pixel fog without a
     // screen-door dither pattern
-    float q = floor(a * 24.0 + 0.5) / 24.0;
-    COLOR = vec4(fog_col, q);
+    float q = floor(a * 32.0 + 0.5) / 32.0;
+    COLOR = vec4(col, q);
 }"""
 var fog_layer = null
 var fog_density = 0.0
@@ -35271,7 +35270,7 @@ func _update_fog(delta):
     m.set_shader_parameter("density",fog_density)
     m.set_shader_parameter("player",player.global_position)
     # thick fog closes the pocket in to arm's length plus a few steps
-    m.set_shader_parameter("clear_r",lerpf(300.0,72.0,fog_density))
+    m.set_shader_parameter("clear_r",lerpf(170.0,90.0,fog_density))
     var drift = m.get_shader_parameter("drift")
     if drift == null:
         drift = Vector2.ZERO
@@ -35302,6 +35301,32 @@ func _point_in_rects(p:Vector2,rects:Array) -> bool:
         if r.has_point(p):
             return true
     return false
+
+const RAIN_DROPS = 170
+const SNOW_FLAKES = 240
+const RAIN_SPLASH_RINGS = 36
+
+# what the camera sees, in world units, with a margin
+func _weather_view(margin:float = 24.0) -> Rect2:
+    var cam = get_viewport().get_camera_2d()
+    var center = cam.get_screen_center_position() if cam != null else (player.global_position if player != null else Vector2.ZERO)
+    var half = get_viewport().get_visible_rect().size * 0.5 / (cam.zoom if cam != null else Vector2.ONE) + Vector2(margin,margin)
+    return Rect2(center - half,half * 2.0)
+
+# a particle that left the view comes back in on the far side - the world stays
+# put, only what falls out of sight is recycled
+func _weather_wrap(node,view:Rect2,from_top:bool,rng_k:float) -> void:
+    var p = node.global_position
+    if p.x < view.position.x:
+        p.x += view.size.x
+    elif p.x > view.end.x:
+        p.x -= view.size.x
+    if p.y > view.end.y:
+        p.y = view.position.y + fposmod(rng_k * 37.0,24.0) if from_top else p.y - view.size.y
+        p.x = view.position.x + fposmod(p.x * 7.31 + rng_k * 113.0,view.size.x)
+    elif p.y < view.position.y - 30.0:
+        p.y += view.size.y
+    node.global_position = p
 
 func _create_weather_visuals():
     rain_splash_layer = Polygon2D.new()
@@ -35341,17 +35366,19 @@ func _create_weather_visuals():
     weather_visual_root.name = "WeatherVisuals"
     weather_visual_root.z_as_relative = false
     weather_visual_root.z_index = 90
-    player.add_child(weather_visual_root)
+    # 1.48: the weather lives in the world (it was a child of the player and
+    # every drop ran along with the camera)
+    add_child(weather_visual_root)
 
     rain_lines.clear()
 
-    for i in range(28):
+    for i in range(RAIN_DROPS):
         var line = Line2D.new()
         line.width = 1.0
-        line.default_color = Color(0.64,0.74,0.80,0.40)
+        line.default_color = Color(0.66,0.74,0.80,0.34 + 0.12 * float(i % 3) / 2.0)
         line.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
         line.add_point(Vector2.ZERO)
-        line.add_point(Vector2(-3,8))
+        line.add_point(Vector2(-3,10 + (i % 3) * 2))
         line.position = Vector2(
             -175.0 + float((i * 37) % 350),
             -110.0 + float((i * 53) % 225)
@@ -35380,11 +35407,11 @@ func _create_weather_visuals():
         fog_bands.append(fog)
 
     snow_flakes.clear()
-    for i in range(70):
+    for i in range(SNOW_FLAKES):
         var flake = ColorRect.new()
         var big = i % 5 == 0
-        flake.size = Vector2(1,1) if not big else Vector2(1.5,1.5)
-        flake.color = Color(0.92,0.94,0.97,0.85 if big else 0.65)
+        flake.size = Vector2(1.5,1.5) if not big else Vector2(2.5,2.5)
+        flake.color = Color(0.95,0.96,0.99,0.95 if big else 0.80)
         flake.mouse_filter = Control.MOUSE_FILTER_IGNORE
         flake.position = Vector2(-175.0 + float((i * 47) % 350),-115.0 + float((i * 71) % 230))
         flake.set_meta("fall",22.0 + float((i * 13) % 19) + (8.0 if big else 0.0))
@@ -35394,7 +35421,7 @@ func _create_weather_visuals():
         snow_flakes.append(flake)
 
     rain_splashes.clear()
-    for i in range(12):
+    for i in range(RAIN_SPLASH_RINGS):
         var splash = Line2D.new()
         splash.width = 1.0
         splash.default_color = Color(0.62,0.72,0.76,0.0)
@@ -35427,6 +35454,7 @@ func _update_snow(delta,snowing,indoors):
             snow_ground_layer.material.set_shader_parameter("cover",snow_cover)
     var falling = snowing and not indoors
     var dry_rects = _rain_dry_rects() if falling else []
+    var view = _weather_view(30.0)
     var t = Time.get_ticks_msec() * 0.001
     for flake in snow_flakes:
         if not is_instance_valid(flake):
@@ -35435,14 +35463,11 @@ func _update_snow(delta,snowing,indoors):
         if not falling:
             continue
         var ph = float(flake.get_meta("phase",0.0))
+        if not flake.has_meta("placed"):
+            flake.set_meta("placed",true)
+            flake.global_position = view.position + Vector2(fposmod(ph * 97.31,1.0) * view.size.x,fposmod(ph * 0.6180339,1.0) * view.size.y)
         flake.position += Vector2(sin(t * 1.3 + ph) * 9.0 - 4.0,float(flake.get_meta("fall",28.0))) * delta
-        if flake.position.y > 118.0:
-            flake.position.y = -118.0
-            flake.position.x = -175.0 + fposmod(flake.position.x * 7.0 + ph * 53.0,350.0)
-        if flake.position.x < -185.0:
-            flake.position.x = 180.0
-        elif flake.position.x > 185.0:
-            flake.position.x = -180.0
+        _weather_wrap(flake,view,true,ph + t)
         if not dry_rects.is_empty():
             flake.visible = not _point_in_rects(flake.global_position,dry_rects)
 
@@ -35495,6 +35520,8 @@ func _update_weather_visuals(delta):
     # everything) kept falling on the room's floor: blank them over the
     # building the player stands in, keep them outside its walls
     var dry_rects = _rain_dry_rects() if raining else []
+    var view = _weather_view(30.0)
+    var t = Time.get_ticks_msec() * 0.001
     for i in range(rain_lines.size()):
         var line = rain_lines[i]
         if not is_instance_valid(line):
@@ -35504,21 +35531,17 @@ func _update_weather_visuals(delta):
         if not raining:
             continue
 
-        var speed = float(line.get_meta("rain_speed",165.0))
-        line.position += Vector2(-22.0, speed) * delta
-
-        if line.position.y > 120.0:
-            line.position.y = -120.0
-            line.position.x = -175.0 + float((i * 61 + weather_cycle_index * 23) % 350)
-
-        if line.position.x < -190.0:
-            line.position.x = 185.0
+        var speed = float(line.get_meta("rain_speed",165.0)) * 1.6
+        if not line.has_meta("placed"):
+            line.set_meta("placed",true)
+            line.global_position = view.position + Vector2(fposmod(float(i) * 97.31,1.0) * view.size.x,fposmod(float(i) * 0.6180339,1.0) * view.size.y)
+        line.position += Vector2(-28.0, speed) * delta
+        _weather_wrap(line,view,true,float(i) + t)
         # after the move: a streak that just wrapped to the top is judged where
         # it is now drawn, not where it was
         if not dry_rects.is_empty():
             line.visible = not _point_in_rects(line.global_position,dry_rects)
 
-    var t = Time.get_ticks_msec() * 0.001
     var fog_target = 0.0
     if indoors:
         fog_target = 0.0
@@ -35532,6 +35555,8 @@ func _update_weather_visuals(delta):
     for fog in fog_bands:
         if not is_instance_valid(fog):
             continue
+        fog.visible = false          # 1.48: the world-space fog layer does this
+        continue
         var c = fog.color
         c.a = lerpf(c.a,fog_target,min(1.0,delta*2.0 + 0.06))
         fog.color = c
@@ -35552,9 +35577,9 @@ func _update_weather_visuals(delta):
         var phase = float(splash.get_meta("phase",0.0))
         var pulse = max(0.0,sin(t*7.5 + phase))
         splash.modulate.a = pulse * 0.42
-        if pulse < 0.08:
-            splash.position.x = -160.0 + float((i*67 + weather_cycle_index*31) % 320)
-            splash.position.y = -90.0 + float((i*43 + weather_cycle_index*19) % 180)
+        if pulse < 0.08 or not view.has_point(splash.global_position):
+            var k = float(i) * 0.7548777 + floor(t * 7.5 / TAU + float(i) * 0.1) * 0.5698403
+            splash.global_position = (view.position + Vector2(fposmod(k,1.0) * view.size.x,fposmod(k * 1.618,1.0) * view.size.y)).round()
 
 
 
