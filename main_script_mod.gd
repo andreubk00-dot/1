@@ -2132,7 +2132,12 @@ func _run_runtime_smoke_tests():
     var qa_floor_parent = Node2D.new()
     add_child(qa_floor_parent)
     var qa_floor = _interior_floor_sprite(qa_floor_parent,"АПТЕКА",Vector2(300,216))
-    _record_test(qa_floor != null and qa_floor.get_child_count() >= 20,"Пол интерьера должен собираться из тайлов, а не растягиваться одним спрайтом")
+    # 1.48: one seamless material repeated (never stretched) - or the old tiles
+    var qa_floor_ok = qa_floor != null and qa_floor.get_child_count() >= 20
+    if qa_floor != null and qa_floor.has_meta("floor_material"):
+        var qa_floor_spr = qa_floor.get_child(0)
+        qa_floor_ok = qa_floor_spr is Sprite2D and qa_floor_spr.region_enabled and qa_floor_spr.texture_repeat == CanvasItem.TEXTURE_REPEAT_ENABLED and is_equal_approx(qa_floor_spr.scale.x,0.5)
+    _record_test(qa_floor_ok,"Пол интерьера должен повторять материал, а не растягиваться одним спрайтом")
     _record_test(qa_floor != null and qa_floor.get_node_or_null("InteriorTrim") != null,"У интерьера нет переходов пол/стена")
     qa_floor_parent.queue_free()
 
@@ -18354,30 +18359,72 @@ func _decorate_interior_trim(root,inner_w,inner_h):
     _interior_trim_piece(trim,Rect2(96,0,32,16),Vector2(0,half_h-3),Vector2.ONE,1)
     return trim
 
+# 1.48: interior floors v2 (tools/interior_floors_v2.py) - one seamless
+# material per building, drawn as a single repeating sprite: no 32-unit tile
+# grid, no loud checker. Homes vary between boards, patterned linoleum and
+# parquet; clinics get pale ceramic, shops sheet linoleum, garages painted
+# concrete, industry and the army bare concrete.
+func _interior_floor_material(sign_text,building_id) -> String:
+    var h = abs(hash(str(building_id) + ":floor"))
+    match _exterior_style_index(sign_text):
+        1:
+            return "clinic"
+        2:
+            return "linoleum" if h % 3 != 0 else "bath_tile"
+        3:
+            return "garage"
+        4:
+            return "concrete"
+        5:
+            return "concrete" if h % 2 == 0 else "garage"
+        6:
+            return "planks"
+    return ["planks","home_lino","parquet","planks","home_lino"][h % 5]
+
 func _interior_floor_sprite(parent,sign_text,size):
-    # 1.38: HD floor (tools/wa_interior_floor_hd.py), same layout at 2x
-    var hd_floor = _hd_exists("res://art/world_hd/interior_floor_hd.png")
-    var atlas = load("res://art/world_hd/interior_floor_hd.png") if hd_floor else load("res://interior_floor_tiles_v5.png")
-    var fk = 2.0 if hd_floor else 1.0
-    if atlas == null:
-        return null
+    # a hall that big is no flat: bare concrete whatever the sign says
+    var hall = size.x * size.y > 300.0 * 220.0
     var root = Node2D.new()
     root.name = "InteriorFloorTiles"
     root.position = Vector2(0,7)
     root.z_index = -2
     parent.add_child(root)
-
+    var inner_w = max(32.0,size.x - 20.0)
+    var inner_h = max(32.0,size.y - 28.0)
+    var bid = str(parent.get_meta("building_id","")) if parent.has_meta("building_id") else str(sign_text)
+    var mat_name = _interior_floor_material(sign_text,bid + str(parent.position))
+    if hall and not mat_name in ["clinic","linoleum","garage"]:
+        mat_name = "concrete"
+    var path = "res://art/world_hd/floor_%s_hd.png" % mat_name
+    if _hd_exists(path):
+        var spr = Sprite2D.new()
+        spr.texture = load(path)
+        spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        spr.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+        spr.region_enabled = true
+        var off = Vector2(float(abs(hash(bid)) % 256),float(abs(hash(bid + "y")) % 256))
+        spr.region_rect = Rect2(off,Vector2(inner_w,inner_h) * 2.0)
+        spr.centered = false
+        spr.scale = Vector2(0.5,0.5)
+        spr.position = Vector2(-inner_w * 0.5,-inner_h * 0.5)
+        spr.material = _interior_floor_wear_material()
+        root.add_child(spr)
+        root.set_meta("floor_material",mat_name)
+        _decorate_interior_trim(root,inner_w,inner_h)
+        return root
+    # fallback: the 1.38 tiles
+    var hd_floor = _hd_exists("res://art/world_hd/interior_floor_hd.png")
+    var atlas = load("res://art/world_hd/interior_floor_hd.png") if hd_floor else load("res://interior_floor_tiles_v5.png")
+    var fk = 2.0 if hd_floor else 1.0
+    if atlas == null:
+        return root
     var tile_size = 32.0
-    var inner_w = max(tile_size,size.x - 20.0)
-    var inner_h = max(tile_size,size.y - 28.0)
     var cols = max(1,int(ceil(inner_w / tile_size)))
     var rows = max(1,int(ceil(inner_h / tile_size)))
     var row = _interior_floor_row(sign_text)
     for y in range(rows):
         for x in range(cols):
             var variant = abs((x * 5 + y * 7 + row * 11 + int(abs(hash(str(sign_text)))))) % 8
-            # the last column / row is cut to the room: whole tiles used to run up
-            # to 31 px past the east and south walls and show outside the building
             var tw = min(tile_size,inner_w - float(x)*tile_size)
             var th = min(tile_size,inner_h - float(y)*tile_size)
             var tex = AtlasTexture.new()
@@ -18389,8 +18436,6 @@ func _interior_floor_sprite(parent,sign_text,size):
             sprite.centered = false
             sprite.scale = Vector2(1.0 / fk,1.0 / fk)
             sprite.position = Vector2(-inner_w*0.5 + float(x)*tile_size,-inner_h*0.5 + float(y)*tile_size)
-            if ((x+y) % 5) == 0:
-                sprite.modulate = Color(0.96,0.95,0.91,1.0)
             sprite.material = _interior_floor_wear_material()
             root.add_child(sprite)
     _decorate_interior_trim(root,inner_w,inner_h)
@@ -18417,7 +18462,7 @@ void fragment() {
     // tracked-in grime: soft-edged dark blotches, browner than the floor
     float grime = fn(tp / 26.0 + 5.0) * 0.65 + fn(tp / 7.0) * 0.35;
     float g = smoothstep(0.62, 0.78, grime);
-    c.rgb = mix(c.rgb, c.rgb * vec3(0.74, 0.70, 0.64), g * 0.55);
+    c.rgb = mix(c.rgb, c.rgb * vec3(0.80, 0.77, 0.72), g * 0.32);
     // dried water stains: a pale ring round a slightly darker middle
     float st = fn(tp / 18.0 + 31.0);
     float ring = smoothstep(0.70, 0.73, st) - smoothstep(0.76, 0.80, st);
@@ -28767,6 +28812,43 @@ func _note_partition_gap(root,r:Rect2):
     gaps.append(r)
     root.set_meta("partition_gaps",gaps)
 
+# 1.48: walls seen from above - a plaster top (tools/interior_floors_v2.py
+# walls) tinted to the wall, a dark outline, a lit edge toward the light (upper
+# left), a shaded edge away from it, and on a wall running east-west the low
+# face of the wall below its top, with a skirting board. They were flat dark
+# bars before.
+const PARTITION_TONE = Color(0.62,0.62,0.57)
+
+func _wall_cap(root,r:Rect2,tone:Color,south_face:bool = false) -> Node2D:
+    var g = Node2D.new()
+    g.name = "WallCap"
+    root.add_child(g)
+    _rect(r.get_center(),r.size + Vector2(2,2),Color("161a19"),g)
+    var path = "res://art/world_hd/wall_cap_hd.png"
+    if _hd_exists(path):
+        var spr = Sprite2D.new()
+        spr.texture = load(path)
+        spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        spr.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+        spr.region_enabled = true
+        spr.region_rect = Rect2(r.position * 2.0,r.size * 2.0)
+        spr.centered = false
+        spr.scale = Vector2(0.5,0.5)
+        spr.position = r.position
+        spr.modulate = tone
+        g.add_child(spr)
+    else:
+        _rect(r.get_center(),r.size,tone,g)
+    _rect(Vector2(r.get_center().x,r.position.y + 0.5),Vector2(r.size.x,1),Color(1,1,1,0.16),g)
+    _rect(Vector2(r.position.x + 0.5,r.get_center().y),Vector2(1,r.size.y),Color(1,1,1,0.10),g)
+    _rect(Vector2(r.get_center().x,r.end.y - 0.5),Vector2(r.size.x,1),Color(0,0,0,0.22),g)
+    _rect(Vector2(r.end.x - 0.5,r.get_center().y),Vector2(1,r.size.y),Color(0,0,0,0.16),g)
+    if south_face:
+        var face = tone.darkened(0.42)
+        _rect(Vector2(r.get_center().x,r.end.y + 2.5),Vector2(r.size.x,4),face,g)
+        _rect(Vector2(r.get_center().x,r.end.y + 4.0),Vector2(r.size.x,1),face.darkened(0.35),g)
+    return g
+
 func _wall_piece(root,center:Vector2,size:Vector2,horizontal:bool):
     var a = (center.x - size.x * 0.5) if horizontal else (center.y - size.y * 0.5)
     var b = (center.x + size.x * 0.5) if horizontal else (center.y + size.y * 0.5)
@@ -28799,12 +28881,8 @@ func _wall_piece(root,center:Vector2,size:Vector2,horizontal:bool):
         var mid = (sp[0] + sp[1]) * 0.5
         var pos = Vector2(mid,center.y) if horizontal else Vector2(center.x,mid)
         var dims = Vector2(length,size.y) if horizontal else Vector2(size.x,length)
-        var v1 = _rect(pos,dims,Color("242927"),root)
+        var v1 = _wall_cap(root,Rect2(pos - dims * 0.5,dims),PARTITION_TONE,horizontal)
         var v2 = null
-        if horizontal:
-            v2 = _rect(pos + Vector2(0,-2),Vector2(max(2.0,length - 3.0),2),Color(0.36,0.37,0.33,0.55),root)
-        else:
-            v2 = _rect(pos + Vector2(-2,0),Vector2(2,max(2.0,length - 3.0)),Color(0.36,0.37,0.33,0.55),root)
         var body = _add_static_rect(root,pos,dims)
         body.set_meta("partition",true)
         body.set_meta("horizontal",horizontal)
@@ -28901,6 +28979,81 @@ func _tidy_chunk_props(chunk) -> void:
     for b in chunk.get_children():
         if b is Node2D and b.is_in_group("world_buildings"):
             _separate_furniture(b,keep)
+            _bake_interior_light(b)
+
+# 1.48: baked room light. Every wall, partition and standing piece of
+# furniture shades the floor round it - dark in the corners and along the
+# walls, a soft contact shadow under a cabinet, open floor in the middle of a
+# room left bright. One multiply overlay per building, made once the room is
+# furnished (2 world units per texel, smoothed by resampling).
+const INTERIOR_AO_STRENGTH = 0.46
+var _interior_ao_mat = null
+
+func _bake_interior_light(building) -> void:
+    if not is_instance_valid(building) or not building.has_meta("building_size") or building.has_meta("interior_ao"):
+        return
+    var size:Vector2 = building.get_meta("building_size")
+    if size.x < 40.0 or size.y < 40.0:
+        return
+    var k = 0.5
+    var w = int(ceil(size.x * k))
+    var h = int(ceil(size.y * k))
+    var img = Image.create(w,h,false,Image.FORMAT_L8)
+    img.fill(Color(0,0,0))
+    var origin = -size * 0.5
+    var paint = func(r:Rect2,v:float):
+        var a = ((r.position - origin) * k).floor()
+        var e = ((r.end - origin) * k).ceil()
+        var ri = Rect2i(Vector2i(a),Vector2i(e - a)).intersection(Rect2i(0,0,w,h))
+        if ri.size.x > 0 and ri.size.y > 0:
+            img.fill_rect(ri,Color(v,v,v))
+    # the outer walls as they are drawn (see _create_building)
+    paint.call(Rect2(origin,Vector2(size.x,16)),1.0)
+    paint.call(Rect2(origin,Vector2(14,size.y)),1.0)
+    paint.call(Rect2(Vector2(size.x * 0.5 - 14,origin.y),Vector2(14,size.y)),1.0)
+    paint.call(Rect2(Vector2(origin.x,size.y * 0.5 - 7),Vector2(size.x,7)),0.7)
+    for r in building.get_meta("partitions",[]):
+        paint.call(r,1.0)
+    for c in building.get_children():
+        if c is StaticBody2D and c.has_meta("prop_solid_body") and not c.is_queued_for_deletion() and c.get_child_count() > 0:
+            var sh = c.get_child(0)
+            if sh is CollisionShape2D and sh.shape is RectangleShape2D:
+                var rr = Rect2(c.position + sh.position - sh.shape.size * 0.5,sh.shape.size)
+                paint.call(rr.grow(1.0),0.85)
+    # two radii: a tight contact shadow and a wide room falloff
+    var near = img.duplicate()
+    near.resize(max(1,w / 3),max(1,h / 3),Image.INTERPOLATE_BILINEAR)
+    near.resize(w,h,Image.INTERPOLATE_CUBIC)
+    var far = img.duplicate()
+    far.resize(max(1,w / 7),max(1,h / 7),Image.INTERPOLATE_BILINEAR)
+    far.resize(w,h,Image.INTERPOLATE_CUBIC)
+    var out = Image.create(w,h,false,Image.FORMAT_RGB8)
+    for y in range(h):
+        # the back of a room (away from the door and the light) a little darker
+        var depth = 1.0 - 0.10 * (1.0 - float(y) / float(max(1,h - 1)))
+        for x in range(w):
+            var o = clamp(near.get_pixel(x,y).r * 0.55 + far.get_pixel(x,y).r * 0.30,0.0,1.0)
+            var v = clamp((1.0 - INTERIOR_AO_STRENGTH * o) * depth,0.0,1.0)
+            # shadows lean cool, lit floor stays neutral
+            out.set_pixel(x,y,Color(v * (0.97 + 0.03 * v),v * (0.98 + 0.02 * v),v))
+    var spr = Sprite2D.new()
+    spr.name = "InteriorLight"
+    spr.texture = ImageTexture.create_from_image(out)
+    spr.centered = false
+    spr.position = origin
+    spr.scale = Vector2(1.0 / k,1.0 / k)
+    spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+    spr.z_index = -1
+    if _interior_ao_mat == null:
+        _interior_ao_mat = CanvasItemMaterial.new()
+        _interior_ao_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
+    spr.material = _interior_ao_mat
+    building.add_child(spr)
+    building.set_meta("interior_ao",spr)
+    # the old flat wall bands would darken twice
+    var old = building.get_node_or_null("InteriorDepthShading")
+    if old != null:
+        old.visible = false
 
 func _near_any(p:Vector2,points:Array,radius:float) -> bool:
     for q in points:
@@ -30015,14 +30168,11 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
 
     # outer walls are drawn inside the footprint: centred on the edge they stuck
     # out 7 px and showed as dark strips beside the facade and the lifted roof
-    _rect(Vector2(0,-size.y*0.5 + 8),Vector2(size.x,16),Color("1b1f1e"),building)
-    _rect(Vector2(0,-size.y*0.5 + 10),Vector2(size.x-6,12),wall_color.lightened(0.12),building)
-    _rect(Vector2(-size.x*0.5 + 7,0),Vector2(14,size.y),Color("1b1f1e"),building)
-    _rect(Vector2(-size.x*0.5 + 7,0),Vector2(10,size.y-5),wall_color,building)
-    _rect(Vector2(size.x*0.5 - 7,0),Vector2(14,size.y),Color("1b1f1e"),building)
-    _rect(Vector2(size.x*0.5 - 7,0),Vector2(10,size.y-5),wall_color,building)
-    _rect(Vector2(0,size.y*0.5),Vector2(size.x,13),Color("1b1f1e"),building)
-    _rect(Vector2(0,size.y*0.5-2),Vector2(size.x-6,8),wall_color.darkened(0.10),building)
+    var cap_tone = wall_color.lerp(PARTITION_TONE,0.6)
+    _wall_cap(building,Rect2(Vector2(-size.x*0.5,-size.y*0.5),Vector2(size.x,16)),cap_tone)
+    _wall_cap(building,Rect2(Vector2(-size.x*0.5,-size.y*0.5),Vector2(14,size.y)),cap_tone)
+    _wall_cap(building,Rect2(Vector2(size.x*0.5 - 14,-size.y*0.5),Vector2(14,size.y)),cap_tone)
+    _wall_cap(building,Rect2(Vector2(-size.x*0.5,size.y*0.5 - 6.5),Vector2(size.x,13)),cap_tone.darkened(0.08))
 
     if open_interior:
         if archetype_id != "":

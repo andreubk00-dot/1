@@ -29,6 +29,8 @@ func run():
     game.field_hints.finish_steps()
     game.field_hints._queue.clear()
     game.field_hints.enabled = false
+    if "weather_state" in game:
+        game.weather_state = "clear"
     var seen = {}
     var shot = 0
     var stops = [Vector2i(0, 0), Vector2i(-8, -2), Vector2i(3, -4), Vector2i(-5, 5), Vector2i(6, 6), Vector2i(-3, -7), Vector2i(8, -1)]
