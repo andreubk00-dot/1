@@ -196,6 +196,34 @@ def grass_field(seed, base=(46, 58, 34), dry=(86, 82, 50), dirt=(74, 61, 44), dr
     return g, hf, soil
 
 
+def lawn_detail(alb, hf, m, seed, walk_d=None):
+    """1.48: a lawn that reads as grass, not as a carpet: tussocks with a lit
+    top, dry straw patches, ground worn bare beside the paths, and fallen leaves
+    gathered in drifts instead of sprinkled evenly."""
+    dry = soft(noise(seed + 1, 46, 3), 0.62, 0.78) * m
+    alb = blend(alb, (92, 88, 54), dry * 0.55)
+    if walk_d is not None:
+        worn = m & (walk_d < 10.0 + 10.0 * noise(seed + 2, 10, 2)) & (noise(seed + 3, 16, 2) > 0.48)
+        alb = blend(alb, (78, 66, 48), worn * 0.7)
+        hf = hf - worn * 0.3
+    # tussocks: a dark body and a lit tip
+    rng = np.random.default_rng(seed + 4)
+    ys, xs = np.nonzero(m)
+    for i in rng.integers(0, len(xs), max(1, len(xs) // 160)):
+        x, y = xs[i], ys[i]
+        dark = np.array((36, 48, 26), float)
+        lit = np.array((88, 106, 54), float)
+        for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (1, 1)):
+            alb[(y + dy) % N, (x + dx) % N] = dark
+        alb[(y - 1) % N, x] = lit
+        alb[(y - 1) % N, (x + 1) % N] = lit * 0.9
+        alb[(y + 2) % N, (x + 1) % N] *= 0.7
+    drift = m & (noise(seed + 5, 30, 3) > 0.66)
+    alb = leaves(alb, drift, 0.05, seed + 6)
+    alb = leaves(alb, m, 0.0025, seed + 7)
+    return alb, hf
+
+
 # ------------------------------------------------------------- families ---
 _soft_seed = [500]
 
@@ -596,8 +624,9 @@ def city():
     # lawn kerb: low dark edge where the lawn meets the pavement
     lawn_edge = plot & ((np.abs(X - SW0) < 1.0) | (np.abs(X - SW1) < 1.0) | (np.abs(Y - SW0) < 1.0) | (np.abs(Y - SW1) < 1.0))
     alb[lawn_edge] = (52, 52, 46)
-    alb = leaves(alb, plot, 0.02, 9215)
-    alb = leaves(alb, sw, 0.004, 9216)
+    walk_d = np.minimum(np.minimum(np.abs(X - SW0), np.abs(X - SW1)), np.minimum(np.abs(Y - SW0), np.abs(Y - SW1)))
+    alb, hf = lawn_detail(alb, hf, plot, 9230, walk_d)
+    alb = leaves(alb, sw, 0.003, 9216)
     return alb, hf
 
 

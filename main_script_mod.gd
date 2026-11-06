@@ -17086,6 +17086,9 @@ func _world_hd_twin(path:String) -> String:
     return WORLD_HD_TWINS[path] if _world_hd_ok[path] else ""
 
 func _facade_atlas_sprite(parent,path,region,pos,scale_value = 1.0):
+    # 1.48: the shrubs remodelled (tools/blender/vegetation_v2.py), same layout
+    if str(path) == "res://vegetation_v1.png" and _hd_exists("res://art/world_hd/vegetation_v2.png"):
+        path = "res://art/world_hd/vegetation_v2.png"
     var twin = _world_hd_twin(str(path))
     if twin != "":
         path = twin
@@ -24057,11 +24060,11 @@ vec3 ground_weather(vec3 c, vec2 wp) {
     float broad = gw_n(tp / 260.0) * 0.6 + gw_n(tp / 90.0 + 17.0) * 0.4;
     float k = mix(0.84, 1.12, broad);
     if (hard) {
-        // 1.46 patched asphalt: a few repairs per street - a slab of newer, darker
-        // tarmac with a worn, uneven edge and a black bitumen seam around it
+        // 1.46 patched asphalt (off since 1.48: the ground art carries its own
+        // irregular repairs; these read as squares on the road)
         vec2 cs = vec2(72.0, 44.0);
         vec2 cell = floor(tp / cs);
-        if (gw_h(cell + 3.1) > 0.87) {
+        if (gw_h(cell + 3.1) > 2.0) {
             vec2 f = fract(tp / cs);
             vec2 lo = vec2(0.06) + vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.30;
             vec2 hi = lo + vec2(0.30) + vec2(gw_h(cell + 9.0), gw_h(cell + 11.0)) * 0.30;
@@ -28986,8 +28989,22 @@ func _tidy_chunk_props(chunk) -> void:
 # walls, a soft contact shadow under a cabinet, open floor in the middle of a
 # room left bright. One multiply overlay per building, made once the room is
 # furnished (2 world units per texel, smoothed by resampling).
-const INTERIOR_AO_STRENGTH = 0.46
-var _interior_ao_mat = null
+const INTERIOR_AO_STRENGTH = 0.58
+var _interior_ao_shader = null
+const INTERIOR_AO_SHADER = """shader_type canvas_item;
+render_mode blend_mul;
+uniform sampler2D far_tex : filter_linear;
+uniform float strength = 0.46;
+void fragment() {
+    float n = texture(TEXTURE, UV).r;
+    float f = texture(far_tex, UV).r;
+    float o = clamp(n * 0.55 + f * 0.30, 0.0, 1.0);
+    // the back of a room (away from the door and the light) a little darker
+    float depth = 1.0 - 0.10 * (1.0 - UV.y);
+    float v = clamp((1.0 - strength * o) * depth, 0.0, 1.0);
+    // shadows lean cool, lit floor stays neutral
+    COLOR = vec4(v * (0.97 + 0.03 * v), v * (0.98 + 0.02 * v), v, 1.0);
+}"""
 
 func _bake_interior_light(building) -> void:
     if not is_instance_valid(building) or not building.has_meta("building_size") or building.has_meta("interior_ao"):
@@ -29008,12 +29025,18 @@ func _bake_interior_light(building) -> void:
         if ri.size.x > 0 and ri.size.y > 0:
             img.fill_rect(ri,Color(v,v,v))
     # the outer walls as they are drawn (see _create_building)
-    paint.call(Rect2(origin,Vector2(size.x,16)),1.0)
-    paint.call(Rect2(origin,Vector2(14,size.y)),1.0)
-    paint.call(Rect2(Vector2(size.x * 0.5 - 14,origin.y),Vector2(14,size.y)),1.0)
-    paint.call(Rect2(Vector2(origin.x,size.y * 0.5 - 7),Vector2(size.x,7)),0.7)
-    for r in building.get_meta("partitions",[]):
-        paint.call(r,1.0)
+    # (a little past their faces, so the darkness reaches the floor)
+    paint.call(Rect2(origin,Vector2(size.x,20)),1.0)
+    paint.call(Rect2(origin,Vector2(18,size.y)),1.0)
+    paint.call(Rect2(Vector2(size.x * 0.5 - 18,origin.y),Vector2(18,size.y)),1.0)
+    paint.call(Rect2(Vector2(origin.x,size.y * 0.5 - 9),Vector2(size.x,9)),0.7)
+    for n in [building] + building.get_children():
+        if n is Node and n.has_meta("partitions"):
+            for r in n.get_meta("partitions",[]):
+                var rr:Rect2 = r
+                if n != building and n is Node2D:
+                    rr.position += n.position
+                paint.call(rr.grow(2.0),1.0)
     for c in building.get_children():
         if c is StaticBody2D and c.has_meta("prop_solid_body") and not c.is_queued_for_deletion() and c.get_child_count() > 0:
             var sh = c.get_child(0)
@@ -29027,27 +29050,26 @@ func _bake_interior_light(building) -> void:
     var far = img.duplicate()
     far.resize(max(1,w / 7),max(1,h / 7),Image.INTERPOLATE_BILINEAR)
     far.resize(w,h,Image.INTERPOLATE_CUBIC)
-    var out = Image.create(w,h,false,Image.FORMAT_RGB8)
-    for y in range(h):
-        # the back of a room (away from the door and the light) a little darker
-        var depth = 1.0 - 0.10 * (1.0 - float(y) / float(max(1,h - 1)))
-        for x in range(w):
-            var o = clamp(near.get_pixel(x,y).r * 0.55 + far.get_pixel(x,y).r * 0.30,0.0,1.0)
-            var v = clamp((1.0 - INTERIOR_AO_STRENGTH * o) * depth,0.0,1.0)
-            # shadows lean cool, lit floor stays neutral
-            out.set_pixel(x,y,Color(v * (0.97 + 0.03 * v),v * (0.98 + 0.02 * v),v))
+    if OS.has_environment("OSTATOK_AO_DUMP"):
+        img.save_png("%s/ao_%s_mask.png" % [OS.get_environment("OSTATOK_AO_DUMP"),str(building.get_meta("building_id",""))])
+        near.save_png("%s/ao_%s_near.png" % [OS.get_environment("OSTATOK_AO_DUMP"),str(building.get_meta("building_id",""))])
+    # the falloff is composed on the GPU (no per-texel loop at chunk load)
     var spr = Sprite2D.new()
     spr.name = "InteriorLight"
-    spr.texture = ImageTexture.create_from_image(out)
+    spr.texture = ImageTexture.create_from_image(near)
     spr.centered = false
     spr.position = origin
     spr.scale = Vector2(1.0 / k,1.0 / k)
     spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
     spr.z_index = -1
-    if _interior_ao_mat == null:
-        _interior_ao_mat = CanvasItemMaterial.new()
-        _interior_ao_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
-    spr.material = _interior_ao_mat
+    if _interior_ao_shader == null:
+        _interior_ao_shader = Shader.new()
+        _interior_ao_shader.code = INTERIOR_AO_SHADER
+    var m = ShaderMaterial.new()
+    m.shader = _interior_ao_shader
+    m.set_shader_parameter("far_tex",ImageTexture.create_from_image(far))
+    m.set_shader_parameter("strength",INTERIOR_AO_STRENGTH)
+    spr.material = m
     building.add_child(spr)
     building.set_meta("interior_ao",spr)
     # the old flat wall bands would darken twice
@@ -34290,11 +34312,11 @@ vec3 ground_weather(vec3 c, vec2 wp) {
     float broad = gw_n(tp / 260.0) * 0.6 + gw_n(tp / 90.0 + 17.0) * 0.4;
     float k = mix(0.84, 1.12, broad);
     if (hard) {
-        // 1.46 patched asphalt: a few repairs per street - a slab of newer, darker
-        // tarmac with a worn, uneven edge and a black bitumen seam around it
+        // 1.46 patched asphalt (off since 1.48: the ground art carries its own
+        // irregular repairs; these read as squares on the road)
         vec2 cs = vec2(72.0, 44.0);
         vec2 cell = floor(tp / cs);
-        if (gw_h(cell + 3.1) > 0.87) {
+        if (gw_h(cell + 3.1) > 2.0) {
             vec2 f = fract(tp / cs);
             vec2 lo = vec2(0.06) + vec2(gw_h(cell + 5.0), gw_h(cell + 7.0)) * 0.30;
             vec2 hi = lo + vec2(0.30) + vec2(gw_h(cell + 9.0), gw_h(cell + 11.0)) * 0.30;
