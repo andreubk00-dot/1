@@ -122,6 +122,29 @@ func audit(where: String) -> void:
                 var inter = r1.intersection(r2)
                 if inter.get_area() > 0.35 * min(r1.get_area(), r2.get_area()):
                     report("furniture_overlap", "%s %s: %s and %s overlap" % [where, str(b.get_meta("building_id", "")), body_name({"collider": bodies[i][0]}), body_name({"collider": bodies[j][0]})])
+    # 1.50: standing pieces on each other or on a partition (by what they draw)
+    for br in buildings:
+        var b = br[0]
+        var feet = []
+        var keep_pts = []
+        for n in game.get_tree().get_nodes_in_group("interactable"):
+            if is_instance_valid(n) and b.get_parent().is_ancestor_of(n):
+                keep_pts.append(n.global_position)
+
+        for c in b.get_children():
+            if game._standing_piece(c):
+                feet.append([c, game._prop_foot(c), game._prop_body_rect(c), game._prop_drawn_rect(c), game._near_any(c.global_position, keep_pts, 16.0)])
+        tick("pieces")
+        var parts = b.get_meta("partitions", [])
+        for i in range(feet.size()):
+            for w in parts:
+                if not feet[i][4] and feet[i][3].grow(-1.0).intersects(w):
+                    report("piece_on_wall", "%s %s: %s stands on a partition" % [where, str(b.get_meta("building_id", "")), str(feet[i][0].get_meta("world_prop_kind", ""))])
+                    break
+            for j in range(i + 1, feet.size()):
+                if feet[i][2].grow(-1.5).intersects(feet[j][2].grow(-1.5)):
+                    var near_cache = false
+                    report("piece_on_piece", "%s %s: %s on %s" % [where, str(b.get_meta("building_id", "")), str(feet[i][0].get_meta("world_prop_kind", "")), str(feet[j][0].get_meta("world_prop_kind", ""))])
     # NPCs standing in solids
     for npc in game.get_tree().get_nodes_in_group("faction_npcs"):
         if not is_instance_valid(npc) or npc.is_queued_for_deletion():

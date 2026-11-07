@@ -16892,6 +16892,7 @@ func _home_prop_sprite(kind:String,parent,pos,z_value,scale_value):
             Color(0.01,0.012,0.012,0.26),parent
         )
         contact.z_index = z_value - 1
+        sprite.set_meta("contact_shadow",contact)
     parent.add_child(sprite)
     return sprite
 
@@ -16939,6 +16940,7 @@ func _world_prop_sprite(kind,parent,pos = Vector2.ZERO,z_value = 0,scale_value =
             shadow_width,shadow_height,Color(0.01,0.012,0.012,0.28),parent
         )
         contact.z_index = z_value - 1
+        sprite.set_meta("contact_shadow",contact)
     parent.add_child(sprite)
     return sprite
 
@@ -28965,7 +28967,18 @@ func _resync_prop_bodies(building) -> void:
 # parked car, and no piece of furniture stands inside another one (two dressing
 # passes could pick the same spot: a cabinet in a wardrobe, a crate in a bench).
 func _tidy_chunk_props(chunk) -> void:
-    if not is_instance_valid(chunk) or chunk.has_meta("marauder_base"):
+    if not is_instance_valid(chunk):
+        return
+    if chunk.has_meta("marauder_base"):
+        # the raiders' yard is laid out by hand; only the rooms are tidied
+        var kp = []
+        for n in get_tree().get_nodes_in_group("interactable"):
+            if is_instance_valid(n) and chunk.is_ancestor_of(n):
+                kp.append(n.global_position)
+        for b in chunk.get_children():
+            if b is Node2D and b.is_in_group("world_buildings"):
+                _declutter_interior(b,kp)
+                _bake_interior_light(b)
         return
     var keep = []
     for n in get_tree().get_nodes_in_group("interactable"):
@@ -29007,6 +29020,7 @@ func _tidy_chunk_props(chunk) -> void:
                     break
     for b in chunk.get_children():
         if b is Node2D and b.is_in_group("world_buildings"):
+            _declutter_interior(b,keep)
             _separate_furniture(b,keep)
             _bake_interior_light(b)
 
@@ -29103,6 +29117,115 @@ func _bake_interior_light(building) -> void:
     if old != null:
         old.visible = false
 
+# 1.50: the last pass over a furnished room. Every standing piece gets the
+# floor it needs - not on a partition, not in a doorway or the walk in from
+# the door, not on another piece. What stands by a cache stays; the authored
+# pieces of a room come next, the filler last. A piece in the way is nudged
+# up to 32 units; filler that fits nowhere is taken out.
+const WALL_HUNG_KINDS = ["extinguisher","radiator","wall_clock","wall_poster","hanging_wires","wall_pipe","tool_wall_detail",
+    "wall_notice_board","wall_phone","wall_sign","hanging_lamp","ceiling_pipes","hospital_curtain","wall_grime","wall_crack","wall_wires"]
+
+func _standing_piece(c) -> bool:
+    if not (c is Sprite2D) or c.is_queued_for_deletion() or not c.has_meta("world_prop_kind"):
+        return false
+    var kind = str(c.get_meta("world_prop_kind",""))
+    if kind == "" or _interior_kind_walkable(kind) or kind in WALL_HUNG_KINDS or kind.begins_with("wall_"):
+        return false
+    if c.has_meta("interior_wall_dressing") or c.has_meta("window_dressing") or c.has_meta("doorway_dressing"):
+        return false
+    return true
+
+# the lower three quarters of what a piece draws: two pieces whose bodies
+# overlap read as one stacked on the other
+func _prop_body_rect(spr) -> Rect2:
+    var r = _sprite_used_rect(spr)
+    r = Rect2(r.position * spr.scale,r.size * spr.scale)
+    r.position += spr.position
+    return Rect2(r.position.x + r.size.x * 0.06,r.position.y + r.size.y * 0.25,r.size.x * 0.88,r.size.y * 0.75)
+
+func _prop_drawn_rect(spr) -> Rect2:
+    var r = _sprite_used_rect(spr)
+    r = Rect2(r.position * spr.scale,r.size * spr.scale)
+    r.position += spr.position
+    return r
+
+func _move_piece(spr,off:Vector2) -> void:
+    spr.position += off
+    var sh = spr.get_meta("contact_shadow") if spr.has_meta("contact_shadow") else null
+    if is_instance_valid(sh):
+        sh.position += off
+
+func _declutter_interior(building,keep:Array) -> void:
+    if not building.has_meta("building_size"):
+        return
+    var size:Vector2 = building.get_meta("building_size")
+    var blocked = []
+    for w in building.get_meta("partitions",[]):
+        blocked.append(w.grow(2.0))
+    for g in building.get_meta("partition_gaps",[]):
+        blocked.append(g)
+    for z in building.get_meta("keep_clear",[]):
+        blocked.append(z)
+    var inner = Rect2(-size * 0.5 + Vector2(11,12),size - Vector2(22,18))
+    var walls = building.get_meta("partitions",[])
+    var pieces = []
+    for c in building.get_children():
+        if _standing_piece(c):
+            var anchored = _near_any(c.global_position,keep,16.0)
+            var rank = 0 if anchored else (2 if (c.has_meta("interior_fill") or c.has_meta("dress_fill")) else 1)
+            var f = _prop_foot(c)
+            pieces.append([rank,-f.get_area(),c])
+    pieces.sort_custom(func(a,b): return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
+    var placed = []
+    var moved = 0
+    var removed = 0
+    for it in pieces:
+        var spr = it[2]
+        var foot = _prop_foot(spr)
+        if it[0] == 0:
+            placed.append(_prop_body_rect(spr))
+            continue
+        var body = _prop_body_rect(spr)
+        var drawn = _prop_drawn_rect(spr)
+        var best = null
+        for step in range(0,11):
+            for d in [Vector2(0,0),Vector2(0,1),Vector2(1,0),Vector2(-1,0),Vector2(0,-1),Vector2(1,1),Vector2(-1,1),Vector2(1,-1),Vector2(-1,-1)]:
+                if step == 0 and d != Vector2.ZERO:
+                    continue
+                var off = d * float(step) * 4.0
+                var f = Rect2(foot.position + off,foot.size)
+                if _foot_blocked(f,blocked,inner):
+                    continue
+                # what it draws stays off the partitions (a shelf drawn over a
+                # wall top reads as standing on it) and off the other pieces
+                var bd = Rect2(body.position + off,body.size)
+                var whole = Rect2(drawn.position + off,drawn.size)
+                var clash = false
+                for w in walls:
+                    if whole.grow(-1.0).intersects(w):
+                        clash = true
+                        break
+                if not clash:
+                    for q in placed:
+                        if bd.grow(-1.5).intersects(q):
+                            clash = true
+                            break
+                if not clash:
+                    best = off
+                    break
+            if best != null:
+                break
+        if best == null:
+            _drop_prop(spr)
+            removed += 1
+            continue
+        if best != Vector2.ZERO:
+            _move_piece(spr,best)
+            moved += 1
+        placed.append(Rect2(body.position + best,body.size))
+    building.set_meta("declutter",[moved,removed])
+    _resync_prop_bodies(building)
+
 func _near_any(p:Vector2,points:Array,radius:float) -> bool:
     for q in points:
         if p.distance_to(q) <= radius:
@@ -29113,6 +29236,9 @@ func _drop_prop(spr) -> void:
     var body = spr.get_meta("prop_body") if spr.has_meta("prop_body") else null
     if is_instance_valid(body):
         body.queue_free()
+    var sh = spr.get_meta("contact_shadow") if spr.has_meta("contact_shadow") else null
+    if is_instance_valid(sh):
+        sh.queue_free()
     spr.remove_from_group("interior_depth_props")
     spr.queue_free()
 
@@ -29142,8 +29268,7 @@ func _separate_furniture(building,keep:Array) -> void:
                 if _near_any(small[1].global_position,keep,14.0):
                     continue
             small[0].queue_free()
-            small[1].remove_from_group("interior_depth_props")
-            small[1].queue_free()
+            _drop_prop(small[1])
 
 func _clear_prop_bodies_off_containers(chunk) -> void:
     # the raiders' base is laid out by hand (everything solid comes from its
@@ -29747,12 +29872,74 @@ func _furnish_interior_set(building,set_key:String,size:Vector2,building_id,cap:
     # a second pass (the dressing of a bare hall) adds to what is there
     building.set_meta("interior_fill_count",int(building.get_meta("interior_fill_count",0)) + placed)
 
+# 1.50: what a sprite really draws - the opaque pixels of its region, not the
+# whole atlas cell (an HD crate sat in a 64 x 64 cell, a fridge in a 56 x 64
+# one: the floor plan thought them three times their size). Cached per region.
+var _used_rect_cache = {}
+var _atlas_image_cache = {}
+
+func _sprite_used_rect(spr) -> Rect2:
+    var full = spr.get_rect()
+    var tex = spr.texture
+    if tex == null:
+        return full
+    var key = ""
+    var img = null
+    var region = Rect2()
+    if tex is AtlasTexture and tex.atlas != null:
+        region = tex.region
+        key = "%s|%s" % [str(tex.atlas.resource_path),str(region)]
+        if not _used_rect_cache.has(key):
+            var ap = str(tex.atlas.resource_path)
+            if not _atlas_image_cache.has(ap):
+                var im = tex.atlas.get_image()
+                if im != null and im.is_compressed():
+                    im.decompress()
+                _atlas_image_cache[ap] = im
+            img = _atlas_image_cache[ap]
+    else:
+        key = str(tex.resource_path) + "|full"
+        if not _used_rect_cache.has(key):
+            img = tex.get_image()
+            if img != null and img.is_compressed():
+                img.decompress()
+            region = Rect2(Vector2.ZERO,tex.get_size())
+    if not _used_rect_cache.has(key):
+        var u = Rect2()
+        if img != null:
+            var x0 = int(region.position.x)
+            var y0 = int(region.position.y)
+            var w = int(region.size.x)
+            var h = int(region.size.y)
+            var minx = w
+            var miny = h
+            var maxx = -1
+            var maxy = -1
+            for y in range(0,h):
+                for x in range(0,w):
+                    if img.get_pixel(x0 + x,y0 + y).a > 0.6:
+                        if x < minx: minx = x
+                        if x > maxx: maxx = x
+                        if y < miny: miny = y
+                        if y > maxy: maxy = y
+            if maxx >= 0:
+                u = Rect2(minx,miny,maxx - minx + 1,maxy - miny + 1)
+        _used_rect_cache[key] = u
+    var used:Rect2 = _used_rect_cache[key]
+    if used.size == Vector2.ZERO:
+        return full
+    # into the sprite's local frame (centred or not, flipped or not)
+    var px = used.position.x
+    if spr.flip_h:
+        px = full.size.x - used.end.x
+    return Rect2(full.position + Vector2(px,used.position.y),used.size)
+
 func _prop_foot(spr) -> Rect2:
     # the floor footprint of a standing piece: the lower part of what it draws
-    var r = spr.get_rect()
+    var r = _sprite_used_rect(spr)
     r = Rect2(r.position * spr.scale,r.size * spr.scale)
     r.position += spr.position
-    return Rect2(r.position.x + r.size.x * 0.12,r.position.y + r.size.y * 0.55,r.size.x * 0.76,r.size.y * 0.40)
+    return Rect2(r.position.x + r.size.x * 0.10,r.position.y + r.size.y * 0.55,r.size.x * 0.80,r.size.y * 0.42)
 
 func _settle_interior_props(building,size:Vector2,check_rooms:bool = true):
     # Furniture never stands on a partition, in a doorway between rooms or in
