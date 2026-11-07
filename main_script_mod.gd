@@ -16867,7 +16867,8 @@ const HOME_PROP_REGIONS = {
 }
 
 func _home_prop_sprite(kind:String,parent,pos,z_value,scale_value):
-    var atlas = load("res://art/world_hd/props_home_v1.png")
+    # 1.50: modelled in Blender (tools/blender/home_props_v2.py), same layout
+    var atlas = load("res://art/world_hd/props_home_v2.png") if _hd_exists("res://art/world_hd/props_home_v2.png") else load("res://art/world_hd/props_home_v1.png")
     if atlas == null:
         return null
     var region:Rect2 = HOME_PROP_REGIONS[kind]
@@ -23900,6 +23901,7 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/vehicles/vehicles_hd_v1.png")
     paths.append("res://art/high_risk/hr_props_v1.png")
     paths.append("res://art/world_hd/world_props_v20.png")
+    paths.append("res://art/world_hd/props_home_v2.png")
     paths.append("res://settlement_props_v1.png")
     for family in ["city","rural","woodland","military","industrial"]:
         paths.append("res://art/world_hd/ground_%s_hd.png" % family)
@@ -29223,6 +29225,28 @@ func _declutter_interior(building,keep:Array) -> void:
             _move_piece(spr,best)
             moved += 1
         placed.append(Rect2(body.position + best,body.size))
+    # litter on the floor: not under a piece of furniture, not in a doorway
+    var gaps = building.get_meta("partition_gaps",[])
+    for c in building.get_children():
+        if not (c is Sprite2D) or c.is_queued_for_deletion() or not c.has_meta("world_prop_kind"):
+            continue
+        var lk = str(c.get_meta("world_prop_kind",""))
+        if not (lk in INTERIOR_LITTER or LITTER_TO_DECAL.has(lk)) or _near_any(c.global_position,keep,14.0):
+            continue
+        var lr = _prop_drawn_rect(c)
+        var lc = lr.get_center()
+        var bad = false
+        for q in placed:
+            if q.grow(-2.0).has_point(lc):
+                bad = true
+                break
+        if not bad:
+            for g in gaps:
+                if g.intersects(lr):
+                    bad = true
+                    break
+        if bad:
+            _drop_prop(c)
     building.set_meta("declutter",[moved,removed])
     _resync_prop_bodies(building)
 

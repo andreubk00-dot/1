@@ -217,14 +217,15 @@ def home_lino(r):
     # patterned linoleum: muted diamonds, worn grey in the lanes
     img = np.zeros((N, N, 3))
     yy, xx = np.mgrid[0:N, 0:N]
-    d = (np.abs(((xx % 32) - 16)) + np.abs(((yy % 32) - 16)))
-    a = np.array([152, 120, 92], float)
-    b = np.array([128, 98, 76], float)
-    c = np.array([170, 146, 112], float)
+    # 1.50: a small, quiet pattern (the 16-unit diamonds were loud)
+    d = (np.abs(((xx % 16) - 8)) + np.abs(((yy % 16) - 8)))
+    a = np.array([146, 118, 92], float)
+    b = np.array([134, 106, 82], float)
+    c = np.array([158, 132, 104], float)
     img[:] = a
-    img[d < 12] = b
-    img[(d >= 12) & (d < 14)] = c
-    img[d < 4] = c
+    img[d < 6] = b
+    img[(d >= 6) & (d < 7)] = c
+    img[d < 2] = c
     n = value_noise(r, 3)
     wear = np.clip((n - 0.5) * 2.5, 0, 1)
     grey = np.array([140, 130, 116], float)
