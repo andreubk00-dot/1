@@ -18130,6 +18130,11 @@ func _roof_surface_sprite(parent,sign_text,size):
     # repeated at native density, framed by parapet or eave strips.
     var style = _roof_style_index(sign_text)
     var hd_path = "res://art/world_hd/roof_tile_s%d_hd.png" % style
+    # 1.50: 256-unit roofs (tools/roofs_v2.py) - no 64-unit wallpaper repeat
+    var v2_path = "res://art/world_hd/roof_v2_s%d.png" % style
+    var v2 = _hd_exists(v2_path)
+    if v2:
+        hd_path = v2_path
     var hd = _hd_exists(hd_path)
     var tex = load(hd_path) if hd else load("res://roof_tile_s%d_v3.png" % style)
     if tex == null:
@@ -18150,7 +18155,11 @@ func _roof_surface_sprite(parent,sign_text,size):
     sprite.region_enabled = true
     sprite.region_filter_clip_enabled = false
     var k = 2.0 if hd else 1.0
-    sprite.region_rect = Rect2(0,0,area.x * k,area.y * k)
+    var roof_off = Vector2.ZERO
+    if v2:
+        var gp = parent.global_position if parent.is_inside_tree() else parent.position
+        roof_off = Vector2(fposmod(gp.x * 3.7,512.0),fposmod(gp.y * 5.3,512.0)).floor()
+    sprite.region_rect = Rect2(roof_off,Vector2(area.x * k,area.y * k))
     sprite.scale = Vector2(1.0 / k,1.0 / k)
     sprite.position = center
     sprite.modulate = Color(0.94,0.94,0.92,1.0)
@@ -23902,6 +23911,8 @@ func _ensure_world_hd_preloaded():
     paths.append("res://art/high_risk/hr_props_v1.png")
     paths.append("res://art/world_hd/world_props_v20.png")
     paths.append("res://art/world_hd/props_home_v2.png")
+    for st in range(6):
+        paths.append("res://art/world_hd/roof_v2_s%d.png" % st)
     paths.append("res://settlement_props_v1.png")
     for family in ["city","rural","woodland","military","industrial"]:
         paths.append("res://art/world_hd/ground_%s_hd.png" % family)
