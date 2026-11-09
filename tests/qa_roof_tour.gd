@@ -11,6 +11,8 @@ func _initialize():
         if arg.begins_with("--qa-output="):
             output = arg.trim_prefix("--qa-output=")
     call_deferred("run")
+    # a QA capture never hangs a session: quit after four minutes whatever happens
+    create_timer(240.0).timeout.connect(func(): quit(0))
 
 func frames(n: int) -> void:
     for i in range(n):
