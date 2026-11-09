@@ -17064,7 +17064,7 @@ const WORLD_HD_TWINS = {
     "res://facade_features_v1.png":"res://art/world_hd/facade_features_hd.png",
     "res://entrance_v2.png":"res://art/world_hd/entrance_hd.png",
     "res://door_leaf_v1.png":"res://art/world_hd/door_leaf_hd.png",
-    "res://facade_extras_v1.png":"res://art/world_hd/facade_extras_hd.png",
+    "res://facade_extras_v1.png":"res://art/world_hd/facade_extras_v2.png",
     "res://facade_details_v1.png":"res://art/world_hd/facade_details_hd.png"
 }
 var _world_hd_ok = {}

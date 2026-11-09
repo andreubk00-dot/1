@@ -701,6 +701,47 @@ def broken_cabinet():
         box((rnd.uniform(-10, -2), rnd.uniform(2, 4), 2 + i * 3.2), (1.0, 2.0, 1.2), mat(COLOURS[i % len(COLOURS)], rough=0.8), bevel=0.1)
 
 
+# ------------------------------------------------------------- 1.52 ------
+def _all_meshes():
+    import bpy
+    return [o for o in bpy.context.scene.objects if o.type in ('MESH', 'CURVE') and o.name != 'ground']
+
+
+def toppled_shelf_v2():
+    # a steel shelf fallen forward onto the floor, its load spilled in front
+    metal_shelving()
+    bk.rotate(_all_meshes(), -1.15, (0, 0, 0), 'x')
+    import bpy
+    for o in _all_meshes():
+        o.location.z += 4.0
+    rnd = random.Random(9)
+    for i in range(12):
+        c = COLOURS[i % len(COLOURS)]
+        box((rnd.uniform(-22, 22), rnd.uniform(14, 24), 0.9), (rnd.uniform(1.0, 2.4), rnd.uniform(1.0, 2.0), 0.9),
+            mat(c, rough=0.8) if i % 3 else mat((168, 132, 88), rough=0.95), bevel=0.1, rot=(0, 0, rnd.uniform(0, 3)))
+
+
+def wall_monitor():
+    # an old monitor hung on the wall by a wire, screen cracked
+    box((0, 0, 14), (7, 2.5, 5.5), paint((60, 60, 58)), bevel=0.8)
+    box((0, 2.55, 14), (5.8, 0.15, 4.4), mat((26, 34, 36), rough=0.12), bevel=0.4)
+    tube([(-4.5, 2.7, 17), (1, 2.7, 11)], 0.12, mat((150, 160, 160), rough=0.2))
+    tube([(0.5, 2.7, 18), (3.5, 2.7, 12)], 0.12, mat((150, 160, 160), rough=0.2))
+    tube([(-5, 0, 19.5), (0, 0, 24), (5, 0, 19.5)], 0.2, mat((40, 40, 40), rough=0.6))
+    cyl((0, -1, 24), 0.5, 0.6, steel((150, 150, 146)), axis='y', bevel=0)
+    tube([(6, 0, 10), (7, 0.5, 4), (6, 1, 0.5)], 0.25, mat((30, 30, 30), rough=0.8))
+
+
+def defib_wall():
+    # a defibrillator in its yellow wall case
+    box((0, 0, 14), (6.5, 2.5, 6.5), mat((226, 196, 40), rough=0.4, grime=0.35), bevel=0.8)
+    box((0, 2.55, 15), (4.6, 0.15, 3.6), mat((40, 120, 80), rough=0.2), bevel=0.4)
+    box((0, 2.7, 15), (1.0, 0.1, 2.6), mat((240, 240, 236), rough=0.5), bevel=0)
+    box((0, 2.7, 15), (2.6, 0.1, 1.0), mat((240, 240, 236), rough=0.5), bevel=0)
+    tube([(-5, 0, 20.5), (0, 0, 24), (5, 0, 20.5)], 0.2, mat((40, 40, 40), rough=0.6))
+    tube([(5, 2, 9), (7, 3, 3), (5, 4, 0.5)], 0.25, mat((30, 30, 30), rough=0.8))
+
+
 KINDS = {
     'metal_shelving': metal_shelving, 'tool_case': tool_case, 'extinguisher': extinguisher,
     'cabinet': cabinet, 'filing_cabinet': filing_cabinet, 'desk': desk, 'tipped_chair': tipped_chair,
@@ -718,6 +759,7 @@ KINDS = {
     'rain_collector': rain_collector, 'campfire': campfire, 'body_bag': body_bag, 'folded_blanket': folded_blanket,
     'paper_stack': paper_stack, 'rolling_stand': rolling_stand,
     'folded_screen': folded_screen, 'broken_cabinet': broken_cabinet,
+    'toppled_shelf': toppled_shelf_v2, 'broken_monitor': wall_monitor, 'defib_unit': defib_wall, 'med_tray': med_cart,
 }
 
 
