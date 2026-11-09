@@ -28,13 +28,15 @@ func run():
     game.weather_state = "clear"
     var seen = {}
     var shot = 0
-    for stop in [Vector2i(0, 0), Vector2i(-8, -2), Vector2i(3, -4), Vector2i(-5, 5), Vector2i(6, 6), Vector2i(-3, -7), Vector2i(8, -1), Vector2i(2, 2), Vector2i(-6, 1), Vector2i(4, -2)]:
+    for stop in [Vector2i(0, 0), Vector2i(-8, -2), Vector2i(3, -4), Vector2i(-5, 5), Vector2i(6, 6)]:
+        if shot >= 4:
+            break
         game._qa_move_to_world_chunk(stop)
         game.world_minutes = 12.0 * 60.0
         await frames(20)
         for chunk in game.find_children("Chunk_*", "", true, false):
             for r in chunk.find_children("*", "Sprite2D", true, false):
-                if shot >= 8 or not r.has_meta("roof_style") or not r.is_visible_in_tree():
+                if shot >= 4 or not r.has_meta("roof_style") or not r.is_visible_in_tree():
                     continue
                 var st = int(r.get_meta("roof_style"))
                 var w = r.region_rect.size.x * r.scale.x

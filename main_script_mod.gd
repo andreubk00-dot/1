@@ -17057,7 +17057,7 @@ func _facade_height_for(sign_text,size,building_id = ""):
 # (tools/blender/world_hd.py). Same cell layout at 2 texels per world unit,
 # drawn at half scale like every other 3D-rendered asset in the game.
 const WORLD_HD_TWINS = {
-    "res://roof_details_v1.png":"res://art/world_hd/roof_details_hd.png",
+    "res://roof_details_v1.png":"res://art/world_hd/roof_details_v2.png",
     "res://facade_wall_tiles_v4.png":"res://art/world_hd/facade_wall_tiles_hd.png",
     "res://facade_bands_v1.png":"res://art/world_hd/facade_bands_hd.png",
     "res://facade_windows_v1.png":"res://art/world_hd/facade_windows_hd.png",
@@ -18237,7 +18237,9 @@ func _chimney_texture():
 
 func _roof_prop_texture(index):
     var hd = _hd_exists("res://art/world_hd/roof_props_hd.png")
-    var atlas = load("res://art/world_hd/roof_props_hd.png" if hd else "res://roof_props_v4.png")
+    # 1.51: modelled in Blender (tools/blender/roof_props_v2.py), same layout
+    var roof_path = "res://art/world_hd/roof_props_v2.png" if _hd_exists("res://art/world_hd/roof_props_v2.png") else "res://art/world_hd/roof_props_hd.png"
+    var atlas = load(roof_path if hd else "res://roof_props_v4.png")
     if atlas == null:
         return null
     var tex = AtlasTexture.new()
@@ -23906,6 +23908,7 @@ func _ensure_world_hd_preloaded():
         paths.append("res://art/world_hd/roof_edge_h_s%d_hd.png" % st)
         paths.append("res://art/world_hd/roof_edge_v_s%d_hd.png" % st)
     paths.append("res://art/world_hd/roof_props_hd.png")
+    paths.append("res://art/world_hd/roof_props_v2.png")
     paths.append("res://art/vehicles/world_cars_hd_v2.png")
     paths.append("res://art/vehicles/vehicles_hd_v1.png")
     paths.append("res://art/high_risk/hr_props_v1.png")

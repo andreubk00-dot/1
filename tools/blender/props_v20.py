@@ -12,6 +12,7 @@ placement, footprints and collision of every piece stay as they were.
 Reads world_props_v19.png, writes art/world_hd/world_props_v20.png.
 """
 import math
+import random
 import os
 import re
 import sys
@@ -519,6 +520,187 @@ def med_supply_stack():
     box((13, 2, 0.6), (2, 1.4, 0.6), mat((200, 220, 226), rough=0.2), bevel=0.4)
 
 
+# ------------------------------------------------------------- 1.51 ------
+def med_cart():
+    st = steel((190, 194, 190))
+    for z in (4, 10, 16):
+        box((0, 0, z), (7, 5, 0.4), mat((210, 212, 206), rough=0.4), bevel=0.2)
+    for x in (-6.5, 6.5):
+        for y in (-4.5, 4.5):
+            cyl((x, y, 1), 0.4, 15.4, st, bevel=0, verts=8)
+            sphere((x, y, 0.7), 0.8, mat((40, 40, 40), rough=0.8))
+    for (x, y, c) in ((-3, 0, (220, 220, 214)), (2, 1, (150, 190, 210)), (4, -2, (200, 70, 60))):
+        box((x, y, 17.2), (1.6, 1.2, 1.0), mat(c, rough=0.6), bevel=0.2)
+    box((0, 0, 11), (5, 3, 0.8), mat((60, 120, 150), rough=0.5), bevel=0.3)      # a basin on the middle shelf
+
+
+def medical_screen():
+    fr = steel((180, 184, 180))
+    for i, x in enumerate((-12, 0, 12)):
+        rot = (0, 0, [0.35, 0, -0.35][i])
+        box((x, 0, 13), (5.6, 0.4, 9), cloth((170, 196, 190)), bevel=0.3, rot=rot)
+        box((x, 0, 22.4), (6, 0.5, 0.4), fr, bevel=0, rot=rot)
+        for dx in (-5.6, 5.6):
+            cyl((x + dx, 0, 0), 0.4, 22.5, fr, bevel=0, verts=8)
+            sphere((x + dx, 0, 0.6), 0.8, mat((40, 40, 40), rough=0.8))
+
+
+def weapon_rack():
+    w = wood((92, 76, 52))
+    box((0, -2, 12), (12, 1.0, 12), w, bevel=0.4)
+    box((0, 1, 3), (12, 3, 1), w, bevel=0.3)
+    for x in (-8, -3, 2, 7):
+        box((x, -0.6, 16), (0.4, 0.6, 7), mat((40, 42, 40), rough=0.5, metal=0.5), bevel=0)   # rifles
+        box((x, -0.4, 9), (1.1, 0.8, 2.6), wood((110, 74, 44)), bevel=0.2)
+        box((x, -0.6, 12.5), (0.9, 0.6, 1.2), mat((30, 30, 30), rough=0.6), bevel=0)
+    box((10, 2, 1.5), (2, 1.5, 1.5), mat((86, 98, 62), rough=0.6, metal=0.3), bevel=0.2)     # an ammo can
+
+
+def toolbox():
+    red = mat((170, 44, 34), rough=0.45, metal=0.3, grime=0.4, dust=0.3)
+    box((0, 0, 3.5), (10, 4.5, 3.5), red, bevel=0.5)
+    box((0, 0, 7.4), (10.2, 4.7, 0.4), mat((150, 36, 28), rough=0.45, metal=0.3), bevel=0.2)
+    tube([(-4, 0, 7.8), (-4, 0, 9.5), (4, 0, 9.5), (4, 0, 7.8)], 0.5, steel((60, 60, 60)))
+    box((0, 4.6, 4), (1.2, 0.3, 0.8), steel((180, 180, 170)), bevel=0)
+    box((13, 2, 0.4), (3.5, 0.5, 0.4), steel((170, 170, 166)), bevel=0, rot=(0, 0, 0.6))   # a spanner
+    cyl((-13, 3, 0.4), 0.5, 5, mat((180, 140, 40), rough=0.6), axis='x', bevel=0.1)        # a screwdriver
+
+
+def sink():
+    white = mat((222, 222, 214), rough=0.3, grime=0.35, dust=0.15)
+    box((0, 0, 14), (8, 6, 2), white, bevel=1.2, seg=3)
+    box((0, 0.5, 15.4), (6.4, 4.4, 0.8), mat((150, 156, 150), rough=0.3), bevel=0.8)      # the bowl
+    cyl((0, 0, 0), 1.6, 12, white, bevel=0.5, verts=16)                                    # pedestal
+    tube([(0, -5, 16), (0, -5, 19.5), (0, -2.5, 19.5)], 0.4, steel((200, 200, 196)))
+    box((0, -7, 22), (5, 0.5, 4), mat((140, 160, 170), rough=0.1), bevel=0.3)            # a mirror, cracked
+    sphere((-3, 4.5, 14), 1.0, mat((150, 110, 70), rough=1.0), scale=(1.4, 0.3, 1))
+
+
+def toppled_shelf():
+    post = steel((96, 100, 98))
+    shelf = steel((120, 124, 120))
+    # the shelf lies on its back, legs toward the camera
+    box((0, 0, 4.0), (20, 4.5, 0.35), shelf, bevel=0.1, rot=(0.2, 0, 0))
+    for y in (-4, 4):
+        box((0, y, 3), (20.5, 0.5, 0.5), post, bevel=0)
+    for x in (-19, -6, 7, 19):
+        box((x, 0, 3.5), (0.5, 4.5, 0.4), shelf, bevel=0)
+    rnd = random.Random(9)
+    for i in range(10):
+        c = COLOURS[i % len(COLOURS)]
+        box((rnd.uniform(-20, 20), rnd.uniform(5, 10), 0.8), (rnd.uniform(1, 2.4), rnd.uniform(1, 2), 0.8), mat(c, rough=0.8), bevel=0.1, rot=(0, 0, rnd.uniform(0, 3)))
+
+
+def broken_monitor():
+    box((0, 0, 4.5), (6.5, 5, 4.5), paint((178, 174, 158)), bevel=1.0)
+    box((0, 5.05, 5), (5, 0.2, 3.4), mat((24, 30, 32), rough=0.15), bevel=0.4)
+    for (a, b) in (((-3, 5.3, 7), (2, 5.3, 3)), ((1, 5.3, 8), (4, 5.3, 4))):
+        tube([a, b], 0.12, mat((150, 160, 160), rough=0.2))                               # cracks
+    box((0, 0, 0.3), (3, 2.5, 0.3), paint((160, 156, 140)), bevel=0.2)
+    tube([(-6, -3, 2), (-10, 2, 0.3), (-14, 3, 0.3)], 0.3, mat((30, 30, 30), rough=0.8))
+
+
+def mop_bucket():
+    yel = mat((200, 166, 40), rough=0.5, grime=0.4, dust=0.3)
+    cyl((0, 0, 0), 5.0, 8, yel, bevel=0.6, verts=22)
+    cyl((0, 0, 7.6), 4.2, 0.3, mat((90, 96, 90), rough=0.2), bevel=0, verts=22)          # grey water
+    box((0, 0, 9.5), (4.4, 1.0, 1.6), mat((60, 60, 60), rough=0.6), bevel=0.3)            # wringer
+    tube([(1, 0, 8), (4, -2, 22)], 0.5, wood((150, 120, 80)))                              # the mop handle
+    sphere((0.8, 0.2, 7.6), 2.0, cloth((170, 160, 140)), scale=(1.2, 1, 0.5))
+
+
+def rain_collector():
+    blue = mat((60, 96, 140), rough=0.5, grime=0.4, dust=0.3)
+    cyl((0, 0, 0), 9, 18, blue, bevel=0.8, verts=28)
+    for z in (5, 13):
+        cyl((0, 0, z), 9.2, 0.8, mat((50, 80, 120), rough=0.5), bevel=0.2, verts=28)
+    cyl((0, 0, 18), 8.6, 0.3, mat((60, 70, 76), rough=0.15), bevel=0, verts=28)           # water
+    box((0, 0, 18.6), (11, 11, 0.2), cloth((120, 110, 70)), bevel=0, rot=(0, 0, 0.3))     # a tarp funnel
+    tube([(9, 2, 3), (12, 2, 3), (12, 4, 3)], 0.6, galv_like())
+    for x in (-6, 6):
+        box((x, 9.5, 0.6), (1.2, 1.2, 0.6), wood((90, 70, 48)), bevel=0)
+
+
+def galv_like():
+    return mat((150, 154, 150), rough=0.45, metal=0.55, grime=0.45, dust=0.35, scale=0.12)
+
+
+def campfire():
+    rnd = random.Random(4)
+    for i in range(9):
+        a = i * math.tau / 9
+        sphere((math.cos(a) * 7, math.sin(a) * 5, 1.2), 2.0, mat((120, 116, 108), rough=1.0), scale=(1.2, 1, 0.8))
+    for i in range(5):
+        a = i * math.tau / 5 + 0.3
+        tube([(math.cos(a) * 5, math.sin(a) * 3.5, 0.8), (0, 0, 4)], 0.7, wood((70, 48, 30)))
+    sphere((0, 0, 1), 3.5, mat((40, 34, 30), rough=1.0), scale=(1.3, 1, 0.3))            # ash
+    sphere((0, 0, 3), 2.4, mat((255, 150, 60), rough=0.5, emit=(255, 130, 40)), scale=(1, 1, 1.4))
+    sphere((0, 0, 6), 1.4, mat((255, 210, 120), rough=0.5, emit=(255, 200, 100)), scale=(1, 1, 1.6))
+    tube([(-10, 4, 0.8), (-2, 6, 0.8)], 0.8, wood((90, 64, 40)))                          # a log aside
+
+
+def body_bag():
+    blk = mat((30, 34, 30), rough=0.35, grime=0.2)
+    sphere((0, 0, 3), 7, blk, scale=(3.0, 1.0, 0.45))
+    sphere((-15, 0, 3.2), 3.0, blk, scale=(1.2, 1, 0.8))
+    tube([(-18, 0, 5.2), (18, 0, 5.2)], 0.2, steel((170, 170, 160)))                      # zip
+    box((14, 3, 3.5), (2, 0.1, 1.4), mat(PAPER, rough=0.9), bevel=0)                      # a tag
+
+
+def folded_blanket():
+    cols = [(150, 60, 50), (90, 110, 140), (120, 130, 80)]
+    for i, c in enumerate(cols):
+        box((i * 0.6 - 0.6, 0, 1.0 + i * 2.0), (9 - i, 6 - i * 0.6, 1.0), cloth(c), bevel=0.8, seg=3)
+
+
+def med_tray():
+    st = steel((200, 204, 200))
+    box((0, 0, 0.5), (9, 6, 0.5), st, bevel=0.3)
+    for (x, y, c) in ((-5, 0, (220, 220, 214)), (-1, 2, (200, 60, 50)), (3, -1, (150, 190, 210)), (6, 2, (230, 230, 220))):
+        box((x, y, 1.3), (1.4, 0.8, 0.4), mat(c, rough=0.5), bevel=0.1, rot=(0, 0, x * 0.2))
+    tube([(-6, -3, 1.2), (2, -4, 1.2)], 0.25, st)
+
+
+def paper_stack():
+    for i in range(6):
+        box((i * 0.3, 0, 0.5 + i * 1.0), (7, 5, 0.5), mat([PAPER, (200, 196, 180), (180, 170, 150)][i % 3], rough=0.9), bevel=0.1, rot=(0, 0, (i % 3 - 1) * 0.08))
+    box((1, 0, 6.5), (2, 1.4, 0.3), mat((60, 90, 130), rough=0.8), bevel=0)
+
+
+def defib_unit():
+    box((0, 0, 4), (7, 5, 4), mat((230, 200, 40), rough=0.4, grime=0.35), bevel=0.8)
+    box((0, 5.05, 5), (4, 0.2, 2.2), mat((30, 40, 40), rough=0.2), bevel=0.3)
+    for x in (-4, 4):
+        box((x, -2, 8.5), (2, 1.2, 0.6), mat((60, 60, 60), rough=0.6), bevel=0.3)        # paddles
+    tube([(-4, -2, 8.5), (-9, 3, 0.5)], 0.25, mat((30, 30, 30), rough=0.8))
+
+
+def rolling_stand():
+    st = steel((190, 194, 190))
+    cyl((0, 0, 0), 0.6, 24, st, bevel=0, verts=10)
+    for a in range(5):
+        t = a * math.tau / 5
+        tube([(0, 0, 1.2), (math.cos(t) * 5, math.sin(t) * 4, 0.4)], 0.35, st)
+    box((0, 0, 24), (6, 4, 0.4), st, bevel=0.2)
+    box((0, 0, 25.5), (4, 3, 1.2), paint((190, 186, 172)), bevel=0.4)                    # a monitor on top
+    box((0, 3.05, 25.5), (3, 0.1, 0.8), mat((40, 120, 80), rough=0.2), bevel=0)
+
+
+def folded_screen():
+    medical_screen()
+
+
+def broken_cabinet():
+    body = paint((128, 132, 126))
+    box((0, 0, 12), (12, 5, 12), body, bevel=0.5)
+    box((-6, 5.1, 12), (5.5, 0.2, 11), mat((40, 40, 38), rough=0.9), bevel=0)             # a door gone
+    box((-10, 9, 1.0), (5.5, 0.4, 11), paint((138, 142, 136)), bevel=0.2, rot=(1.45, 0, 0.3))   # on the floor
+    box((5.5, 5.1, 12), (5.5, 0.2, 11), paint((136, 140, 134)), bevel=0.2)
+    rnd = random.Random(3)
+    for i in range(6):
+        box((rnd.uniform(-10, -2), rnd.uniform(2, 4), 2 + i * 3.2), (1.0, 2.0, 1.2), mat(COLOURS[i % len(COLOURS)], rough=0.8), bevel=0.1)
+
+
 KINDS = {
     'metal_shelving': metal_shelving, 'tool_case': tool_case, 'extinguisher': extinguisher,
     'cabinet': cabinet, 'filing_cabinet': filing_cabinet, 'desk': desk, 'tipped_chair': tipped_chair,
@@ -531,6 +713,11 @@ KINDS = {
     'pharmacy_cabinet': pharmacy_cabinet, 'drawer_cabinet': drawer_cabinet, 'generator_prop': generator_prop,
     'street_debris': street_debris, 'scattered_bottles': scattered_bottles, 'rubble': rubble,
     'medicine_boxes': medicine_boxes, 'med_supply_stack': med_supply_stack,
+    'med_cart': med_cart, 'medical_screen': medical_screen, 'weapon_rack': weapon_rack, 'toolbox': toolbox,
+    'sink': sink, 'mop_bucket': mop_bucket,
+    'rain_collector': rain_collector, 'campfire': campfire, 'body_bag': body_bag, 'folded_blanket': folded_blanket,
+    'paper_stack': paper_stack, 'rolling_stand': rolling_stand,
+    'folded_screen': folded_screen, 'broken_cabinet': broken_cabinet,
 }
 
 
