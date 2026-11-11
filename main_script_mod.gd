@@ -7740,6 +7740,7 @@ void fragment() {
 """
 var atmosphere_rect = null
 
+
 func _ensure_atmosphere_layer():
     if atmosphere_rect != null and is_instance_valid(atmosphere_rect):
         return atmosphere_rect
@@ -16818,7 +16819,9 @@ func _hd_prop_sprite(kind:String,parent,pos:Vector2,z_value:int,scale_value:floa
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.scale = Vector2(0.5,0.5)
     sprite.position = Vector2(round(pos.x),round(old_bottom - 31.0))
-    sprite.flip_h = kind != "lamp" and int(abs(pos.x * 5.0 + pos.y * 3.0)) % 2 == 0
+    # 1.53: never mirrored - the model is lit from the upper left like the
+    # world; a mirrored one has its light on the wrong side and reads crooked
+    sprite.flip_h = false
     sprite.z_index = z_value
     sprite.set_meta("world_prop_kind",kind)
     sprite.set_meta("world_prop_scale",0.5)
@@ -17064,6 +17067,9 @@ const WORLD_HD_TWINS = {
     "res://entrance_v2.png":"res://art/world_hd/entrance_hd.png",
     "res://door_leaf_v1.png":"res://art/world_hd/door_leaf_hd.png",
     "res://facade_extras_v1.png":"res://art/world_hd/facade_extras_v2.png",
+    # 1.53: the last 1x world art at the HD density (tools/hd_upscale.py)
+    "res://settlement_props_v1.png":"res://art/world_hd/x2/settlement_props_v1.png",
+    "res://poi_props_v1.png":"res://art/world_hd/x2/poi_props_v1.png",
     "res://facade_details_v1.png":"res://art/world_hd/facade_details_hd.png"
 }
 var _world_hd_ok = {}
@@ -17810,12 +17816,15 @@ func _decorate_facade_wall_texture(facade,sign_text,size,building_id):
         _world_prop_sprite("med_sign",facade,Vector2(0,-1),4,0.42)
 
 func _interior_floor_detail_sprite(parent,index,pos,rotation_value,scale_value):
-    var atlas = load("res://floor_detail_v5.png")
+    var x2 = _x2_path("res://floor_detail_v5.png")
+    var atlas = load(x2 if x2 != "" else "res://floor_detail_v5.png")
     if atlas == null:
         return null
+    var k = 2.0 if x2 != "" else 1.0
+    scale_value = scale_value / k
     var tex = AtlasTexture.new()
     tex.atlas = atlas
-    tex.region = Rect2(clamp(int(index),0,7) * 48,0,48,32)
+    tex.region = Rect2(clamp(int(index),0,7) * 48 * k,0,48 * k,32 * k)
     var sprite = Sprite2D.new()
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -21753,10 +21762,11 @@ func _create_door(chunk, coord, local_pos, door_id):
     visual.position = Vector2(-19,0)
     node.add_child(visual)
     var door_sprite = Sprite2D.new()
-    door_sprite.texture = load("res://door_topdown_v2.png")
+    var door_x2 = _x2_path("res://door_topdown_v2.png")
+    door_sprite.texture = load(door_x2 if door_x2 != "" else "res://door_topdown_v2.png")
     door_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     door_sprite.position = Vector2(19,0)
-    door_sprite.scale = Vector2.ONE
+    door_sprite.scale = Vector2.ONE * (0.5 if door_x2 != "" else 1.0)
     visual.add_child(door_sprite)
     node.set_meta("door_hinge_offset",Vector2(-19,0))
 
@@ -24440,12 +24450,15 @@ func _build_showcase_chunk(chunk,coord):
 
 
 func _street_detail_texture(index):
-    var atlas = load("res://street_detail_v2.png")
+    var x2 = _x2_path("res://street_detail_v2.png")
+    var atlas = load(x2 if x2 != "" else "res://street_detail_v2.png")
     if atlas == null:
         return null
+    var k = 2.0 if x2 != "" else 1.0
     var tex = AtlasTexture.new()
     tex.atlas = atlas
-    tex.region = Rect2(clamp(int(index),0,5) * 64,0,64,48)
+    tex.region = Rect2(clamp(int(index),0,5) * 64 * k,0,64 * k,48 * k)
+    tex.set_meta("texel_k",k)
     return tex
 
 func _street_detail_sprite(parent,index,pos,rotation_value = 0.0,scale_value = 1.0,z_value = -3):
@@ -24459,18 +24472,22 @@ func _street_detail_sprite(parent,index,pos,rotation_value = 0.0,scale_value = 1
     # pixel art is flipped, not rotated by odd angles (rotation tore it into jaggies)
     sprite.flip_h = rotation_value < 0.0
     sprite.flip_v = abs(rotation_value) > 0.12 and index != 0
-    sprite.scale = Vector2(scale_value,scale_value)
+    var stk = float(tex.get_meta("texel_k",1.0))
+    sprite.scale = Vector2(scale_value,scale_value) / stk
     sprite.z_index = z_value
     parent.add_child(sprite)
     return sprite
 
 func _wet_surface_texture(index):
-    var atlas = load("res://wet_surface_v2.png")
+    var x2 = _x2_path("res://wet_surface_v2.png")
+    var atlas = load(x2 if x2 != "" else "res://wet_surface_v2.png")
     if atlas == null:
         return null
+    var k = 2.0 if x2 != "" else 1.0
     var tex = AtlasTexture.new()
     tex.atlas = atlas
-    tex.region = Rect2(clamp(int(index),0,3) * 64,0,64,48)
+    tex.region = Rect2(clamp(int(index),0,3) * 64 * k,0,64 * k,48 * k)
+    tex.set_meta("texel_k",k)
     return tex
 
 func _wet_surface_sprite(parent,index,pos,rotation_value = 0.0,scale_value = 1.0,z_value = -5,base_alpha = 0.44):
@@ -24482,7 +24499,7 @@ func _wet_surface_sprite(parent,index,pos,rotation_value = 0.0,scale_value = 1.0
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.position = Vector2(round(pos.x),round(pos.y))
     sprite.rotation = rotation_value
-    sprite.scale = Vector2(scale_value,scale_value)
+    sprite.scale = Vector2(scale_value,scale_value) / float(tex.get_meta("texel_k",1.0))
     sprite.z_index = z_value
     sprite.modulate = Color(1.0,1.0,1.0,0.0)
     sprite.set_meta("base_alpha",float(base_alpha))
@@ -26325,26 +26342,35 @@ const SETTLEMENT_GROUND_TEX = {
     "lazaret":["pavers","asphalt","pavement",["lawn","grass","grass_dry"]]
 }
 
+# 1.53: the HD (2 texels per unit) twin of a 1x texture, "" if none
+func _x2_path(path:String) -> String:
+    var p = "res://art/world_hd/x2/" + path.get_file()
+    return p if _hd_exists(p) else ""
+
 func _settlement_tex(parent,material:String,rect:Rect2,origin:Vector2,vertical:bool = false):
     # Seamless world-anchored texture fill: the region follows world coordinates,
     # so a street continues without a seam into the next sector.
-    var tex = load("res://settlement_ground_%s_v1.png" % material)
+    var src = "res://settlement_ground_%s_v1.png" % material
+    var x2 = _x2_path(src)
+    var tex = load(x2 if x2 != "" else src)
     if tex == null:
         return null
+    var k = 2.0 if x2 != "" else 1.0
     var sprite = Sprite2D.new()
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
     sprite.region_enabled = true
     sprite.centered = false
+    sprite.scale = Vector2(1.0 / k,1.0 / k)
     if vertical:
         # rotate so ruts / slab rows run along the street
         sprite.rotation = PI * 0.5
         sprite.position = Vector2(rect.end.x,rect.position.y)
-        sprite.region_rect = Rect2(origin.y + rect.position.y,origin.x + rect.position.x,rect.size.y,rect.size.x)
+        sprite.region_rect = Rect2(Vector2(origin.y + rect.position.y,origin.x + rect.position.x) * k,Vector2(rect.size.y,rect.size.x) * k)
     else:
         sprite.position = rect.position
-        sprite.region_rect = Rect2(origin + rect.position,rect.size)
+        sprite.region_rect = Rect2((origin + rect.position) * k,rect.size * k)
     parent.add_child(sprite)
     return sprite
 
@@ -28992,7 +29018,7 @@ func _tidy_chunk_props(chunk) -> void:
                 kp.append(n.global_position)
         for b in chunk.get_children():
             if b is Node2D and b.is_in_group("world_buildings"):
-                _declutter_interior(b,kp)
+                _declutter_interior(b,kp,false)
                 _bake_interior_light(b)
         return
     var keep = []
@@ -29170,7 +29196,7 @@ func _move_piece(spr,off:Vector2) -> void:
     if is_instance_valid(sh):
         sh.position += off
 
-func _declutter_interior(building,keep:Array) -> void:
+func _declutter_interior(building,keep:Array,add_bodies:bool = true) -> void:
     if not building.has_meta("building_size"):
         return
     var size:Vector2 = building.get_meta("building_size")
@@ -29185,6 +29211,11 @@ func _declutter_interior(building,keep:Array) -> void:
     var walls = building.get_meta("partitions",[])
     var pieces = []
     for c in building.get_children():
+        # 1.53: furniture is never mirrored (the light would fall on the
+        # wrong side of a modelled piece) and never tilted
+        if _standing_piece(c):
+            c.flip_h = false
+            c.rotation = 0.0
         if _standing_piece(c):
             var anchored = _near_any(c.global_position,keep,16.0)
             var rank = 0 if anchored else (2 if (c.has_meta("interior_fill") or c.has_meta("dress_fill")) else 1)
@@ -29250,7 +29281,7 @@ func _declutter_interior(building,keep:Array) -> void:
         var lc = lr.get_center()
         var bad = false
         for q in placed:
-            if q.grow(-2.0).has_point(lc):
+            if q.size.x > 4.0 and q.size.y > 4.0 and q.grow(-2.0).has_point(lc):
                 bad = true
                 break
         if not bad:
@@ -29262,6 +29293,24 @@ func _declutter_interior(building,keep:Array) -> void:
             _drop_prop(c)
     building.set_meta("declutter",[moved,removed])
     _resync_prop_bodies(building)
+    # 1.53: every standing piece is solid - one that lost or never had a body
+    # (earlier passes, authored rooms) gets one under it now
+    var added = 0
+    for c in (building.get_children() if add_bodies else []):
+        if not _standing_piece(c):
+            continue
+        var b0 = c.get_meta("prop_body") if c.has_meta("prop_body") else null
+        if is_instance_valid(b0) and not b0.is_queued_for_deletion():
+            continue
+        var rr = _interior_prop_solid_rect(c,str(c.get_meta("world_prop_kind","")),true)
+        if rr.size == Vector2.ZERO:
+            continue
+        _add_prop_body(building,rr,c)
+        added += 1
+    if added > 0:
+        building.set_meta("bodies_added",added)
+        # a room the new bodies sealed off is opened again (filler goes first)
+        _open_blocked_rooms(building,size)
 
 func _near_any(p:Vector2,points:Array,radius:float) -> bool:
     for q in points:
@@ -29340,9 +29389,12 @@ func _clear_prop_bodies_off_containers(chunk) -> void:
         for p in spots:
             if r.has_point(p):
                 var spr = b.get_meta("prop_sprite",null)
+                # 1.53: filler standing on a cache goes; a cabinet, a fridge,
+                # a crate that IS the cache stays solid (it was walked through)
+                # - its search radius reaches past its own body
                 if is_instance_valid(spr) and (spr.has_meta("dress_fill") or spr.has_meta("service_verge")):
                     spr.queue_free()
-                b.queue_free()
+                    b.queue_free()
                 break
 
 func _interior_kind_walkable(kind:String) -> bool:
@@ -30571,16 +30623,20 @@ func _build_settlement_model_facade(facade,model:Dictionary,size:Vector2,door_x:
     _settlement_model_sprite(facade,model,"facade_region",model.get("facade_pos",Vector2.ZERO) - Vector2(0,size.y * 0.5))
     # the authored model already carries drainpipes, lamps, signs and weathering
     facade.set_meta("facade_dressed",true)
-    var leaf_tex = load("res://settlement_door_leaves_v1.png")
+    var leaf_x2 = _x2_path("res://settlement_door_leaves_v1.png")
+    var leaf_tex = load(leaf_x2 if leaf_x2 != "" else "res://settlement_door_leaves_v1.png")
     if leaf_tex != null:
+        var lk = 2.0 if leaf_x2 != "" else 1.0
         var tex = AtlasTexture.new()
         tex.atlas = leaf_tex
-        tex.region = Rect2(int(model.get("leaf",0)) * 24,0,24,32)
+        tex.region = Rect2(int(model.get("leaf",0)) * 24 * lk,0,24 * lk,32 * lk)
         var leaf = Sprite2D.new()
         leaf.texture = tex
         leaf.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
         leaf.centered = false
-        leaf.offset = Vector2(0,-32)
+        leaf.offset = Vector2(0,-32 * lk)
+        leaf.scale = Vector2.ONE / lk
+        leaf.set_meta("leaf_base_scale",1.0 / lk)
         leaf.position = Vector2(door_x - 10.0,0.0)
         leaf.add_to_group("front_door_leaves")
         leaf.set_meta("leaf_width",20.0)
