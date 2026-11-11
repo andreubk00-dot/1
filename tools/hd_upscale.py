@@ -73,7 +73,8 @@ def build(P):
         # four texels of the same material
         rgb = b[..., :3].astype(float)
         alpha = b[..., 3]
-        g = rng.choice([-1.0, 0.0, 0.0, 1.0], size=alpha.shape) * (5.0 if tiled else 3.0)
+        # (1.53: no grain - it doubled the build size for little gain)
+        g = np.zeros(alpha.shape)
         rgb = np.clip(rgb + g[..., None] * (alpha[..., None] > 200), 0, 255)
         b = np.dstack([rgb.astype(np.uint8), alpha])
         Image.fromarray(b, 'RGBA').save(os.path.join(out, name))
