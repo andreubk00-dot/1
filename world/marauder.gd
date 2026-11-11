@@ -751,6 +751,7 @@ func _muzzle_flash(at: Vector2, dir: Vector2) -> void:
         var flash = PointLight2D.new()
         flash.texture = lamp.texture
         flash.texture_scale = 0.35
+        flash.rotation = dir.angle()
         flash.energy = 1.4
         flash.color = Color(1.0, 0.8, 0.5)
         flash.global_position = at
@@ -981,7 +982,14 @@ func _update_lamp() -> void:
         return
     var night = game._time_night_factor()
     lamp.energy = 0.55 * night if state != "flee" else 0.0
-    lamp.offset = facing * 26.0
+    # 1.53: the torch is held at the chest and the beam turns with the man.
+    # The cone texture points +x from its centre: it is rotated to where he
+    # looks (an offset alone left the beam pointing right whatever his
+    # heading, hanging in the air beside him).
+    var f = facing if facing.length() > 0.1 else Vector2.DOWN
+    lamp.offset = Vector2.ZERO
+    lamp.rotation = f.angle()
+    lamp.position = (f.normalized() * 5.0 + Vector2(0, -10)).round()
 
 
 # ------------------------------------------------------------- dev64 additions --

@@ -7589,10 +7589,8 @@ func _body_state_offset(phase:float,blend:float) -> Vector2:
     var legs = float(body_condition.get("legs",100.0))
     if legs < 45.0 and blend > 0.1 and sin(phase) > 0.35:
         off.y += px * (2.0 if legs < 20.0 else 1.0)
-    # exhausted or badly hurt, standing still: a slow one-pixel sway
-    var spent = max(clamp((fatigue - 80.0) / 20.0,0.0,1.0),clamp((25.0 - health) / 25.0,0.0,1.0))
-    if spent > 0.0 and blend < 0.2:
-        off.x += px * round(sin(t * 0.7) * spent)
+    # 1.53: no sway or shiver of any kind - frozen, exhausted or hurt, the
+    # figure stands still; the state shows on the HUD and in the breath
     return off
 
 func _update_breath(delta):
@@ -7819,8 +7817,9 @@ func _update_hurt_vignette(delta):
     # badly hurt: the edges throb with the pulse
     var low = 0.0
     if health < 30.0 and health > 0.0:
-        var k = 1.0 - health / 30.0
-        low = k * (0.55 + 0.45 * sin(Time.get_ticks_msec() * 0.001 * lerpf(5.0,8.5,k)))
+        # 1.53: a steady dark-red edge - the 5-8 Hz throb read as the screen
+        # shaking whenever the cold ate into health
+        low = (1.0 - health / 30.0) * 0.8
     if hurt_flash <= 0.0 and low <= 0.0:
         if _hurt_rect != null and is_instance_valid(_hurt_rect):
             _hurt_rect.visible = false
@@ -14966,7 +14965,7 @@ func _update_hud():
     _hud_set_bar_value(hud_vital_bars["infection"],infection_pct)
     _hud_set_bar_value(hud_vital_bars["fatigue"],fatigue_pct)
     # a vital about to kill the player pulses red
-    var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * 7.0)
+    var pulse = 0.3          # 1.53: steady red, no flicker
     for pair in [["health",health_pct],["hunger",hunger_pct],["thirst",thirst_pct]]:
         var bar = hud_vital_bars[pair[0]]
         if bar == null:
