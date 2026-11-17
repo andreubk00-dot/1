@@ -17065,7 +17065,7 @@ const WORLD_HD_TWINS = {
     "res://facade_windows_v1.png":"res://art/world_hd/facade_windows_hd.png",
     "res://facade_features_v1.png":"res://art/world_hd/facade_features_hd.png",
     "res://entrance_v2.png":"res://art/world_hd/entrance_hd.png",
-    "res://door_leaf_v1.png":"res://art/world_hd/door_leaf_hd.png",
+    "res://door_leaf_v1.png":"res://art/world_hd/door_leaf_v2.png",
     "res://facade_extras_v1.png":"res://art/world_hd/facade_extras_v2.png",
     # 1.53: the last 1x world art at the HD density (tools/hd_upscale.py)
     "res://settlement_props_v1.png":"res://art/world_hd/settlement_props_v2.png",
@@ -17329,7 +17329,9 @@ func _build_tall_facade(facade,sign_text,size,building_id,door_x,fh,profile = ""
     _facade_atlas_sprite(facade,"res://entrance_v2.png",Rect2(style * 64,0,64,80),Vector2(door_x,-40.0 + (6.0 if has_steps else 1.0)))
     # 0.90: the door leaf is a real facade element driven by the door node
     # (open/close, collision, AI sound). Hinge on the left edge of the doorway.
-    var leaf_w = 20.0 if (style == 4 or style == 5) else 18.0
+    # 1.58: the leaf fills the whole 20-unit doorway (tools/door_leaf_v2.py);
+    # the old leaves were 18 wide and dragged a black strip over the wall
+    var leaf_w = 20.0 if _hd_exists("res://art/world_hd/door_leaf_v2.png") else (20.0 if (style == 4 or style == 5) else 18.0)
     var leaf = _facade_atlas_sprite(facade,"res://door_leaf_v1.png",Rect2(style * 24,0,24,32),Vector2(door_x - leaf_w * 0.5,0.0))
     if leaf != null:
         leaf.centered = false
@@ -23489,6 +23491,7 @@ func _load_chunk(coord):
     _place_ether_note(chunk,coord)
     _clear_prop_bodies_off_containers(chunk)
     _tidy_chunk_props(chunk)
+    _clear_trees_off_pieces(chunk)
     _scatter_ground_details(chunk,coord)
     # doorways are framed once the partitions are final (the walk from the
     # front door trims some after the rooms are laid out)
@@ -25406,6 +25409,7 @@ func _poi_set_piece(chunk,kind,pos,solid_size = Vector2.ZERO,z_value = 7,flip = 
     node.z_as_relative = false
     node.add_to_group("poi_set_pieces")
     node.set_meta("poi_piece_kind",kind)
+    node.set_meta("poi_piece_solid",solid_size if solid_size != Vector2.ZERO else Vector2(24,12))
     chunk.add_child(node)
     var shadow_w = max(10.0,solid_size.x * 0.55) if solid_size != Vector2.ZERO else 14.0
     _ellipse(Vector2(6,1),shadow_w,4.0,Color(0.01,0.012,0.012,0.26),node)
@@ -29269,6 +29273,37 @@ func _scatter_ground_details(chunk,coord) -> void:
                 chunk.add_child(spr)
                 placed += 1
     chunk.set_meta("ground_detail_count",placed)
+
+# 1.58: a tree never grows through a set piece. Trees are planted before
+# the yards, woodsheds and wrecks are laid out and only kept off buildings
+# and lots, so a birch could stand in a woodshed or a car. Their trunks are
+# checked against every solid piece, prop and car once the chunk is built.
+func _clear_trees_off_pieces(chunk) -> void:
+    var blocks = []
+    for n in chunk.get_children():
+        if not (n is Node2D) or n.is_queued_for_deletion() or n.has_meta("world_tree"):
+            continue
+        if n.has_meta("settlement_piece_solid") and typeof(n.get_meta("settlement_piece_solid")) == TYPE_VECTOR2:
+            var sz:Vector2 = n.get_meta("settlement_piece_solid")
+            blocks.append(Rect2(n.position - sz * 0.5,sz).grow(10.0))
+        elif n.has_meta("poi_piece_kind"):
+            var ps:Vector2 = n.get_meta("poi_piece_solid",Vector2(24,12))
+            blocks.append(Rect2(n.position - Vector2(ps.x * 0.5,ps.y),ps).grow(10.0))
+        elif n.has_meta("world_car"):
+            blocks.append(Rect2(n.position - Vector2(36,16),Vector2(72,32)))
+        elif _standing_piece(n):
+            blocks.append(_prop_foot(n).grow(6.0))
+    if blocks.is_empty():
+        return
+    for t in chunk.get_children():
+        if not (t is Node2D) or not t.has_meta("world_tree") or t.is_queued_for_deletion():
+            continue
+        var trunk = Rect2(t.position + Vector2(-6,1),Vector2(12,12))
+        for r in blocks:
+            if r.intersects(trunk):
+                chunk.remove_child(t)
+                t.queue_free()
+                break
 
 func _tidy_chunk_props(chunk) -> void:
     if not is_instance_valid(chunk):

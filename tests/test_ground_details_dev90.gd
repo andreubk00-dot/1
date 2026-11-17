@@ -30,13 +30,20 @@ func run():
     var total = 0
     var with_details = 0
     var covers = 0
-    for coord in [Vector2i(1,0), Vector2i(2,1), Vector2i(-2,1), Vector2i(0,-2), Vector2i(5,0), Vector2i(-1,-1), Vector2i(3,-3), Vector2i(-4,2), Vector2i(0,-5), Vector2i(-6,-2)]:
+    for coord in [Vector2i(1,0), Vector2i(2,1), Vector2i(-2,1), Vector2i(0,-2), Vector2i(5,0), Vector2i(-1,-1), Vector2i(3,-3), Vector2i(-4,2), Vector2i(0,-5), Vector2i(-6,-2), Vector2i(0,-2), Vector2i(-8,6)]:
         game._qa_move_to_world_chunk(coord)
         for i in 12: await physics_frame
         var chunk = game.loaded_chunks.get(coord, null)
         if chunk == null:
             continue
         var ds = details(chunk)
+        # 1.58: no tree trunk inside a set piece
+        for t in chunk.get_children():
+            if t is Node2D and t.has_meta("world_tree") and not t.is_queued_for_deletion():
+                for n in chunk.get_children():
+                    if n is Node2D and not n.is_queued_for_deletion() and n.has_meta("poi_piece_kind") and n.has_meta("poi_piece_solid"):
+                        var ps: Vector2 = n.get_meta("poi_piece_solid")
+                        check(not Rect2(n.position - Vector2(ps.x * 0.5, ps.y), ps).grow(4.0).has_point(t.position + Vector2(0, 7)), "%s tree at %s inside %s" % [str(coord), str(t.position), str(n.get_meta("poi_piece_kind"))])
         for n in chunk.get_children():
             if n.has_meta("ground_cover") and not n.is_queued_for_deletion():
                 covers += 1
