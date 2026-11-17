@@ -23464,6 +23464,7 @@ func _load_chunk(coord):
     _place_ether_note(chunk,coord)
     _clear_prop_bodies_off_containers(chunk)
     _tidy_chunk_props(chunk)
+    _scatter_ground_details(chunk,coord)
     # doorways are framed once the partitions are final (the walk from the
     # front door trims some after the rooms are laid out)
     for b in chunk.get_children():
@@ -29007,6 +29008,116 @@ func _resync_prop_bodies(building) -> void:
 # 1.47: the last word on a freshly built chunk - nothing upright stands on a
 # parked car, and no piece of furniture stands inside another one (two dressing
 # passes could pick the same spot: a cabinet in a wardrobe, a crate in a bench).
+# 1.54: the small things of open ground. Lots, fields and yards between the
+# set pieces were bare; each chunk gets a deterministic scatter of flat,
+# non-solid details picked by what the ground under them is (grass, earth,
+# hard surface), clear of buildings, lots, props and the roadway.
+const GROUND_DETAIL_TEX = "res://art/world_hd/ground_details_v1.png"
+const GROUND_DETAIL_CELL = 48
+const GROUND_DETAIL_GRID = 10
+var _ground_class_cache = {}
+
+func _ground_class_image(tex):
+    if tex == null:
+        return null
+    var key = tex.resource_path
+    if not _ground_class_cache.has(key):
+        var img = tex.get_image()
+        if img != null and img.is_compressed():
+            img.decompress()
+        if img != null:
+            img.resize(96,96,Image.INTERPOLATE_BILINEAR)
+        _ground_class_cache[key] = img
+    return _ground_class_cache[key]
+
+func _ground_class_at(img,local:Vector2) -> int:
+    # 0 grass, 1 earth / forest floor, 2 hard ground
+    if img == null:
+        return 0
+    var c:Color = img.get_pixel(clampi(int(local.x / CHUNK_SIZE * 96.0),0,95),clampi(int(local.y / CHUNK_SIZE * 96.0),0,95))
+    if c.s < 0.12:
+        return 2
+    if c.g > c.r * 1.04 and c.g > c.b:
+        return 0
+    return 1
+
+func _scatter_ground_details(chunk,coord) -> void:
+    if not is_instance_valid(chunk) or chunk.has_meta("marauder_base") or not _hd_exists(GROUND_DETAIL_TEX):
+        return
+    var ground = null
+    var solid = []
+    var spots = []
+    for n in chunk.get_children():
+        if not (n is Node2D) or n.is_queued_for_deletion():
+            continue
+        var nm = str(n.name)
+        if nm.begins_with("CompoundSurface") or nm.begins_with("SettlementGround") or nm.begins_with("HighRiskGround"):
+            return
+        if n.has_meta("district_ground"):
+            ground = n
+        elif n.has_meta("building_size") and typeof(n.get_meta("building_size")) == TYPE_VECTOR2:
+            var sz:Vector2 = n.get_meta("building_size")
+            solid.append(Rect2(n.position - sz * 0.5,sz).grow(14.0))
+        elif _holds_ground(n):
+            var r = _world_event_rect(n)
+            if r.size != Vector2.ZERO:
+                solid.append(r.grow(6.0))
+        elif n.z_index >= 0 or n.has_meta("world_car"):
+            spots.append(n.position)
+    if ground == null:
+        return
+    var img = _ground_class_image(ground.texture)
+    var atlas = load(GROUND_DETAIL_TEX)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = hash(Vector3i(coord.x,coord.y,1540))
+    var step = float(CHUNK_SIZE) / GROUND_DETAIL_GRID
+    var placed = 0
+    for gy in range(GROUND_DETAIL_GRID):
+        for gx in range(GROUND_DETAIL_GRID):
+            var pos = Vector2((gx + rng.randf_range(0.12,0.88)) * step,(gy + rng.randf_range(0.12,0.88)) * step).round()
+            var roll = rng.randf()
+            var pick = rng.randi()
+            var cls = _ground_class_at(img,pos)
+            var on_road = _point_on_road_or_sidewalk(pos)
+            if on_road and cls != 2:
+                continue
+            # grass is the richest, hard ground the sparsest; the road itself
+            # only grows weeds in its cracks
+            if roll > ([0.78,0.62,0.42][cls] if not on_road else 0.16):
+                continue
+            var blocked = false
+            for r in solid:
+                if r.has_point(pos):
+                    blocked = true
+                    break
+            if not blocked:
+                for sp in spots:
+                    if abs(sp.x - pos.x) < 20.0 and abs(sp.y - pos.y) < 18.0:
+                        blocked = true
+                        break
+            if blocked:
+                continue
+            var cell = pick % 8
+            if cls == 0:
+                # tufts and flowers are common, a boulder is rare
+                cell = [0,0,1,2,3,4,6,6,7,5][pick % 10]
+            elif cls == 2:
+                cell = ([0,5][pick % 2] if on_road else [0,0,1,1,2,3,4,5,6,7][pick % 10])
+            var tex = AtlasTexture.new()
+            tex.atlas = atlas
+            tex.region = Rect2(cell * GROUND_DETAIL_CELL,cls * GROUND_DETAIL_CELL,GROUND_DETAIL_CELL,GROUND_DETAIL_CELL)
+            var spr = Sprite2D.new()
+            spr.texture = tex
+            spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+            spr.scale = Vector2(0.5,0.5)
+            spr.position = pos
+            spr.flip_h = (pick >> 8) % 2 == 1
+            spr.z_index = -1
+            spr.set_meta("ground_detail",cls * 8 + cell)
+            chunk.add_child(spr)
+            placed += 1
+    chunk.set_meta("ground_detail_count",placed)
+
 func _tidy_chunk_props(chunk) -> void:
     if not is_instance_valid(chunk):
         return
