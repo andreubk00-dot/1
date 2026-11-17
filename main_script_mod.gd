@@ -30809,12 +30809,26 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
         Vector2(size.x*0.5 + shadow_reach,-size.y*0.5 - facade_height + 16),Vector2(size.x*0.5 + shadow_reach,size.y*0.5 + 22),
         Vector2(-size.x*0.5 + 16,size.y*0.5 + 22),Vector2(-size.x*0.5 + 10,size.y*0.5 + 14)
     ])
-    cast_shadow.color = Color(0.0,0.008,0.01,0.24)
+    # 1.60: the shadow lies over the yards, lawns and kerb paint (they sit up
+    # to z -2 and swallowed it) but under the building, props and people; a
+    # soft outer band and a denser core near the walls; it follows the sun
+    # like the baked prop shadows (full by day, faint at night or overcast)
+    cast_shadow.color = Color(0.0,0.008,0.012,0.13)
     cast_shadow.position = center
-    cast_shadow.z_index = -9
+    cast_shadow.z_index = 0
     cast_shadow.z_as_relative = false
     cast_shadow.add_to_group("building_cast_shadows")
+    cast_shadow.add_to_group("sun_blob_shadows")
     chunk.add_child(cast_shadow)
+    var core_reach = shadow_reach * 0.62
+    var core = Polygon2D.new()
+    core.polygon = PackedVector2Array([
+        Vector2(-size.x*0.5 + 10,-size.y*0.5 - facade_height),Vector2(size.x*0.5 + 2,-size.y*0.5 - facade_height),
+        Vector2(size.x*0.5 + core_reach,-size.y*0.5 - facade_height + 12),Vector2(size.x*0.5 + core_reach,size.y*0.5 + 13),
+        Vector2(-size.x*0.5 + 14,size.y*0.5 + 13),Vector2(-size.x*0.5 + 10,size.y*0.5 + 8)
+    ])
+    core.color = Color(0.0,0.008,0.012,0.16)
+    cast_shadow.add_child(core)
 
     _ellipse(Vector2(0,size.y*0.52),size.x*0.42,8,Color(0.02,0.02,0.02,0.14),building)
     _interior_floor_sprite(building,sign_text,size)
@@ -35452,16 +35466,27 @@ func _make_crow_texture() -> ImageTexture:
                     img.set_pixel(f * 12 + x,y,Color(0.45,0.44,0.40,1.0))
     return ImageTexture.create_from_image(img)
 
+# 1.60: HD crows (tools/crows_v1.py): 24 px cells - stand, peck, hop, then
+# wings up / level / down seen from above. Old frame numbers map onto them.
+const CROW_HD_TEX = "res://art/world_hd/crows_v1.png"
+const CROW_HD_FRAME = [1,0,3,5,4]   # peck, head up, wings up, wings down, wings level
+
+func _crow_region(frame:int) -> Rect2:
+    if _crow_tex != null and _crow_tex.get_width() > 48:
+        return Rect2(int(CROW_HD_FRAME[frame]) * 24,0,24,24)
+    return Rect2(min(frame,3) * 12,0,12,9)
+
 func _crow_sprite():
     if _crow_tex == null:
-        _crow_tex = _make_crow_texture()
+        _crow_tex = load(CROW_HD_TEX) if _hd_exists(CROW_HD_TEX) else _make_crow_texture()
     var s = Sprite2D.new()
     var t = AtlasTexture.new()
     t.atlas = _crow_tex
-    t.region = Rect2(0,0,12,9)
+    t.region = _crow_region(0)
     s.texture = t
     s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    s.scale = Vector2(0.5,0.5)
+    # a crow is a hand's span next to a person: the HD cell is drawn small
+    s.scale = Vector2(0.36,0.36) if _crow_tex.get_width() > 48 else Vector2(0.5,0.5)
     return s
 
 func _crow_spot_free(pos:Vector2) -> bool:
@@ -35549,7 +35574,7 @@ func _update_crows(delta):
         var state = str(crow.get_meta("state","ground"))
         if state == "ground":
             # pecking: head down / up, now and then a hop
-            spr.texture.region = Rect2((0 if int(t * 3.0) % 3 != 0 else 1) * 12,0,12,9)
+            spr.texture.region = _crow_region(0 if int(t * 3.0) % 3 != 0 else 1)
             var hop = float(crow.get_meta("next_hop",1.0)) - delta
             if hop <= 0.0:
                 hop = randf_range(0.8,2.6)
@@ -35568,7 +35593,8 @@ func _update_crows(delta):
             crow.set_meta("alt",alt)
             crow.global_position += vel * delta
             spr.position = Vector2(0,-2.0 - alt).round()
-            spr.texture.region = Rect2((2 if int(t * 10.0) % 2 == 0 else 3) * 12,0,12,9)
+            # a three-beat flap: up, level, down, level
+            spr.texture.region = _crow_region([2,4,3,4][int(t * 12.0) % 4])
             var sh = crow.get_meta("shadow")
             if is_instance_valid(sh):
                 sh.modulate.a = clamp(1.0 - alt / 40.0,0.0,1.0)
