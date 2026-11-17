@@ -257,6 +257,41 @@ def ruts(alb, hf, rv, rh, offsets, half=4.0, depth=1.2, dark=0.82):
     return alb, hf
 
 
+def junction_ruts(alb, hf, rv, rh, offsets, hw, half=4.5, depth=1.2, dark=0.82, seed=0):
+    """1.55: wheels do not stop at the crossing. Ruts run on through the
+    junction (fainter, broken where the ground is hard) and the turning traffic
+    has worn quarter arcs from each arm into the next one; between them the
+    trampled middle keeps a few islands of grass (returned as a mask)."""
+    av, ah, inter = arm_masks(rv, rh)
+    c = (R0 + R1) / 2
+    rng = np.random.default_rng(seed)
+    worn = np.zeros(alb.shape[:2])
+    for off in offsets:
+        for coord in (X, Y):
+            dist = np.abs(coord - (c + off))
+            prof = np.clip(1 - dist / half, 0, 1)
+            broken = noise(seed + int(off) + (3 if coord is X else 5), 16, 2) > 0.38
+            worn = np.maximum(worn, prof * inter * broken * 0.6)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cx, cy = c + sx * hw, c + sy * hw
+            for off in offsets:
+                rho = hw - sx * off
+                if rho <= half or rng.random() < 0.35:
+                    continue
+                dist = np.abs(np.hypot(X - cx, Y - cy) - rho)
+                # only the quarter that bends from one arm into the next
+                quarter = ((X - cx) * sx <= 0) & ((Y - cy) * sy <= 0)
+                prof = np.clip(1 - dist / half, 0, 1) * quarter
+                broken = noise(seed + 900 + int(off) + sx * 7 + sy * 13, 14, 2) > 0.3
+                worn = np.maximum(worn, prof * inter * broken * 0.85)
+    k = step(worn, 3, seed + 40, jit=0.9)
+    alb *= (1 - (1 - dark) * k)[..., None]
+    hf -= depth * k
+    islands = inter & (worn < 0.05) & (noise(seed + 50, 10, 2) > 0.56)
+    return alb, hf, islands
+
+
 def kerbs(alb, hf, road, walk, col=(150, 148, 140), seg=12.0, seed=0):
     """kerb stones between carriageway and verge (4 units): lit top, a darker
     face toward the road, joints every seg units, a few broken / missing
@@ -381,6 +416,8 @@ def rural():
     alb[road] = earth[road]
     hf[road] = 0.3 * noise(1112, 4, 2)[road]
     alb, hf = ruts(alb, hf, rv, rh, (-52, -26, 26, 52), half=4.5, depth=1.4, dark=0.8)
+    alb, hf, islands = junction_ruts(alb, hf, rv, rh, (-52, -26, 26, 52), (R1 - R0) / 2, half=4.5, depth=1.4, dark=0.8, seed=1150)
+    alb = blades(alb, islands, 1151, 5000)
     # muted puddles in the ruts after rain
     pud = road & (noise(1114, 30, 3) > 0.72) & (hf < -0.8)
     alb = blend(alb, (70, 76, 74), pud * 0.8)
@@ -422,7 +459,9 @@ def woodland():
     earth = np.array((96, 82, 62), float)[None, None, :] * tone(2108, 20, 0.86, 1.08, 4, 3)[..., None]
     alb = alb * (1 - t_soft[..., None]) + earth * t_soft[..., None]
     hf = hf * (1 - t_soft) + 0.25 * noise(2109, 3, 2) * t_soft
-    alb, hf = ruts(alb, hf, rv, rh, (-20, 20), half=5.0, depth=1.2, dark=0.84)
+    alb, hf = ruts(alb, hf, rv, rh, (-20, 20), half=5.0, depth=1.4, dark=0.76)
+    alb, hf, islands = junction_ruts(alb, hf, rv, rh, (-20, 20), 46, half=5.0, depth=1.4, dark=0.76, seed=2150)
+    alb = blades(alb, islands & track, 2151, 3000, cols=((62, 78, 40), (74, 90, 46), (88, 100, 52)))
     alb = speckle(alb, track, 0.04, [(124, 112, 94), (72, 60, 44)], 2110)
     # rain water standing in the ruts, a grass crown, needles blown onto the track
     pud = track & (hf < -0.7) & (noise(2115, 24, 3) > 0.62)

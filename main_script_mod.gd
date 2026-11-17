@@ -29041,6 +29041,15 @@ func _ground_class_at(img,local:Vector2) -> int:
         return 0
     return 1
 
+func _ground_detail_blocked(pos:Vector2,solid:Array,spots:Array) -> bool:
+    for r in solid:
+        if r.has_point(pos):
+            return true
+    for sp in spots:
+        if abs(sp.x - pos.x) < 20.0 and abs(sp.y - pos.y) < 18.0:
+            return true
+    return false
+
 func _scatter_ground_details(chunk,coord) -> void:
     if not is_instance_valid(chunk) or chunk.has_meta("marauder_base") or not _hd_exists(GROUND_DETAIL_TEX):
         return
@@ -29067,6 +29076,7 @@ func _scatter_ground_details(chunk,coord) -> void:
     if ground == null:
         return
     var img = _ground_class_image(ground.texture)
+    var woodland = str(ground.get_meta("district_ground","")).find("woodland") >= 0
     var atlas = load(GROUND_DETAIL_TEX)
     var rng = RandomNumberGenerator.new()
     rng.seed = hash(Vector3i(coord.x,coord.y,1540))
@@ -29078,44 +29088,52 @@ func _scatter_ground_details(chunk,coord) -> void:
             var roll = rng.randf()
             var pick = rng.randi()
             var cls = _ground_class_at(img,pos)
-            var on_road = _point_on_road_or_sidewalk(pos)
-            if on_road and cls != 2:
+            # a town street is its whole width; a dirt track only its ruts,
+            # its verges are ground like any other
+            var on_road = _point_on_road_or_sidewalk(pos,cls != 2)
+            if woodland and cls != 2:
+                # the forest track is only its two ruts wide (see
+                # wa_ground_districts.woodland); its verges are forest floor
+                on_road = abs(pos.x - CHUNK_SIZE * 0.5) < 52.0 or abs(pos.y - CHUNK_SIZE * 0.5) < 52.0
+            # grass is the richest, hard ground the sparsest; the roadway only
+            # grows weeds in its cracks, a dirt track only a stone or a dry tuft
+            if roll > ([0.78,0.62,0.42][cls] if not on_road else (0.16 if cls == 2 else 0.22)):
                 continue
-            # grass is the richest, hard ground the sparsest; the road itself
-            # only grows weeds in its cracks
-            if roll > ([0.78,0.62,0.42][cls] if not on_road else 0.16):
-                continue
-            var blocked = false
-            for r in solid:
-                if r.has_point(pos):
-                    blocked = true
-                    break
-            if not blocked:
-                for sp in spots:
-                    if abs(sp.x - pos.x) < 20.0 and abs(sp.y - pos.y) < 18.0:
-                        blocked = true
-                        break
-            if blocked:
+            if _ground_detail_blocked(pos,solid,spots):
                 continue
             var cell = pick % 8
-            if cls == 0:
+            if on_road and cls != 2:
+                # stones and dry grass on the ridge between the ruts
+                cls = 1
+                cell = [4,4,5,5,6][pick % 5]
+            elif cls == 0:
                 # tufts and flowers are common, a boulder is rare
                 cell = [0,0,1,2,3,4,6,6,7,5][pick % 10]
             elif cls == 2:
                 cell = ([0,5][pick % 2] if on_road else [0,0,1,1,2,3,4,5,6,7][pick % 10])
-            var tex = AtlasTexture.new()
-            tex.atlas = atlas
-            tex.region = Rect2(cell * GROUND_DETAIL_CELL,cls * GROUND_DETAIL_CELL,GROUND_DETAIL_CELL,GROUND_DETAIL_CELL)
-            var spr = Sprite2D.new()
-            spr.texture = tex
-            spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-            spr.scale = Vector2(0.5,0.5)
-            spr.position = pos
-            spr.flip_h = (pick >> 8) % 2 == 1
-            spr.z_index = -1
-            spr.set_meta("ground_detail",cls * 8 + cell)
-            chunk.add_child(spr)
-            placed += 1
+            # grass grows in clumps: a tuft brings one or two more beside it,
+            # so a patch reads from a distance where a lone tuft is lost
+            var spots_here = [pos]
+            if not on_road and ((cls == 0 and cell in [0,1,6]) or (cls == 1 and cell in [1,5])):
+                for k in range(1 + (pick >> 4) % 2):
+                    var q = (pos + Vector2(rng.randf_range(-11.0,11.0),rng.randf_range(-7.0,7.0))).round()
+                    if not _ground_detail_blocked(q,solid,spots):
+                        spots_here.append(q)
+            for k in range(spots_here.size()):
+                var c2 = cell if k == 0 else ([0,6,0][k] if cls == 0 else [1,5,1][k])
+                var tex = AtlasTexture.new()
+                tex.atlas = atlas
+                tex.region = Rect2(c2 * GROUND_DETAIL_CELL,cls * GROUND_DETAIL_CELL,GROUND_DETAIL_CELL,GROUND_DETAIL_CELL)
+                var spr = Sprite2D.new()
+                spr.texture = tex
+                spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+                spr.scale = Vector2(0.5,0.5)
+                spr.position = spots_here[k]
+                spr.flip_h = ((pick >> 8) + k) % 2 == 1
+                spr.z_index = -1
+                spr.set_meta("ground_detail",cls * 8 + c2)
+                chunk.add_child(spr)
+                placed += 1
     chunk.set_meta("ground_detail_count",placed)
 
 func _tidy_chunk_props(chunk) -> void:
