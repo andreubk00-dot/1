@@ -146,7 +146,7 @@ func _ready() -> void:
     set_meta("is_enemy", true)
     set_meta("is_marauder", true)
     collision_layer = game.LAYER_ENEMY
-    collision_mask = game.LAYER_WORLD
+    collision_mask = game.LAYER_WORLD | game.LAYER_WATER
     motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
     z_index = 9
     z_as_relative = false

@@ -30,13 +30,31 @@ func run():
     var total = 0
     var with_details = 0
     var covers = 0
-    for coord in [Vector2i(1,0), Vector2i(2,1), Vector2i(-2,1), Vector2i(0,-2), Vector2i(5,0), Vector2i(-1,-1), Vector2i(3,-3), Vector2i(-4,2), Vector2i(0,-5), Vector2i(-6,-2), Vector2i(0,-2), Vector2i(-8,6)]:
+    var ponds = 0
+    for coord in [Vector2i(1,0), Vector2i(2,1), Vector2i(-2,1), Vector2i(0,-2), Vector2i(5,0), Vector2i(-1,-1), Vector2i(3,-3), Vector2i(-4,2), Vector2i(0,-5), Vector2i(-6,-2), Vector2i(0,-2), Vector2i(-8,6), Vector2i(1,-5), Vector2i(-1,-5), Vector2i(-3,-5), Vector2i(-2,2)]:
         game._qa_move_to_world_chunk(coord)
         for i in 12: await physics_frame
         var chunk = game.loaded_chunks.get(coord, null)
         if chunk == null:
             continue
         var ds = details(chunk)
+        # 1.61: a pond blocks walking on the water layer, holds no tree and no loot
+        for pn in chunk.get_children():
+            if pn is Node2D and pn.has_meta("world_pond"):
+                ponds += 1
+                var r: Rect2 = chunk.get_meta("pond_rect")
+                var bodies = 0
+                for c in pn.get_children():
+                    if c is StaticBody2D:
+                        bodies += 1
+                        check(c.collision_layer == game.LAYER_WATER, "%s pond body on layer %d" % [str(coord), c.collision_layer])
+                check(bodies == 1, "%s pond without collision" % str(coord))
+                for t in chunk.get_children():
+                    if t is Node2D and t.has_meta("world_tree") and not t.is_queued_for_deletion():
+                        check(not r.has_point(t.position), "%s tree in the pond at %s" % [str(coord), str(t.position)])
+                for it in game.get_tree().get_nodes_in_group("interactable"):
+                    if is_instance_valid(it) and chunk.is_ancestor_of(it):
+                        check(not r.has_point(it.global_position - chunk.global_position), "%s loot in the pond" % str(coord))
         # 1.58: no tree trunk inside a set piece
         for t in chunk.get_children():
             if t is Node2D and t.has_meta("world_tree") and not t.is_queued_for_deletion():
@@ -87,6 +105,9 @@ func run():
         check(differ <= 3, "%s scatter is not deterministic (%d of %d differ)" % [str(coord), differ, sig.size()])
     check(with_details >= 4, "only %d of the visited chunks carry ground details" % with_details)
     check(total >= 80, "only %d ground details over the visited chunks" % total)
+    check(ponds >= 1, "no pond anywhere in the woods")
+    # the survivor's body is stopped by water, bullets are not
+    check((game.player.collision_mask & game.LAYER_WATER) != 0, "the survivor walks on water")
     check(covers >= 10, "only %d pieces of ground cover in the woods and dachas" % covers)
     print("ground details: %d in %d chunks, cover %d" % [total, with_details, covers])
     print("TEST PASSED" if fails == 0 else "TEST FAILED (%d)" % fails)

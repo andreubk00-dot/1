@@ -293,6 +293,8 @@ const TARGET_FARM_REFRESH_DAYS = {
 const LAYER_PLAYER = 1
 const LAYER_ENEMY = 2
 const LAYER_WORLD = 4
+# 1.61: open water - it stops people and beasts but not bullets or sight
+const LAYER_WATER = 8
 
 var item_defs = {}
 var weapon_defs = {}
@@ -6661,7 +6663,7 @@ func _create_player():
     player = CharacterBody2D.new()
     player.name = "Player"
     player.collision_layer = LAYER_PLAYER
-    player.collision_mask = LAYER_WORLD
+    player.collision_mask = LAYER_WORLD | LAYER_WATER
     player.z_index = 20
     player.z_as_relative = false
     add_child(player)
@@ -29136,6 +29138,159 @@ const GROUND_COVER_FOREST_PICK = [0,0,0,1,1,2,3,4,5,5,6,6,7]
 const GROUND_COVER_WEEDS_PICK = [4,4,5,5,6,6,3]
 const GROUND_COVER_BED_PICK = [0,0,1,2,7,3]
 
+# 1.61: ponds in the woods and at the dachas (tools/ponds_v1.py): a ragged
+# pool with a muddy shore, reeds, lily pads, water that shimmers. Its outline
+# is a collision polygon on the water layer: people walk round it, bullets and
+# sight pass over. Placed clear of roads, buildings, lots, props and loot;
+# trees standing in the water are taken out.
+const POND_TEX = "res://art/world_hd/ponds_v1.png"
+const POND_JSON = "res://art/world_hd/ponds_v1.json"
+const POND_CHANCE = 0.32
+const POND_SIZE = Vector2(160,112)
+var _pond_outlines = null
+var _pond_mat = null
+const POND_SHADER = """shader_type canvas_item;
+void fragment() {
+    vec4 c = texture(TEXTURE, UV);
+    if (c.a > 0.97 && c.a < 0.99) {
+        vec2 px = floor(UV / TEXTURE_PIXEL_SIZE);
+        float w = sin(px.x * 0.19 + px.y * 0.43 + TIME * 1.2) * sin(px.x * 0.09 - px.y * 0.05 - TIME * 0.6);
+        c.rgb *= 1.0 + 0.07 * w;
+        float h = fract(sin(dot(floor(px / 3.0), vec2(12.9898, 78.233)) + floor(TIME * 1.5)) * 43758.5453);
+        c.rgb += vec3(0.10, 0.12, 0.12) * step(0.992, h);
+        c.a = 1.0;
+    }
+    COLOR = c * COLOR;
+}"""
+
+func _pond_material():
+    if _pond_mat == null:
+        var sh = Shader.new()
+        sh.code = POND_SHADER
+        _pond_mat = ShaderMaterial.new()
+        _pond_mat.shader = sh
+    return _pond_mat
+
+func _pond_shapes() -> Array:
+    if _pond_outlines == null:
+        _pond_outlines = []
+        if FileAccess.file_exists(POND_JSON):
+            var data = JSON.parse_string(FileAccess.get_file_as_string(POND_JSON))
+            if typeof(data) == TYPE_DICTIONARY:
+                for poly in data.get("outlines",[]):
+                    var pts = PackedVector2Array()
+                    for p in poly:
+                        pts.append(Vector2(float(p[0]),float(p[1])))
+                    _pond_outlines.append(pts)
+    return _pond_outlines
+
+func _pond_blocker(n) -> bool:
+    if n.has_meta("world_car") or n.has_meta("poi_piece_kind") or n.has_meta("settlement_piece_solid") or n.has_meta("world_lamp"):
+        return true
+    if n.has_meta("world_name_sign") or n.has_meta("prop_body") or n.is_in_group("interactable"):
+        return true
+    if n is Sprite2D and _standing_piece(n):
+        return true
+    for c in n.get_children():
+        if c is StaticBody2D or c is Area2D:
+            return true
+    return false
+
+func _place_pond(chunk,coord,solid:Array,forest:bool) -> Rect2:
+    if not _hd_exists(POND_TEX) or _pond_shapes().is_empty():
+        return Rect2()
+    if chunk.has_meta("pond_rect"):
+        return (chunk.get_meta("pond_rect") as Rect2).grow(6.0)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = hash(Vector3i(coord.x,coord.y,1610))
+    if rng.randf() > POND_CHANCE:
+        return Rect2()
+    for attempt in range(14):
+        var c = Vector2(rng.randf_range(POND_SIZE.x * 0.5 + 12.0,CHUNK_SIZE - POND_SIZE.x * 0.5 - 12.0),
+            rng.randf_range(POND_SIZE.y * 0.5 + 12.0,CHUNK_SIZE - POND_SIZE.y * 0.5 - 12.0)).round()
+        var r = Rect2(c - POND_SIZE * 0.5,POND_SIZE)
+        var ok = true
+        for b in solid:
+            if b.intersects(r.grow(10.0)):
+                ok = false
+                break
+        if not ok:
+            continue
+        # the road and its verges (a forest track is only its ruts wide)
+        if forest:
+            if abs(r.get_center().x - CHUNK_SIZE * 0.5) < r.size.x * 0.5 + 64.0 or abs(r.get_center().y - CHUNK_SIZE * 0.5) < r.size.y * 0.5 + 64.0:
+                continue
+        else:
+            var on_road = false
+            for p in [r.position,r.end,Vector2(r.position.x,r.end.y),Vector2(r.end.x,r.position.y),r.get_center()]:
+                if _point_on_road_or_sidewalk(p,true):
+                    on_road = true
+            if on_road or (r.position.x < TREE_ROAD_MAX and r.end.x > TREE_ROAD_MIN) or (r.position.y < TREE_ROAD_MAX and r.end.y > TREE_ROAD_MIN):
+                continue
+        # nothing that stands, nothing to pick up, no one in the water; flat
+        # decor (puddles, shrubs, leaves) under the water is cleared below
+        var clear = []
+        for n in chunk.get_children():
+            if not (n is Node2D) or n.is_queued_for_deletion() or n.has_meta("world_tree"):
+                continue
+            if not r.grow(8.0).has_point(n.position):
+                continue
+            if _pond_blocker(n):
+                ok = false
+                break
+            if n is Sprite2D and n.texture != null and n.texture.get_width() <= 200:
+                clear.append(n)
+        if ok:
+            for it in get_tree().get_nodes_in_group("interactable"):
+                if is_instance_valid(it) and chunk.is_ancestor_of(it) and r.grow(16.0).has_point(it.global_position - chunk.global_position):
+                    ok = false
+                    break
+        if not ok:
+            continue
+        var variant = rng.randi() % _pond_shapes().size()
+        var root = Node2D.new()
+        root.name = "Pond"
+        root.position = c
+        root.set_meta("world_pond",variant)
+        var tex = AtlasTexture.new()
+        tex.atlas = load(POND_TEX)
+        tex.region = Rect2(variant * 320,0,320,224)
+        var spr = Sprite2D.new()
+        spr.texture = tex
+        spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        spr.scale = Vector2(0.5,0.5)
+        spr.flip_h = rng.randf() < 0.5
+        spr.material = _pond_material()
+        root.add_child(spr)
+        var body = StaticBody2D.new()
+        body.collision_layer = LAYER_WATER
+        body.collision_mask = 0
+        var col = CollisionPolygon2D.new()
+        var outline:PackedVector2Array = _pond_shapes()[variant]
+        if spr.flip_h:
+            var flipped = PackedVector2Array()
+            for i in range(outline.size() - 1,-1,-1):
+                flipped.append(Vector2(-outline[i].x,outline[i].y))
+            outline = flipped
+        col.polygon = outline
+        body.add_child(col)
+        root.add_child(body)
+        root.z_index = -1
+        chunk.add_child(root)
+        for n in clear:
+            if n.has_meta("world_prop_kind"):
+                _drop_prop(n)
+            else:
+                n.queue_free()
+        # trees with their roots in the water go
+        for t in chunk.get_children():
+            if t is Node2D and t.has_meta("world_tree") and not t.is_queued_for_deletion() and r.grow(6.0).has_point(t.position):
+                chunk.remove_child(t)
+                t.queue_free()
+        chunk.set_meta("pond_rect",r)
+        return r.grow(6.0)
+    return Rect2()
+
 func _ground_cover_fits(rect:Rect2,solid:Array,spots:Array,forest:bool) -> bool:
     for r in solid:
         if r.intersects(rect):
@@ -29254,10 +29409,25 @@ func _scatter_ground_details(chunk,coord) -> void:
             var r = _world_event_rect(n)
             if r.size != Vector2.ZERO:
                 solid.append(r.grow(6.0))
+        elif n is CharacterBody2D:
+            continue    # people and beasts move on; the ground does not dodge them
         elif n.z_index >= 0 or n.has_meta("world_car"):
             spots.append(n.position)
     if ground == null:
         return
+    # 1.61: the pond goes in before anything is scattered: it clears the flat
+    # decor under its water, so the spots are counted again after it
+    var fam = str(ground.get_meta("district_ground",""))
+    if fam.find("woodland") >= 0 or fam.find("rural") >= 0:
+        var pond = _place_pond(chunk,coord,solid,fam.find("woodland") >= 0)
+        if pond.size != Vector2.ZERO:
+            solid.append(pond)
+            spots.clear()
+            for n in chunk.get_children():
+                if n is Node2D and not n.is_queued_for_deletion() and not n.has_meta("world_pond") and not n.has_meta("district_ground") \
+                        and not (n.has_meta("building_size") and typeof(n.get_meta("building_size")) == TYPE_VECTOR2) and not _holds_ground(n) \
+                        and not (n is CharacterBody2D) and (n.z_index >= 0 or n.has_meta("world_car")):
+                    spots.append(n.position)
     # 1.56: the larger ground cover first (undergrowth, garden beds); the
     # small details then keep off it
     for r in _scatter_ground_cover(chunk,coord,ground,solid,spots):
@@ -32564,7 +32734,7 @@ func _spawn_enemy(chunk,coord,spawn_id,local_pos,enemy_kind = "normal",encounter
     enemy.name = "Infected_%d" % spawn_id
     enemy.position = local_pos
     enemy.collision_layer = LAYER_ENEMY
-    enemy.collision_mask = LAYER_WORLD
+    enemy.collision_mask = LAYER_WORLD | LAYER_WATER
     enemy.z_index = 9
     enemy.z_as_relative = false
     enemy.add_to_group("infected")

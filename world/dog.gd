@@ -108,7 +108,7 @@ func record() -> Dictionary:
 func _ready() -> void:
     add_to_group("dog")
     collision_layer = 0
-    collision_mask = game.LAYER_WORLD
+    collision_mask = game.LAYER_WORLD | game.LAYER_WATER
     motion_mode = CharacterBody2D.MOTION_MODE_FLOATING
     z_index = 9
     z_as_relative = false
