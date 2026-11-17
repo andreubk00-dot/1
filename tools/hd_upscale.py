@@ -25,6 +25,7 @@ SOURCES = [
     "settlement_ground_oil_concrete_v1.png", "settlement_ground_pavers_v1.png", "settlement_ground_pavement_v1.png",
     "floor_detail_v5.png", "street_detail_v2.png", "wet_surface_v2.png", "settlement_door_leaves_v1.png",
     "wall_corner_v2.png", "door_topdown_v2.png", "settlement_props_v1.png", "poi_props_v1.png",
+    "settlement_ground_decals_v1.png",
 ]
 
 

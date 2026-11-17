@@ -17068,8 +17068,8 @@ const WORLD_HD_TWINS = {
     "res://door_leaf_v1.png":"res://art/world_hd/door_leaf_hd.png",
     "res://facade_extras_v1.png":"res://art/world_hd/facade_extras_v2.png",
     # 1.53: the last 1x world art at the HD density (tools/hd_upscale.py)
-    "res://settlement_props_v1.png":"res://art/world_hd/x2/settlement_props_v1.png",
-    "res://poi_props_v1.png":"res://art/world_hd/x2/poi_props_v1.png",
+    "res://settlement_props_v1.png":"res://art/world_hd/settlement_props_v2.png",
+    "res://poi_props_v1.png":"res://art/world_hd/poi_props_v2.png",
     "res://facade_details_v1.png":"res://art/world_hd/facade_details_hd.png"
 }
 var _world_hd_ok = {}
@@ -26466,11 +26466,14 @@ func _settlement_ground(chunk,coord,cell_data:Dictionary,style:String):
         for rect in block.get("buildings",[]):
             _rect(Vector2(rect.get_center().x,rect.end.y + 4.0),Vector2(rect.size.x + 16.0,10.0),pal[2].darkened(0.06),layer)
     if idx == 4 and not base_cell:
+        # 1.57: the square's flower bed - a ring of whitewashed bricks round
+        # the flowers (was two flat ovals and six coloured dots); the
+        # military camp keeps its square bare
         var sq = Rect2(300,300,168,168)
-        _ellipse(sq.get_center() + Vector2(0,40),26,12,pal[4].darkened(0.2),layer)
-        _ellipse(sq.get_center() + Vector2(0,40),22,9,Color(0.26,0.36,0.20),layer)
-        for k in range(6):
-            _ellipse(sq.get_center() + Vector2(-14 + k * 6,38 + (k % 2) * 3),2,2,[Color(0.8,0.3,0.25),Color(0.9,0.8,0.3),Color(0.85,0.85,0.8)][k % 3],layer)
+        if style != "rubezh" and _hd_exists(GROUND_COVER_TEX):
+            var bed = _ground_cover_sprite(layer,load(GROUND_COVER_TEX),1,7,sq.get_center() + Vector2(0,40),false)
+            bed.scale = Vector2(0.62,0.62)
+            bed.z_index = 0
     # Perron grew around a branch line: rails run along the lane between the two lower rows.
     if style == "perron" and (offset.y == 0 or offset.y == 1):
         var y = 760.0 if offset.y == 0 else 8.0
@@ -26598,20 +26601,24 @@ func _settlement_decal(parent,kind:String,pos:Vector2,rot:float = 0.0,scale_valu
     if (kind == "puddle_a" or kind == "puddle_b" or kind == "pothole") and _hd_exists(PUDDLE_TEX):
         var v = int(abs(pos.x * 7.0 + pos.y * 3.0)) % 8
         return _make_puddle(parent,pos,v,false)
-    var atlas = load("res://settlement_ground_decals_v1.png")
+    # 1.57: the HD twin (Scale2x) where it exists - the 1x sheet drew the
+    # bases' puddles, oil and ruts with pixels twice the size of the world's
+    var x2 = _x2_path("res://settlement_ground_decals_v1.png")
+    var k = 2.0 if x2 != "" else 1.0
+    var atlas = load(x2 if x2 != "" else "res://settlement_ground_decals_v1.png")
     var index = SETTLEMENT_DECALS.find(kind)
     if atlas == null or index < 0:
         return null
     var tex = AtlasTexture.new()
     tex.atlas = atlas
-    tex.region = Rect2(index * 96,0,96,64)
+    tex.region = Rect2(index * 96 * k,0,96 * k,64 * k)
     var sprite = Sprite2D.new()
     sprite.texture = tex
     sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sprite.position = Vector2(round(pos.x),round(pos.y))
     # no odd-angle rotation of pixel art: a quarter turn at most, otherwise flips
     sprite.rotation = rot if is_equal_approx(fmod(abs(rot),PI * 0.5),0.0) else 0.0
-    sprite.scale = Vector2(scale_value,scale_value)
+    sprite.scale = Vector2(scale_value,scale_value) / k
     sprite.flip_h = int(pos.x + pos.y) % 2 == 0
     sprite.flip_v = rot < -0.15
     sprite.modulate = Color(1,1,1,1.0 if kind == "ruts" else (0.5 if kind == "oil" else 0.82))

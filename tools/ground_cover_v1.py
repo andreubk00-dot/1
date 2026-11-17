@@ -276,19 +276,22 @@ def compost(seed):
 def flower_bed(seed):
     c = Cell(seed)
     c.blob(48, 50, 30, 18, SOIL[1], 0.1, 0.1)
-    for i in range(16):                                   # a ring of whitewashed bricks
-        a = i / 16 * math.tau
+    for i in range(28):                                   # a ring of whitewashed bricks
+        a = i / 28 * math.tau
         x, y = 48 + math.cos(a) * 31, 50 + math.sin(a) * 19
         c.blob(x, y, 2.6, 1.6, (214, 210, 200))
-    cols = [(214, 70, 60), (230, 190, 60), (232, 230, 220), (196, 110, 170)]
-    for i in range(26):
-        x, y = 48 + c.r.uniform(-22, 22), 50 + c.r.uniform(-12, 12)
-        if ((x - 48) / 26) ** 2 + ((y - 50) / 15) ** 2 > 1:
+    cols = [(214, 70, 60), (230, 190, 60), (232, 230, 220), (196, 110, 170), (236, 132, 52)]
+    for i in range(170):                                  # foliage over most of the soil
+        x, y = 48 + c.r.uniform(-26, 26), 50 + c.r.uniform(-15, 15)
+        if ((x - 48) / 27) ** 2 + ((y - 50) / 16) ** 2 > 1:
             continue
-        c.blade(x, y + 3, 4, GREEN[2])
-        col = cols[c.r.randrange(len(cols))]
-        for dx, dy in ((0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)):
-            c.px(x + dx, y + dy, col)
+        c.blob(x, y, 2.2, 1.6, GREEN[c.r.randrange(1, 4)], rough=0.3)
+    for i in range(90):
+        x, y = 48 + c.r.uniform(-24, 24), 50 + c.r.uniform(-14, 14)
+        if ((x - 48) / 25) ** 2 + ((y - 50) / 14) ** 2 > 1:
+            continue
+        col = cols[(i // 9) % len(cols)] if c.r.random() < 0.7 else cols[c.r.randrange(len(cols))]
+        c.px(x, y, col); c.px(x + 1, y, c.shade(col, 0.85)); c.px(x, y - 1, c.shade(col, 1.12))
     return c.finish()
 
 
