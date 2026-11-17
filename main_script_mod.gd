@@ -17249,9 +17249,34 @@ func _build_tall_facade(facade,sign_text,size,building_id,door_x,fh,profile = ""
         var n = max(1,int(floor((w - 24.0) / step)))
         var start = -float(n - 1) * step * 0.5
         var gate_done = false
+        # 1.56: a ground-floor window that falls on the entrance moves aside
+        # instead of vanishing - a small house with a central door used to get
+        # a blank wall (half widths in world units, shutters included)
+        var xs_row = []
+        var shifted = []
         for k in range(n):
-            var wx = start + float(k) * step
-            if row == 0 and abs(wx - door_x) < 36.0:
+            xs_row.append(start + float(k) * step)
+            shifted.append(false)
+        if row == 0 and style in [0,1,5,6]:
+            var half_w = float([13.5,13.5,15.5,12.5,18.5,11.5,22.0][style])
+            var moved = []
+            for k in range(n):
+                var wx0 = float(xs_row[k])
+                if abs(wx0 - door_x) >= 36.0:
+                    moved.append(wx0)
+                    continue
+                var side = 1.0 if wx0 >= door_x else -1.0
+                var wx1 = door_x + side * (24.0 + half_w)
+                var fits = abs(wx1) + half_w <= w * 0.5 - 3.0
+                for o in moved + xs_row.slice(k + 1):
+                    if abs(float(o) - wx1) < max(half_w * 2.0 + 4.0,40.0) and abs(float(o) - door_x) >= 36.0:
+                        fits = false
+                moved.append(wx1 if fits else wx0)
+                shifted[k] = fits
+            xs_row = moved
+        for k in range(n):
+            var wx = float(xs_row[k])
+            if row == 0 and abs(wx - door_x) < 36.0 and not shifted[k]:
                 continue
             var h = abs(hash(str(building_id) + ":" + str(row) + ":" + str(k)))
             var state = 0
@@ -29041,6 +29066,104 @@ func _ground_class_at(img,local:Vector2) -> int:
         return 0
     return 1
 
+# 1.56: ground cover - the forest's undergrowth and the dacha gardens, flat
+# and walk-over, a step bigger than the ground details (48-unit cells).
+const GROUND_COVER_TEX = "res://art/world_hd/ground_cover_v1.png"
+const GROUND_COVER_CELL = 96
+# forest row: fern, blueberry, birch log, pine log, brushwood, moss, leaves, mushroom ring
+const GROUND_COVER_FOREST_PICK = [0,0,0,1,1,2,3,4,5,5,6,6,7]
+# garden row: potato, cabbage, onion bed, compost, tall weeds, nettle, dry weeds, flower bed
+const GROUND_COVER_WEEDS_PICK = [4,4,5,5,6,6,3]
+const GROUND_COVER_BED_PICK = [0,0,1,2,7,3]
+
+func _ground_cover_fits(rect:Rect2,solid:Array,spots:Array,forest:bool) -> bool:
+    for r in solid:
+        if r.intersects(rect):
+            return false
+    for sp in spots:
+        if rect.grow(6.0).has_point(sp):
+            return false
+    for corner in [rect.position,rect.end,Vector2(rect.position.x,rect.end.y),Vector2(rect.end.x,rect.position.y)]:
+        if forest:
+            if abs(corner.x - CHUNK_SIZE * 0.5) < 60.0 or abs(corner.y - CHUNK_SIZE * 0.5) < 60.0:
+                return false
+        elif _point_on_road_or_sidewalk(corner,true):
+            return false
+        if corner.x < 4.0 or corner.y < 4.0 or corner.x > CHUNK_SIZE - 4.0 or corner.y > CHUNK_SIZE - 4.0:
+            return false
+    return true
+
+func _ground_cover_sprite(chunk,atlas,row:int,cell:int,pos:Vector2,flip:bool):
+    var tex = AtlasTexture.new()
+    tex.atlas = atlas
+    tex.region = Rect2(cell * GROUND_COVER_CELL,row * GROUND_COVER_CELL,GROUND_COVER_CELL,GROUND_COVER_CELL)
+    var spr = Sprite2D.new()
+    spr.texture = tex
+    spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+    spr.scale = Vector2(0.5,0.5)
+    spr.position = pos.round()
+    spr.flip_h = flip
+    spr.z_index = -1
+    spr.set_meta("ground_cover",row * 8 + cell)
+    chunk.add_child(spr)
+    return spr
+
+func _scatter_ground_cover(chunk,coord,ground,solid:Array,spots:Array) -> Array:
+    var used = []
+    var family = str(ground.get_meta("district_ground",""))
+    var forest = family.find("woodland") >= 0
+    var rural = family.find("rural") >= 0
+    if not (forest or rural) or not _hd_exists(GROUND_COVER_TEX):
+        return used
+    var atlas = load(GROUND_COVER_TEX)
+    var rng = RandomNumberGenerator.new()
+    rng.seed = hash(Vector3i(coord.x,coord.y,1560))
+    var size = Vector2(40.0,26.0)
+    var placed = 0
+    if rural:
+        # beds beside and behind each small house - never across its front
+        for b in chunk.get_children():
+            if not (b is Node2D) or not b.is_in_group("world_buildings") or not b.has_meta("building_size"):
+                continue
+            var sz:Vector2 = b.get_meta("building_size")
+            if sz.x > 260.0:
+                continue
+            var r = Rect2(b.position - sz * 0.5,sz)
+            var spots_b = [Vector2(r.position.x - 44.0,r.get_center().y),Vector2(r.end.x + 44.0,r.get_center().y),
+                Vector2(r.position.x + 26.0,r.position.y - 34.0),Vector2(r.end.x - 26.0,r.position.y - 34.0)]
+            var want = 1 + rng.randi() % 2
+            for i in range(spots_b.size()):
+                if want <= 0:
+                    break
+                var pos:Vector2 = spots_b[(i + rng.randi() % 4) % spots_b.size()]
+                var fr = Rect2(pos - size * 0.5,size)
+                if not _ground_cover_fits(fr,solid + used,spots,false):
+                    continue
+                var cell = int(GROUND_COVER_BED_PICK[rng.randi() % GROUND_COVER_BED_PICK.size()])
+                _ground_cover_sprite(chunk,atlas,1,cell,pos,false)
+                used.append(fr.grow(4.0))
+                placed += 1
+                want -= 1
+    var grid = 8
+    var step = float(CHUNK_SIZE) / grid
+    for gy in range(grid):
+        for gx in range(grid):
+            var pos = Vector2((gx + rng.randf_range(0.15,0.85)) * step,(gy + rng.randf_range(0.15,0.85)) * step)
+            var roll = rng.randf()
+            var pick = rng.randi()
+            if roll > (0.72 if forest else 0.4):
+                continue
+            var fr = Rect2(pos - size * 0.5,size)
+            if not _ground_cover_fits(fr,solid + used,spots,forest):
+                continue
+            var row = 0 if forest else 1
+            var cell = int((GROUND_COVER_FOREST_PICK if forest else GROUND_COVER_WEEDS_PICK)[pick % (GROUND_COVER_FOREST_PICK if forest else GROUND_COVER_WEEDS_PICK).size()])
+            _ground_cover_sprite(chunk,atlas,row,cell,pos,(pick >> 6) % 2 == 1)
+            used.append(fr.grow(4.0))
+            placed += 1
+    chunk.set_meta("ground_cover_count",placed)
+    return used
+
 func _ground_detail_blocked(pos:Vector2,solid:Array,spots:Array) -> bool:
     for r in solid:
         if r.has_point(pos):
@@ -29075,6 +29198,10 @@ func _scatter_ground_details(chunk,coord) -> void:
             spots.append(n.position)
     if ground == null:
         return
+    # 1.56: the larger ground cover first (undergrowth, garden beds); the
+    # small details then keep off it
+    for r in _scatter_ground_cover(chunk,coord,ground,solid,spots):
+        solid.append(r)
     var img = _ground_class_image(ground.texture)
     var woodland = str(ground.get_meta("district_ground","")).find("woodland") >= 0
     var atlas = load(GROUND_DETAIL_TEX)
