@@ -51,7 +51,17 @@ func run():
     for c in facade.get_children():
         if c is Label:
             texts.append(c.text)
-    check(texts.size() == 1 and texts[0].ends_with(", 18"),"a house wears its address plate: %s" % [texts])
+    # 1.59: houses no longer carry plates - only public places are signed
+    check(texts.is_empty(),"a house still wears a plate: %s" % [texts])
+    facade.queue_free()
+    facade = Node2D.new()
+    game.add_child(facade)
+    game._facade_signage(facade,"АПТЕКА",180.0,74.0,0.0,"b")
+    texts = []
+    for c in facade.get_children():
+        if c is Label:
+            texts.append(c.text)
+    check(texts == ["АПТЕКА"],"the pharmacy lost its sign: %s" % [texts])
     facade.queue_free()
     facade = Node2D.new()
     game.add_child(facade)

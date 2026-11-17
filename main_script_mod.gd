@@ -3041,8 +3041,41 @@ func _fix_default_font_size():
             th.set_font_size(key,"RichTextLabel",keep)
     th.default_font_size = 6
 
+# 1.59: text standing in the world (shop signs, address plates, road signs,
+# names over people) is drawn at the art's density - twice the font size at
+# half scale, 2 texels per world unit like every sprite - instead of a 5-7 px
+# font blown up by the camera into uneven blocks. Applied once to every Label
+# that joins the world (not the HUD / windows, which live on CanvasLayers),
+# after its creator has set its size and alignment.
+const WORLD_TEXT_DENSITY = 2
+
+func _on_world_node_added(n) -> void:
+    if n is Label and not n.has_meta("world_text_crisp"):
+        n.set_meta("world_text_crisp",false)
+        call_deferred("_crisp_world_label",n)
+
+func _crisp_world_label(l) -> void:
+    if not is_instance_valid(l) or not l.is_inside_tree() or bool(l.get_meta("world_text_crisp",false)):
+        return
+    var p = l.get_parent()
+    while p != null:
+        if p is CanvasLayer or (p is Control and not (p is Label)) or (p is Window and p != get_tree().root):
+            return
+        p = p.get_parent()
+    var k = float(WORLD_TEXT_DENSITY)
+    var fs = l.get_theme_font_size("font_size")
+    var sz = l.size
+    l.add_theme_font_size_override("font_size",int(fs * k))
+    if l.has_theme_constant_override("outline_size"):
+        l.add_theme_constant_override("outline_size",int(l.get_theme_constant("outline_size") * k))
+    l.scale = Vector2.ONE / k
+    l.size = sz * k
+    l.position = l.position.round()
+    l.set_meta("world_text_crisp",true)
+
 func _ready():
     # Keep application/config/name stable: Godot derives the existing user:// path from it.
+    get_tree().node_added.connect(_on_world_node_added)
     DisplayServer.window_set_title("OSTATOK %s" % str(ProjectSettings.get_setting("application/config/version","unknown")))
     y_sort_enabled = true
     if not _runtime_import_cache_ready():
@@ -17381,6 +17414,15 @@ func _facade_sign_kind(t:String) -> String:
             return "stencil"
     return "board"
 
+const FACADE_PUBLIC_SIGNS = ["АПТЕК","ПОЛИКЛИН","БОЛЬНИЦ","ПРОДУКТ","МАГАЗ","КАФЕ","СТОЛОВ","ЧАЙН","ПРАЧЕЧ","ПОЛИЦ","ПОЧТ","СВЯЗ","СЕРВИС","ШИНО","ЗАПЧАСТ","ШКОЛ","БИБЛИОТ","АДМИНИСТ","ВОКЗАЛ","ГОСТИН","БАР","РЫНОК","ХЛЕБ","ОПТИКА","ГАСТРОНОМ"]
+
+func _facade_sign_public(t:String) -> bool:
+    var u = t.to_upper()
+    for k in FACADE_PUBLIC_SIGNS:
+        if u.find(k) >= 0:
+            return true
+    return false
+
 func _facade_board_colors(t:String) -> Array:
     # [board, trim, text]
     if t.find("АПТЕК") >= 0 or t.find("ПОЛИКЛИН") >= 0 or t.find("БОЛЬНИЦ") >= 0:
@@ -17405,10 +17447,11 @@ func _facade_label(facade,text:String,pos:Vector2,font_size:int,col:Color):
     return l
 
 func _facade_text_width(text:String,font_size:int) -> float:
+    # measured the way it is drawn: at the world text density, scaled back
     var font = ThemeDB.fallback_font
     if font == null:
         return float(text.length() * font_size) * 0.62
-    return font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size).x
+    return font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size * WORLD_TEXT_DENSITY).x / float(WORLD_TEXT_DENSITY)
 
 func _facade_signage(facade,sign_text:String,w:float,fh:float,door_x:float,building_id):
     var t = str(sign_text)
@@ -17418,6 +17461,12 @@ func _facade_signage(facade,sign_text:String,w:float,fh:float,door_x:float,build
     if facade.get_parent() is Node2D:
         where += facade.get_parent().position
     var h = abs(hash(str(Vector2i(where.round())) + ":" + str(building_id)))
+    # 1.59: only the places a survivor looks for keep a sign - the pharmacy,
+    # the shop, the clinic, the post office, the café, the service station.
+    # House numbers, flat plates, dacha numbers, stencilled warehouse names and
+    # the plain black boards are gone: they named every wall and said nothing.
+    if kind != "board" or not _facade_sign_public(t):
+        return
     match kind:
         "none":
             return
@@ -30941,11 +30990,12 @@ func _build_settlement_model_facade(facade,model:Dictionary,size:Vector2,door_x:
         facade.add_child(leaf)
         facade.set_meta("door_leaf",leaf)
     var sign_rect = model.get("sign",Rect2())
-    if typeof(sign_rect) == TYPE_RECT2 and sign_rect.size != Vector2.ZERO and sign_text != "":
+    # 1.59: a base names only the places a visitor looks for
+    if typeof(sign_rect) == TYPE_RECT2 and sign_rect.size != Vector2.ZERO and sign_text != "" and _base_sign_wanted(sign_text):
         var label = Label.new()
         label.add_theme_font_size_override("font_size",5 if sign_text.length() > 10 else 6)
         label.text = sign_text
-        label.position = Vector2(sign_rect.position.x - sign_rect.size.x * 0.5,-(sign_rect.position.y + sign_rect.size.y) - 2.0)
+        label.position = Vector2(sign_rect.position.x - sign_rect.size.x * 0.5,-(sign_rect.position.y + sign_rect.size.y) + 1.0)
         label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
         label.clip_text = true
@@ -30953,6 +31003,15 @@ func _build_settlement_model_facade(facade,model:Dictionary,size:Vector2,door_x:
         label.mouse_filter = Control.MOUSE_FILTER_IGNORE
         facade.add_child(label)
         label.size = Vector2(sign_rect.size.x,sign_rect.size.y + 4.0)
+
+const BASE_SIGNS_KEEP = ["ШТАБ","ЧАЙН","СТОЛОВ","РЫНОК","СКЛАД","ПРОДСКЛАД","ОРУЖ","МАСТЕРСК","СНАБЖ","РАДИО","СВЯЗ","РЕГИСТР","ПРИЁМ","АПТЕК","ЛАЗАРЕТ","ПРАЧЕЧ","ОБМЕН","ТОРГ","МЕДПУНКТ"]
+
+func _base_sign_wanted(t:String) -> bool:
+    var u = t.to_upper()
+    for k in BASE_SIGNS_KEEP:
+        if u.begins_with(k):
+            return true
+    return false
 
 func _build_settlement_model_roof(roof,model:Dictionary,facade_height:float):
     # Roof node origin = footprint centre lifted by the facade height (+8).
@@ -32231,32 +32290,67 @@ func _create_name_sign(chunk,pos:Vector2,title:String,subtitle:String = "",style
             break
     if spot.x == INF:
         return null
-    var cols = NAME_SIGN_STYLES.get(style,NAME_SIGN_STYLES["district"])
     var root = Node2D.new()
     root.position = spot.round()
     root.z_index = 5
     root.z_as_relative = false
     root.set_meta("world_name_sign",title)
     chunk.add_child(root)
-    var tw = _facade_text_width(title,6)
-    var sw = _facade_text_width(subtitle,5) if subtitle != "" else 0.0
-    var bw = round(max(tw,sw) + 10.0)
-    var bh = 19.0 if subtitle != "" else 12.0
-    var post_h = 12.0
-    var top = -post_h - bh
-    _ellipse(Vector2(3,0),bw * 0.42,2.5,Color(0,0,0,0.22),root)
-    for px in [-bw * 0.5 + 6.0,bw * 0.5 - 6.0]:
-        _rect(Vector2(px,-post_h * 0.5),Vector2(2.0,post_h),Color("3a3d3c"),root)
-        _rect(Vector2(px - 0.5,-post_h * 0.5),Vector2(1.0,post_h),Color("5a5e5c"),root)
-    _rect(Vector2(1,top + bh * 0.5 + 1.0),Vector2(bw + 2.0,bh + 2.0),Color(0,0,0,0.45),root)
-    _rect(Vector2(0,top + bh * 0.5),Vector2(bw,bh),cols[1],root)
-    _rect(Vector2(0,top + bh * 0.5),Vector2(bw - 2.0,bh - 2.0),cols[0],root)
-    _facade_label(root,title,Vector2(-tw * 0.5,top - 2.0),6,cols[2])
-    if subtitle != "":
-        var c2 = cols[2]
-        c2.a = 0.78
-        _facade_label(root,subtitle,Vector2(-sw * 0.5,top + 6.0),5,c2)
+    _road_name_sign(root,title,subtitle,style)
     return root
+
+# 1.59: place names as Russian road signs (5.23.1 "beginning of a settlement"):
+# a blue plate with a white rim and rounded corners, white capitals, a thin
+# dark metal edge, on two galvanised posts. The restricted zone keeps a
+# warning plate: white with a red rim and red letters.
+const ROAD_SIGN_BLUE = Color("1f56a8")
+const ROAD_SIGN_WHITE = Color("eef1f2")
+
+func _sign_plate(root,c:Vector2,w:float,h:float,col:Color):
+    # a rectangle with its four corner texels cut: the rounded corners of a sign
+    _rect(c,Vector2(w - 1.0,h),col,root)
+    _rect(c,Vector2(w,h - 1.0),col,root)
+
+func _road_name_sign(root,title:String,subtitle:String,style:String) -> void:
+    var warning = style == "warning"
+    var fs = 7
+    var tw = _facade_text_width(title,fs)
+    var sw = _facade_text_width(subtitle,5) if subtitle != "" else 0.0
+    var bw = round(max(tw,sw) + 14.0)
+    if int(bw) % 2 == 1:
+        bw += 1.0
+    var bh = 24.0 if subtitle != "" else 16.0
+    var post_h = 22.0
+    var top = -post_h - bh
+    var cy = top + bh * 0.5
+    # ground shadow and the two galvanised posts
+    _ellipse(Vector2(3,0),bw * 0.40,2.5,Color(0,0,0,0.24),root)
+    for px in [-bw * 0.5 + 7.0,bw * 0.5 - 7.0]:
+        _rect(Vector2(px,-post_h * 0.5 - 2.0),Vector2(2.0,post_h + 4.0),Color("7d8489"),root)
+        _rect(Vector2(px - 0.5,-post_h * 0.5 - 2.0),Vector2(1.0,post_h + 4.0),Color("a9b0b4"),root)
+        _rect(Vector2(px,-0.5),Vector2(3.0,1.0),Color("4b5054"),root)
+    # plate: drop shadow, dark metal edge, white rim, field
+    _sign_plate(root,Vector2(1.0,cy + 1.0),bw + 2.0,bh + 2.0,Color(0,0,0,0.42))
+    _sign_plate(root,Vector2(0,cy),bw + 2.0,bh + 2.0,Color("2b3034"))
+    _sign_plate(root,Vector2(0,cy),bw,bh,Color("c4302b") if warning else ROAD_SIGN_WHITE)
+    var field = Color("f2f0ea") if warning else ROAD_SIGN_BLUE
+    _sign_plate(root,Vector2(0,cy),bw - 3.0,bh - 3.0,field)
+    # light from the upper left: a lit top edge, a shaded bottom edge on the field
+    _rect(Vector2(0,top + 2.5),Vector2(bw - 5.0,1.0),field.lightened(0.10),root)
+    _rect(Vector2(0,top + bh - 2.5),Vector2(bw - 5.0,1.0),field.darkened(0.12),root)
+    var ink = Color("b5261f") if warning else ROAD_SIGN_WHITE
+    # the title centred in its band: the whole plate, or the upper band over a subtitle
+    var band = 13.0 if subtitle != "" else bh
+    var l = _facade_label(root,title,Vector2(-bw * 0.5,top + (1.0 if subtitle != "" else 0.0)),fs,ink)
+    l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    l.size = Vector2(bw,band)
+    if subtitle != "":
+        _rect(Vector2(0,top + 13.5),Vector2(bw - 9.0,1.0),Color(ink.r,ink.g,ink.b,0.55),root)
+        var l2 = _facade_label(root,subtitle,Vector2(-bw * 0.5,top + 14.0),5,Color(ink.r,ink.g,ink.b,0.9))
+        l2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        l2.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        l2.size = Vector2(bw,bh - 15.0)
 
 func _create_world_label(chunk,pos,txt,size,col):
     var label = Label.new()
