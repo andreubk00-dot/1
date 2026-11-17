@@ -29320,6 +29320,7 @@ func _ground_cover_sprite(chunk,atlas,row:int,cell:int,pos:Vector2,flip:bool):
     spr.flip_h = flip
     spr.z_index = -1
     spr.set_meta("ground_cover",row * 8 + cell)
+    spr.add_to_group("snow_buried")
     chunk.add_child(spr)
     return spr
 
@@ -29489,6 +29490,7 @@ func _scatter_ground_details(chunk,coord) -> void:
                 spr.flip_h = ((pick >> 8) + k) % 2 == 1
                 spr.z_index = -1
                 spr.set_meta("ground_detail",cls * 8 + c2)
+                spr.add_to_group("snow_buried")
                 chunk.add_child(spr)
                 placed += 1
     chunk.set_meta("ground_detail_count",placed)
@@ -30985,8 +30987,10 @@ func _create_building(chunk,coord,building_id,center,size,sign_text,wall_color,o
     # like the baked prop shadows (full by day, faint at night or overcast)
     cast_shadow.color = Color(0.0,0.008,0.012,0.13)
     cast_shadow.position = center
-    cast_shadow.z_index = 0
-    cast_shadow.z_as_relative = false
+    # chunk-relative -1: over the yard layers (-2 and below), under the
+    # building (+1), its props and the people
+    cast_shadow.z_index = -1
+    cast_shadow.z_as_relative = true
     cast_shadow.add_to_group("building_cast_shadows")
     cast_shadow.add_to_group("sun_blob_shadows")
     chunk.add_child(cast_shadow)
@@ -35171,6 +35175,7 @@ void fragment() {
 }"""
 var snow_ground_layer = null
 var snow_cover = 0.0
+var _snow_buried_alpha = 1.0
 var snow_flakes = []
 
 func _is_snowing() -> bool:
@@ -35934,7 +35939,9 @@ func _set_down_foot(walker,foot:Vector2,dir:Vector2):
     if soles > 0:
         walker.set_meta("wet_soles",soles - 1)
         wetness = max(wetness,float(soles) / 8.0)
-    if wetness < 0.2:
+    # 1.62: boots press into fresh snow: blue-grey dents that last a while
+    var snowy = snow_cover > 0.35 and _footstep_surface_at(at) == "snow"
+    if wetness < 0.2 and not snowy:
         return
     var fp = null
     if _footprints.size() >= FOOTPRINT_POOL:
@@ -35944,14 +35951,18 @@ func _set_down_foot(walker,foot:Vector2,dir:Vector2):
         fp.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
         fp.scale = Vector2(0.5,0.5)
         fp.z_as_relative = false
-        fp.z_index = -67
+        # 1.62: over the yards, lawns and road paint (chunk -50, layers up
+        # to -52) and over the snow cover (-66); the old -67 hid them
+        fp.z_index = -51
         footprint_layer.add_child(fp)
     fp.texture = _footprint_texture(dir)
     fp.flip_v = dir.y > 0.0 and abs(dir.y) >= abs(dir.x)
     fp.flip_h = dir.x < 0.0 and abs(dir.x) > abs(dir.y)
     fp.global_position = at.round()
     fp.set_meta("age",0.0)
-    fp.set_meta("strength",clamp(wetness,0.0,1.0))
+    fp.set_meta("strength",clamp(max(wetness,snow_cover if snowy else 0.0),0.0,1.0))
+    fp.set_meta("life",FOOTPRINT_LIFE * (4.0 if snowy else 1.0))
+    fp.self_modulate = Color(0.62,0.70,0.82) if snowy else Color(1,1,1)
     fp.modulate = Color(1,1,1,0.0)
     fp.visible = true
     _footprints.append(fp)
@@ -35985,7 +35996,7 @@ func _update_footprints(delta):
     for fp in _footprints:
         var age = float(fp.get_meta("age",0.0)) + delta
         fp.set_meta("age",age)
-        fp.modulate.a = float(fp.get_meta("strength",1.0)) * 0.7 * clamp(1.0 - age / FOOTPRINT_LIFE,0.0,1.0)
+        fp.modulate.a = float(fp.get_meta("strength",1.0)) * 0.7 * clamp(1.0 - age / float(fp.get_meta("life",FOOTPRINT_LIFE)),0.0,1.0)
     var keep = []
     for s in _splashes:
         if not is_instance_valid(s):
@@ -36334,6 +36345,13 @@ func _update_snow(delta,snowing,indoors):
         snow_cover = min(1.0,snow_cover + delta / 150.0)
     elif temp > 1.0:
         snow_cover = max(0.0,snow_cover - delta / 260.0)
+    # 1.62: the snow buries the small things of the ground (tufts, moss,
+    # beds, brushwood); they come back as it melts
+    var buried_a = snappedf(1.0 - clamp((snow_cover - 0.15) / 0.6,0.0,1.0) * 0.95,0.05)
+    if buried_a != _snow_buried_alpha:
+        _snow_buried_alpha = buried_a
+        for n in get_tree().get_nodes_in_group("snow_buried"):
+            n.modulate.a = buried_a
     if is_instance_valid(snow_ground_layer):
         var show = snow_cover > 0.01 and not indoors
         snow_ground_layer.visible = show
