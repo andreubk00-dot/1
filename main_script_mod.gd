@@ -18968,6 +18968,10 @@ func _update_puddle_reflections():
     for wp in get_tree().get_nodes_in_group("window_light_patches"):
         if is_instance_valid(wp):
             wp.modulate.a = night * 0.55 if bool(wp.get_meta("warm",false)) else moon_in * 0.8
+    var sun_in = (1.0 - night) * (1.0 if weather_state == "clear" else (0.45 if weather_state == "cloudy" else 0.18)) * (1.0 - fog_density * 0.6)
+    for sp in get_tree().get_nodes_in_group("window_sun_patches"):
+        if is_instance_valid(sp):
+            sp.modulate.a = sun_in * 0.42
     var tw = Time.get_ticks_msec() * 0.001
     for g in get_tree().get_nodes_in_group("window_glows"):
         if not is_instance_valid(g):
@@ -31393,6 +31397,17 @@ func _window_patch_material(warm:bool):
         _window_patch_mats[key] = m
     return _window_patch_mats[key]
 
+func _window_sun_material():
+    # 1.65: daylight through the panes - a soft warm white, much milder
+    if not _window_patch_mats.has("sun"):
+        var sh = Shader.new()
+        sh.code = WINDOW_PATCH_SHADER
+        var m = ShaderMaterial.new()
+        m.shader = sh
+        m.set_shader_parameter("tint",Vector3(1.55,1.42,1.12))
+        _window_patch_mats["sun"] = m
+    return _window_patch_mats["sun"]
+
 func _add_window_light_patches(building,facade,size:Vector2):
     if not is_instance_valid(facade):
         return
@@ -31421,6 +31436,19 @@ func _add_window_light_patches(building,facade,size:Vector2):
         patch.set_meta("warm",warm)
         patch.add_to_group("window_light_patches")
         building.add_child(patch)
+        # 1.65: by day the same opening lays a patch of sunlight on the floor
+        var sun = Sprite2D.new()
+        sun.texture = patch.texture
+        sun.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+        sun.scale = patch.scale
+        sun.centered = false
+        sun.position = patch.position
+        sun.z_index = -1
+        sun.light_mask = 0
+        sun.material = _window_sun_material()
+        sun.modulate = Color(1,1,1,0)
+        sun.add_to_group("window_sun_patches")
+        building.add_child(sun)
 
 # dev84: a parked car stands on layer 6 and the survivor on 20, so walking
 # past behind a car (north of its body) he was drawn over its roof - he seemed
