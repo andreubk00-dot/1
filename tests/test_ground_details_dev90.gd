@@ -31,6 +31,7 @@ func run():
     var with_details = 0
     var covers = 0
     var ponds = 0
+    var marks = 0
     for coord in [Vector2i(1,0), Vector2i(2,1), Vector2i(-2,1), Vector2i(0,-2), Vector2i(5,0), Vector2i(-1,-1), Vector2i(3,-3), Vector2i(-4,2), Vector2i(0,-5), Vector2i(-6,-2), Vector2i(0,-2), Vector2i(-8,6), Vector2i(1,-5), Vector2i(-1,-5), Vector2i(-3,-5), Vector2i(-2,2)]:
         game._qa_move_to_world_chunk(coord)
         for i in 12: await physics_frame
@@ -38,6 +39,13 @@ func run():
         if chunk == null:
             continue
         var ds = details(chunk)
+        # 1.64: road marks lie flat on the road, under everything
+        for m in chunk.get_children():
+            if m.has_meta("road_mark") and not m.is_queued_for_deletion():
+                marks += 1
+                check(m.z_index < 0 and m.get_child_count() == 0, "%s road mark is not a flat decal" % str(coord))
+                if str(m.get_meta("road_mark")) == "skid":
+                    check(is_equal_approx(fmod(abs(m.rotation), PI * 0.5), 0.0) or is_equal_approx(fmod(abs(m.rotation), PI * 0.5), PI * 0.5), "%s skid turned at an odd angle" % str(coord))
         # 1.61: a pond blocks walking on the water layer, holds no tree and no loot
         for pn in chunk.get_children():
             if pn is Node2D and pn.has_meta("world_pond"):
@@ -105,6 +113,7 @@ func run():
         check(differ <= 3, "%s scatter is not deterministic (%d of %d differ)" % [str(coord), differ, sig.size()])
     check(with_details >= 4, "only %d of the visited chunks carry ground details" % with_details)
     check(total >= 80, "only %d ground details over the visited chunks" % total)
+    check(marks >= 1, "no skid marks or glass by any car")
     check(ponds >= 1, "no pond anywhere in the woods")
     # the survivor's body is stopped by water, bullets are not
     check((game.player.collision_mask & game.LAYER_WATER) != 0, "the survivor walks on water")

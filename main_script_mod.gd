@@ -23543,6 +23543,7 @@ func _load_chunk(coord):
     _clear_prop_bodies_off_containers(chunk)
     _tidy_chunk_props(chunk)
     _clear_trees_off_pieces(chunk)
+    _dress_car_wrecks(chunk,coord)
     _scatter_ground_details(chunk,coord)
     # doorways are framed once the partitions are final (the walk from the
     # front door trims some after the rooms are laid out)
@@ -29500,6 +29501,52 @@ func _scatter_ground_details(chunk,coord) -> void:
                 chunk.add_child(spr)
                 placed += 1
     chunk.set_meta("ground_detail_count",placed)
+
+# 1.64: what the last day left behind the cars on the road - the black
+# rubber of a hard stop or a swerve, crumbs of safety glass from a smashed
+# window (tools/road_marks_v1.py). Flat, under the car; a skid only for a car
+# square to the street (a quarter turn at most: pixel art does not rotate).
+const ROAD_MARKS_TEX = "res://art/world_hd/road_marks_v1.png"
+
+func _dress_car_wrecks(chunk,coord) -> void:
+    if chunk.has_meta("marauder_base") or not _hd_exists(ROAD_MARKS_TEX):
+        return
+    var atlas = load(ROAD_MARKS_TEX)
+    for car in chunk.get_children():
+        if not (car is Node2D) or not car.has_meta("world_car") or car.is_queued_for_deletion():
+            continue
+        var h = abs(hash(Vector2i(car.position.round())))
+        var quarter = round(car.rotation / (PI * 0.5)) * PI * 0.5
+        var fwd = Vector2.RIGHT.rotated(quarter)
+        if h % 100 < 38 and abs(wrapf(car.rotation - quarter,-PI,PI)) < 0.15:
+            var mid = car.position - fwd * (30.0 + 64.0)
+            var tail = car.position - fwd * (30.0 + 124.0)
+            if _point_on_road_or_sidewalk(mid) and _point_on_road_or_sidewalk(tail) and _point_on_road_or_sidewalk(car.position):
+                var t = AtlasTexture.new()
+                t.atlas = atlas
+                t.region = Rect2(int(h / 100) % 4 * 256,0,256,64)
+                var sk = Sprite2D.new()
+                sk.texture = t
+                sk.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+                sk.scale = Vector2(0.5,0.5)
+                sk.rotation = quarter
+                sk.position = mid.round()
+                sk.z_index = -1
+                sk.set_meta("road_mark","skid")
+                chunk.add_child(sk)
+        if (h / 7) % 100 < 40:
+            var side = Vector2(-fwd.y,fwd.x) * (1.0 if (h / 11) % 2 == 0 else -1.0)
+            var t2 = AtlasTexture.new()
+            t2.atlas = atlas
+            t2.region = Rect2(int(h / 13) % 4 * 64,64,64,48)
+            var gl = Sprite2D.new()
+            gl.texture = t2
+            gl.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+            gl.scale = Vector2(0.5,0.5)
+            gl.position = (car.position + side * 15.0 + fwd * float(int(h / 17) % 21 - 10)).round()
+            gl.z_index = -1
+            gl.set_meta("road_mark","glass")
+            chunk.add_child(gl)
 
 # 1.58: a tree never grows through a set piece. Trees are planted before
 # the yards, woodsheds and wrecks are laid out and only kept off buildings

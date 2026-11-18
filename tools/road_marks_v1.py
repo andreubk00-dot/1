@@ -44,7 +44,7 @@ def skid(kind, seed):
             y += side * track / 2 * (1 - 0.15 * t)
             # heavier where the tyre bit first, fading toward the stop
             dark = 0.9 - 0.45 * t + r.uniform(-0.12, 0.12)
-            w = 3 if t < 0.7 else 2
+            w = 4 if t < 0.6 else 3
             for k in range(w):
                 yy = int(round(y)) + k - w // 2
                 if 0 <= yy < SH and r.random() < 0.93:
