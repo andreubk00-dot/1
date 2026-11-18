@@ -29393,14 +29393,19 @@ func _scatter_ground_details(chunk,coord) -> void:
     if not is_instance_valid(chunk) or chunk.has_meta("marauder_base") or not _hd_exists(GROUND_DETAIL_TEX):
         return
     var ground = null
+    var compound = false
     var solid = []
     var spots = []
     for n in chunk.get_children():
         if not (n is Node2D) or n.is_queued_for_deletion():
             continue
         var nm = str(n.name)
-        if nm.begins_with("CompoundSurface") or nm.begins_with("SettlementGround") or nm.begins_with("HighRiskGround"):
+        if nm.begins_with("SettlementGround") or nm.begins_with("HighRiskGround"):
             return
+        if nm.begins_with("CompoundSurface"):
+            # 1.63: a big site's own paving: all hard ground, details only
+            compound = true
+            continue
         if n.has_meta("district_ground"):
             ground = n
         elif n.has_meta("building_size") and typeof(n.get_meta("building_size")) == TYPE_VECTOR2:
@@ -29419,7 +29424,7 @@ func _scatter_ground_details(chunk,coord) -> void:
     # 1.61: the pond goes in before anything is scattered: it clears the flat
     # decor under its water, so the spots are counted again after it
     var fam = str(ground.get_meta("district_ground",""))
-    if fam.find("woodland") >= 0 or fam.find("rural") >= 0:
+    if not compound and (fam.find("woodland") >= 0 or fam.find("rural") >= 0):
         var pond = _place_pond(chunk,coord,solid,fam.find("woodland") >= 0)
         if pond.size != Vector2.ZERO:
             solid.append(pond)
@@ -29431,8 +29436,9 @@ func _scatter_ground_details(chunk,coord) -> void:
                     spots.append(n.position)
     # 1.56: the larger ground cover first (undergrowth, garden beds); the
     # small details then keep off it
-    for r in _scatter_ground_cover(chunk,coord,ground,solid,spots):
-        solid.append(r)
+    if not compound:
+        for r in _scatter_ground_cover(chunk,coord,ground,solid,spots):
+            solid.append(r)
     var img = _ground_class_image(ground.texture)
     var woodland = str(ground.get_meta("district_ground","")).find("woodland") >= 0
     var atlas = load(GROUND_DETAIL_TEX)
@@ -29445,10 +29451,10 @@ func _scatter_ground_details(chunk,coord) -> void:
             var pos = Vector2((gx + rng.randf_range(0.12,0.88)) * step,(gy + rng.randf_range(0.12,0.88)) * step).round()
             var roll = rng.randf()
             var pick = rng.randi()
-            var cls = _ground_class_at(img,pos)
+            var cls = 2 if compound else _ground_class_at(img,pos)
             # a town street is its whole width; a dirt track only its ruts,
             # its verges are ground like any other
-            var on_road = _point_on_road_or_sidewalk(pos,cls != 2)
+            var on_road = false if compound else _point_on_road_or_sidewalk(pos,cls != 2)
             if woodland and cls != 2:
                 # the forest track is only its two ruts wide (see
                 # wa_ground_districts.woodland); its verges are forest floor
@@ -38527,20 +38533,24 @@ func _update_day_night(delta):
     # the game's art direction while daylight stays cool and desaturated.
     var brightness = 0.82
 
+    # 1.63: the night floor rose from 0.245: the town at night was a black
+    # screen; it stays dark, but streets, cars and house blocks now read
+    var night_floor = 0.29
     if hour >= 21.0 or hour < 5.0:
         # Keep silhouettes/road geometry readable while preserving a genuinely dark night.
-        brightness = 0.245
+        brightness = night_floor
     elif hour >= 18.0:
-        brightness = lerpf(0.82,0.245,(hour - 18.0) / 3.0)
+        brightness = lerpf(0.82,night_floor,(hour - 18.0) / 3.0)
     elif hour < 7.0:
-        brightness = lerpf(0.245,0.82,(hour - 5.0) / 2.0)
+        brightness = lerpf(night_floor,0.82,(hour - 5.0) / 2.0)
 
     # 1.38: moonlight. Out in the fields, the dachas and the woods nothing
     # blocks the sky: the night there is a touch lighter and colder than in the
     # town, so dirt roads, plots and tree lines still read. Eased so crossing
-    # a district border never pops.
-    var night_mix = clamp((0.82 - brightness) / (0.82 - 0.245),0.0,1.0)
-    var open_target = 0.0
+    # a district border never pops. 1.63: the town gets some of it too - the
+    # blocks hide part of the sky, not all of it.
+    var night_mix = clamp((0.82 - brightness) / (0.82 - night_floor),0.0,1.0)
+    var open_target = 0.35
     if player != null and not _high_risk_floor_active():
         var pc = _world_to_chunk(player.global_position)
         if loaded_chunks.has(pc):
