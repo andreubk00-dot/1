@@ -110,3 +110,7 @@
 - yelp_1, whine_1-2 — «Dog sounds» https://opengameart.org/content/dog-sounds (pauliuw)
 - growl_1 — «Dog Growl» https://opengameart.org/content/dog-growl (bonebrah)
 - growl_2 — «Dog grunt» https://opengameart.org/content/dog-grunt (qubodup)
+
+## Синтезированные звуки опасностей (1.66)
+
+`audio/world/hazards/*.wav` — взрыв растяжки, щелчок чеки, выброс пара, шипение, писк датчика, утечка газа. Синтезированы скриптом `tools/hazard_sfx_v1.py` (собственная работа, CC0).

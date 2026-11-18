@@ -53,6 +53,7 @@ const FactionSettlementCatalog = preload("res://world/faction_settlement_catalog
 const SettlementBuildingModels = preload("res://world/settlement_building_models.gd")
 const HighRiskBuildingModels = preload("res://world/high_risk_building_models.gd")
 const HighRiskSiteCatalog = preload("res://world/high_risk_site_catalog.gd")
+const HrHazard = preload("res://world/hr_hazard.gd")
 const TraderCatalog = preload("res://world/trader_catalog.gd")
 const TradingMarket = preload("res://world/trading_market.gd")
 const ContractCatalog = preload("res://world/contract_catalog.gd")
@@ -8532,6 +8533,10 @@ func _play_footstep():
 func _world_sfx_path(kind):
     if str(kind).begins_with("step_"):
         return "res://audio/world/steps/%s.wav" % str(kind).substr(5)
+    if str(kind).begins_with("hz_"):
+        return "res://audio/world/hazards/%s.wav" % str(kind).substr(3)
+    if str(kind) == "base_siren":
+        return "res://audio/world/base_siren.wav"
     match str(kind):
         "door_open": return "res://audio/world/door_open.wav"
         "door_close": return "res://audio/world/door_close.wav"
@@ -20490,6 +20495,8 @@ func _update_interaction_prompt():
         interaction_label.text = "ВЕРСТАК  •  КРАФТ"
     elif type == "water_pump":
         interaction_label.text = "НАПИТЬСЯ / НАПОЛНИТЬ  •  КОЛОНКА"
+    elif type == "hr_hazard":
+        interaction_label.text = target.interaction_label()
     elif type == "trader":
         interaction_label.text = "ТОРГОВАТЬ  •  %s" % name.to_upper()
     elif type == "contract_board":
@@ -20747,6 +20754,8 @@ func _interact():
         _collect_rainwater(target)
     elif type == "water_pump":
         _use_water_pump(target)
+    elif type == "hr_hazard":
+        target.disarm()
     elif type == "base_lamp":
         _toggle_base_lamp(target)
     elif type == "base_cot":
@@ -22885,6 +22894,7 @@ func _build_high_risk_floor(root,poi_id:String,floor_index:int,data:Dictionary) 
         if not bool(defeated.get(key,false)):
             _spawn_enemy(root,anchor,spawn_id,enemy_positions[i],kind,profile)
     _spawn_high_risk_floor_drops(root,poi_id,floor_index,anchor)
+    _place_hr_floor_hazards(root,theme,size,poi_id,floor_index,data.get("containers",[]))
 
 func _hr_visual_override(specs:Array,index:int,pos:Vector2,size:Vector2,sign_text = "",archetype_text = "") -> void:
     if index < 0 or index >= specs.size():
@@ -27071,8 +27081,82 @@ func _dress_high_risk_site(chunk,coord,poi_id:String,cell_offset:Vector2i,cell_d
                 placed += 1
                 break
     _hr_vegetation(chunk,coord,style,cell,rng)
+    _place_hr_hazards(chunk,style,rng)
     chunk.set_meta("high_risk_pieces",placed)
     chunk.set_meta("high_risk_pieces_skipped",skipped)
+
+# 1.66: every High Risk site has its own hazard (world/hr_hazard.gd)
+const HR_HAZARD_KIND = {"quarantine":"gas","bastion":"tripwire","clinic":"alarm","vector":"steam"}
+
+func _hr_make_hazard(parent,kind:String,pos:Vector2,params:Dictionary = {}):
+    var hz = HrHazard.new()
+    hz.position = pos.round()
+    parent.add_child(hz)
+    hz.setup(self,kind,params)
+    return hz
+
+func _place_hr_hazards(chunk,style:String,rng) -> void:
+    var kind = str(HR_HAZARD_KIND.get(style,""))
+    if kind == "":
+        return
+    var want = rng.randi_range(2,3)
+    var made = 0
+    for attempt in range(30):
+        if made >= want:
+            break
+        var p = Vector2(rng.randf_range(60.0,700.0),rng.randf_range(470.0,730.0))
+        var params = {}
+        var clear_r = 34.0
+        if kind == "tripwire":
+            params["length"] = rng.randf_range(46.0,74.0)
+            # the wire must run clear along its whole length
+            var ok = true
+            for k in range(0,int(params["length"]) + 1,12):
+                if not _hr_spot_clear(chunk,p + Vector2(k,0),10.0):
+                    ok = false
+                    break
+            if not ok:
+                continue
+        elif not _hr_spot_clear(chunk,p,clear_r):
+            continue
+        _hr_make_hazard(chunk,kind,p,params)
+        made += 1
+    chunk.set_meta("hr_hazards",made)
+
+func _place_hr_floor_hazards(root,theme:String,size:Vector2,poi_id:String,floor_index:int,containers:Array) -> void:
+    var kind = "gas"
+    if theme.begins_with("military"):
+        kind = "tripwire"
+    elif theme.begins_with("vector"):
+        kind = "steam"
+    elif theme.begins_with("quarantine"):
+        kind = "gas"
+    else:
+        kind = "alarm"
+    var rng = RandomNumberGenerator.new()
+    rng.seed = abs(int(hash("hz:%s:%d" % [poi_id,floor_index]))) + 3
+    var keep = []
+    for c in containers:
+        keep.append(c.get("pos",Vector2.ZERO))
+    keep.append(Vector2(0,size.y * 0.40))
+    keep.append(Vector2(0,-size.y * 0.40))
+    var made = 0
+    for attempt in range(40):
+        if made >= 4:
+            break
+        var p = Vector2(rng.randf_range(-size.x * 0.42,size.x * 0.42),rng.randf_range(-size.y * 0.38,size.y * 0.38))
+        var length = rng.randf_range(44.0,70.0)
+        var ok = true
+        for k in keep:
+            if p.distance_to(k) < 70.0 or (kind == "tripwire" and (p + Vector2(length,0)).distance_to(k) < 70.0):
+                ok = false
+                break
+        if not ok:
+            continue
+        var hz = _hr_make_hazard(root,kind,p,{"length":length})
+        keep.append(p)
+        made += 1
+    root.set_meta("hr_hazards",made)
 
 func _hr_vegetation(chunk,coord,style:String,cell:Dictionary,rng):
     # weeds and leaf drifts along building feet and fences; real trees only where
